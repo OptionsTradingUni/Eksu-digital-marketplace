@@ -166,19 +166,62 @@ shared/
 - **Responsive**: Mobile-first design optimized for Nigerian students
 - **Components**: Shadcn UI for consistent, accessible components
 
+## Recently Added Features (November 2025)
+
+### Wallet System
+- Virtual wallet for each user with balance tracking
+- Automatic welcome bonus (₦300-₦1,000) on signup
+- Transaction history with full audit trail
+- Escrow support for secure transactions
+
+### Referral System  
+- Share referral links and earn ₦500 per successful signup
+- Automatic bonus payment to wallet
+- Track all referrals and earnings
+
+### Role Switcher
+- Users can switch between buyer, seller, and admin modes
+- Instant role switching via API
+- Automatic seller analytics creation for sellers
+
+### Login Streak Rewards
+- Daily login rewards from ₦50 to ₦1,000
+- Streak tracking (current and longest)
+- Automatic wallet crediting
+
+### Advanced Search Features
+- Save searches with price alerts
+- Get notified when prices drop
+- Search history tracking
+
+### Seller Tools
+- Draft product listings (save for later)
+- Scheduled posting (post at specific time)
+- Boost/featured listings with payment
+- Seller analytics dashboard
+- Best posting time suggestions
+
+### Voice Posting (Ready for Integration)
+- Database support for voice transcriptions
+- Multi-language support (Pidgin, Yoruba, Igbo, Hausa, English)
+- Audio file storage
+
+### Support & Disputes
+- Support ticket system with priority levels
+- Dispute resolution center
+- Photo evidence upload
+- Admin resolution tracking
+
 ## Future Enhancements (Phase 2)
 
-- Stripe/Paystack payment integration with escrow (3-6% fee)
+- Stripe/Paystack payment integration
 - Student ID & NIN verification (YouVerify/Dojah)
 - AI-powered scam detection
-- Featured/boosted listings (₦500-₦2,000)
-- Premium seller subscriptions (₦3,000-₦5,000/semester)
 - Video uploads for products
 - Push notifications
-- Wishlist with price drop alerts
-- Banner ad management
-- Seller analytics dashboard
-- Multi-language support
+- Instant search (<300ms with Nigerian slang support)
+- Voice-to-text posting UI
+- Multi-language support UI
 - USSD payment fallback
 
 ## Revenue Model

@@ -8,7 +8,22 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
-import { insertProductSchema, insertMessageSchema, insertReviewSchema, insertReportSchema, insertWatchlistSchema } from "@shared/schema";
+import { z } from "zod";
+import { 
+  insertProductSchema, 
+  insertMessageSchema, 
+  insertReviewSchema, 
+  insertReportSchema, 
+  insertWatchlistSchema,
+  roleUpdateSchema,
+  createReferralSchema,
+  createSavedSearchSchema,
+  saveDraftSchema,
+  createScheduledPostSchema,
+  createBoostSchema,
+  createDisputeSchema,
+  createSupportTicketSchema,
+} from "@shared/schema";
 
 // Setup multer for image uploads
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -62,6 +77,355 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // ==================== NEW FEATURES API ROUTES ====================
+
+  // Wallet routes
+  app.get('/api/wallet', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const wallet = await storage.getOrCreateWallet(userId);
+      res.json(wallet);
+    } catch (error) {
+      console.error("Error fetching wallet:", error);
+      res.status(500).json({ message: "Failed to fetch wallet" });
+    }
+  });
+
+  app.get('/api/wallet/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const wallet = await storage.getOrCreateWallet(userId);
+      const transactions = await storage.getUserTransactions(wallet.id);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Role switcher
+  app.put('/api/users/role', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = roleUpdateSchema.parse(req.body);
+
+      const user = await storage.updateUserProfile(userId, { role: validated.role });
+      
+      // Create seller analytics if switching to seller
+      if (validated.role === 'seller' || validated.role === 'admin') {
+        await storage.getOrCreateSellerAnalytics(userId);
+      }
+
+      res.json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error updating role:", error);
+      res.status(500).json({ message: "Failed to update role" });
+    }
+  });
+
+  // Referral routes
+  app.get('/api/referrals', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const referrals = await storage.getUserReferrals(userId);
+      res.json(referrals);
+    } catch (error) {
+      console.error("Error fetching referrals:", error);
+      res.status(500).json({ message: "Failed to fetch referrals" });
+    }
+  });
+
+  app.post('/api/referrals', isAuthenticated, async (req: any, res) => {
+    try {
+      const referrerId = req.user.claims.sub;
+      const validated = createReferralSchema.parse(req.body);
+      
+      // Create referral first - this validates no duplicates/self-referral
+      const referral = await storage.createReferral(referrerId, validated.referredUserId);
+      
+      // Only proceed with payment if referral creation succeeded
+      const wallet = await storage.getOrCreateWallet(referrerId);
+      const updatedWallet = await storage.updateWalletBalance(referrerId, '500', 'add');
+      
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'referral_bonus',
+        amount: '500',
+        description: 'Referral bonus',
+        relatedUserId: validated.referredUserId,
+        status: 'completed',
+      });
+      
+      await storage.markReferralPaid(referral.id);
+
+      res.json({ ...referral, newBalance: updatedWallet.balance });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating referral:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to create referral" });
+    }
+  });
+
+  // Login streak routes
+  app.post('/api/login-streak', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await storage.updateLoginStreak(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error updating login streak:", error);
+      res.status(500).json({ message: "Failed to update login streak" });
+    }
+  });
+
+  app.get('/api/login-streak', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const streak = await storage.getOrCreateLoginStreak(userId);
+      res.json(streak);
+    } catch (error) {
+      console.error("Error fetching login streak:", error);
+      res.status(500).json({ message: "Failed to fetch login streak" });
+    }
+  });
+
+  // Saved searches
+  app.get('/api/saved-searches', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const searches = await storage.getUserSavedSearches(userId);
+      res.json(searches);
+    } catch (error) {
+      console.error("Error fetching saved searches:", error);
+      res.status(500).json({ message: "Failed to fetch saved searches" });
+    }
+  });
+
+  app.post('/api/saved-searches', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = createSavedSearchSchema.parse({ ...req.body, userId });
+      const search = await storage.createSavedSearch(validated);
+      res.json(search);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error saving search:", error);
+      res.status(500).json({ message: "Failed to save search" });
+    }
+  });
+
+  app.delete('/api/saved-searches/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSavedSearch(req.params.id);
+      res.json({ message: "Search deleted" });
+    } catch (error) {
+      console.error("Error deleting search:", error);
+      res.status(500).json({ message: "Failed to delete search" });
+    }
+  });
+
+  // Draft products
+  app.get('/api/drafts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const drafts = await storage.getUserDrafts(userId);
+      res.json(drafts);
+    } catch (error) {
+      console.error("Error fetching drafts:", error);
+      res.status(500).json({ message: "Failed to fetch drafts" });
+    }
+  });
+
+  app.post('/api/drafts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = saveDraftSchema.parse(req.body);
+      const draft = await storage.saveDraft(userId, validated);
+      res.json(draft);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error saving draft:", error);
+      res.status(500).json({ message: "Failed to save draft" });
+    }
+  });
+
+  app.delete('/api/drafts/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteDraft(req.params.id);
+      res.json({ message: "Draft deleted" });
+    } catch (error) {
+      console.error("Error deleting draft:", error);
+      res.status(500).json({ message: "Failed to delete draft" });
+    }
+  });
+
+  // Scheduled posts
+  app.get('/api/scheduled-posts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const posts = await storage.getUserScheduledPosts(userId);
+      res.json(posts);
+    } catch (error) {
+      console.error("Error fetching scheduled posts:", error);
+      res.status(500).json({ message: "Failed to fetch scheduled posts" });
+    }
+  });
+
+  app.post('/api/scheduled-posts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = createScheduledPostSchema.parse({ ...req.body, sellerId: userId });
+      const post = await storage.createScheduledPost(validated);
+      res.json(post);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating scheduled post:", error);
+      res.status(500).json({ message: "Failed to create scheduled post" });
+    }
+  });
+
+  // Boost requests
+  app.get('/api/boosts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const boosts = await storage.getUserBoostRequests(userId);
+      res.json(boosts);
+    } catch (error) {
+      console.error("Error fetching boosts:", error);
+      res.status(500).json({ message: "Failed to fetch boosts" });
+    }
+  });
+
+  app.post('/api/boosts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = createBoostSchema.parse(req.body);
+      
+      // Verify sufficient balance before deducting
+      const wallet = await storage.getOrCreateWallet(userId);
+      const currentBalance = parseFloat(wallet.balance);
+      const boostCost = parseFloat(validated.amount);
+      
+      if (currentBalance < boostCost) {
+        return res.status(400).json({ 
+          message: `Insufficient balance. Available: ₦${currentBalance}, Required: ₦${boostCost}` 
+        });
+      }
+      
+      // Calculate expiry
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + validated.duration);
+
+      // Deduct from wallet first
+      const updatedWallet = await storage.updateWalletBalance(userId, validated.amount, 'subtract');
+      
+      // Then create boost request
+      const boost = await storage.createBoostRequest({
+        productId: validated.productId,
+        sellerId: userId,
+        type: validated.type,
+        duration: validated.duration,
+        amount: validated.amount,
+        expiresAt,
+      });
+
+      // Log transaction
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'boost_payment',
+        amount: validated.amount,
+        description: `${validated.type} listing for ${validated.duration} hours`,
+        relatedProductId: validated.productId,
+        status: 'completed',
+      });
+
+      res.json({ ...boost, newBalance: updatedWallet.balance });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating boost:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to create boost" });
+    }
+  });
+
+  // Disputes
+  app.get('/api/disputes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const disputes = await storage.getUserDisputes(userId);
+      res.json(disputes);
+    } catch (error) {
+      console.error("Error fetching disputes:", error);
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+
+  app.post('/api/disputes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = createDisputeSchema.parse({ ...req.body, buyerId: userId });
+      const dispute = await storage.createDispute(validated);
+      res.json(dispute);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating dispute:", error);
+      res.status(500).json({ message: "Failed to create dispute" });
+    }
+  });
+
+  // Support tickets
+  app.get('/api/support', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tickets = await storage.getUserSupportTickets(userId);
+      res.json(tickets);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      res.status(500).json({ message: "Failed to fetch tickets" });
+    }
+  });
+
+  app.post('/api/support', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validated = createSupportTicketSchema.parse({ ...req.body, userId });
+      const ticket = await storage.createSupportTicket(validated);
+      res.json(ticket);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating ticket:", error);
+      res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  // Seller analytics
+  app.get('/api/seller/analytics', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const analytics = await storage.getOrCreateSellerAnalytics(userId);
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
 

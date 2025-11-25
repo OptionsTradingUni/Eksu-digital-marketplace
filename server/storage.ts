@@ -7,6 +7,19 @@ import {
   reviews,
   reports,
   watchlist,
+  wallets,
+  transactions,
+  referrals,
+  welcomeBonuses,
+  savedSearches,
+  draftProducts,
+  scheduledPosts,
+  voicePosts,
+  boostRequests,
+  disputes,
+  supportTickets,
+  loginStreaks,
+  sellerAnalytics,
   type User,
   type UpsertUser,
   type Product,
@@ -19,6 +32,27 @@ import {
   type Review,
   type InsertReport,
   type Watchlist,
+  type Wallet,
+  type InsertWallet,
+  type Transaction,
+  type InsertTransaction,
+  type Referral,
+  type WelcomeBonus,
+  type SavedSearch,
+  type InsertSavedSearch,
+  type DraftProduct,
+  type InsertDraftProduct,
+  type ScheduledPost,
+  type InsertScheduledPost,
+  type VoicePost,
+  type BoostRequest,
+  type InsertBoostRequest,
+  type Dispute,
+  type InsertDispute,
+  type SupportTicket,
+  type InsertSupportTicket,
+  type LoginStreak,
+  type SellerAnalytics,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
@@ -64,6 +98,70 @@ export interface IStorage {
   
   // Report operations
   createReport(report: InsertReport): Promise<any>;
+  
+  // Wallet operations
+  getOrCreateWallet(userId: string): Promise<Wallet>;
+  getWallet(userId: string): Promise<Wallet | undefined>;
+  updateWalletBalance(userId: string, amount: string, type: 'add' | 'subtract'): Promise<Wallet>;
+  
+  // Transaction operations
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getUserTransactions(walletId: string): Promise<Transaction[]>;
+  
+  // Welcome bonus operations
+  createWelcomeBonus(userId: string, amount: string): Promise<WelcomeBonus>;
+  getWelcomeBonus(userId: string): Promise<WelcomeBonus | undefined>;
+  
+  // Referral operations
+  createReferral(referrerId: string, referredUserId: string): Promise<Referral>;
+  getUserReferrals(userId: string): Promise<Referral[]>;
+  markReferralPaid(referralId: string): Promise<Referral>;
+  
+  // Saved search operations
+  createSavedSearch(search: InsertSavedSearch): Promise<SavedSearch>;
+  getUserSavedSearches(userId: string): Promise<SavedSearch[]>;
+  deleteSavedSearch(id: string): Promise<void>;
+  
+  // Draft product operations
+  saveDraft(sellerId: string, data: any): Promise<DraftProduct>;
+  getUserDrafts(sellerId: string): Promise<DraftProduct[]>;
+  deleteDraft(id: string): Promise<void>;
+  
+  // Scheduled post operations
+  createScheduledPost(post: InsertScheduledPost): Promise<ScheduledPost>;
+  getUserScheduledPosts(sellerId: string): Promise<ScheduledPost[]>;
+  getPendingScheduledPosts(): Promise<ScheduledPost[]>;
+  markScheduledPostPublished(id: string, productId: string): Promise<ScheduledPost>;
+  
+  // Voice post operations
+  createVoicePost(post: any): Promise<VoicePost>;
+  getUserVoicePosts(userId: string): Promise<VoicePost[]>;
+  
+  // Boost request operations
+  createBoostRequest(request: InsertBoostRequest): Promise<BoostRequest>;
+  getUserBoostRequests(sellerId: string): Promise<BoostRequest[]>;
+  getActiveBoosts(): Promise<BoostRequest[]>;
+  expireBoost(id: string): Promise<BoostRequest>;
+  
+  // Dispute operations
+  createDispute(dispute: InsertDispute): Promise<Dispute>;
+  getUserDisputes(userId: string): Promise<Dispute[]>;
+  getAllDisputes(): Promise<Dispute[]>;
+  resolveDispute(id: string, resolution: string, resolvedBy: string): Promise<Dispute>;
+  
+  // Support ticket operations
+  createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket>;
+  getUserSupportTickets(userId: string): Promise<SupportTicket[]>;
+  getAllSupportTickets(): Promise<SupportTicket[]>;
+  updateSupportTicket(id: string, data: Partial<SupportTicket>): Promise<SupportTicket>;
+  
+  // Login streak operations
+  getOrCreateLoginStreak(userId: string): Promise<LoginStreak>;
+  updateLoginStreak(userId: string): Promise<{ streak: LoginStreak; reward: number }>;
+  
+  // Seller analytics operations
+  getOrCreateSellerAnalytics(sellerId: string): Promise<SellerAnalytics>;
+  updateSellerAnalytics(sellerId: string, data: Partial<SellerAnalytics>): Promise<SellerAnalytics>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -74,6 +172,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
+    // Check if this is a new user
+    const existing = await this.getUser(userData.id);
+    const isNewUser = !existing;
+
     const [user] = await db
       .insert(users)
       .values(userData)
@@ -85,6 +187,21 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
+
+    // For new users, create wallet and give welcome bonus
+    if (isNewUser) {
+      const bonusAmount = (Math.random() * 700 + 300).toFixed(2); // Random ₦300-₦1000
+      await this.createWelcomeBonus(user.id, bonusAmount);
+      
+      // Create login streak
+      await this.getOrCreateLoginStreak(user.id);
+      
+      // If seller, create analytics
+      if (user.role === 'seller' || user.role === 'admin') {
+        await this.getOrCreateSellerAnalytics(user.id);
+      }
+    }
+
     return user;
   }
 
@@ -414,6 +531,422 @@ export class DatabaseStorage implements IStorage {
   async createReport(report: InsertReport): Promise<any> {
     const [created] = await db.insert(reports).values(report).returning();
     return created;
+  }
+
+  // Wallet operations
+  async getOrCreateWallet(userId: string): Promise<Wallet> {
+    const existing = await this.getWallet(userId);
+    if (existing) return existing;
+
+    const [wallet] = await db.insert(wallets).values({ userId }).returning();
+    return wallet;
+  }
+
+  async getWallet(userId: string): Promise<Wallet | undefined> {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, userId));
+    return wallet;
+  }
+
+  async updateWalletBalance(userId: string, amount: string, type: 'add' | 'subtract'): Promise<Wallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    
+    // Check for sufficient balance when subtracting
+    if (type === 'subtract') {
+      const currentBalance = parseFloat(wallet.balance);
+      const amountToSubtract = parseFloat(amount);
+      
+      if (currentBalance < amountToSubtract) {
+        throw new Error(`Insufficient balance. Available: ₦${currentBalance}, Required: ₦${amountToSubtract}`);
+      }
+    }
+    
+    // Use SQL arithmetic for safe decimal operations
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balance: type === 'add'
+          ? sql`${wallets.balance} + ${amount}`
+          : sql`${wallets.balance} - ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(wallets.id, wallet.id))
+      .returning();
+
+    return updated;
+  }
+
+  // Transaction operations
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [created] = await db.insert(transactions).values(transaction).returning();
+    return created;
+  }
+
+  async getUserTransactions(walletId: string): Promise<Transaction[]> {
+    return await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.walletId, walletId))
+      .orderBy(desc(transactions.createdAt));
+  }
+
+  // Welcome bonus operations
+  async createWelcomeBonus(userId: string, amount: string): Promise<WelcomeBonus> {
+    const [bonus] = await db
+      .insert(welcomeBonuses)
+      .values({ userId, amount })
+      .returning();
+
+    // Add to wallet and create transaction
+    const wallet = await this.getOrCreateWallet(userId);
+    await this.updateWalletBalance(userId, amount, 'add');
+    await this.createTransaction({
+      walletId: wallet.id,
+      type: 'welcome_bonus',
+      amount,
+      description: 'Welcome to EKSU Marketplace!',
+      status: 'completed',
+    });
+
+    return bonus;
+  }
+
+  async getWelcomeBonus(userId: string): Promise<WelcomeBonus | undefined> {
+    const [bonus] = await db
+      .select()
+      .from(welcomeBonuses)
+      .where(eq(welcomeBonuses.userId, userId));
+    return bonus;
+  }
+
+  // Referral operations
+  async createReferral(referrerId: string, referredUserId: string): Promise<Referral> {
+    // Prevent self-referrals
+    if (referrerId === referredUserId) {
+      throw new Error("Cannot refer yourself");
+    }
+
+    // Check for duplicate referrals
+    const [existing] = await db
+      .select()
+      .from(referrals)
+      .where(
+        and(
+          eq(referrals.referrerId, referrerId),
+          eq(referrals.referredUserId, referredUserId)
+        )
+      );
+
+    if (existing) {
+      throw new Error("Referral already exists");
+    }
+
+    const [referral] = await db
+      .insert(referrals)
+      .values({ referrerId, referredUserId })
+      .returning();
+    return referral;
+  }
+
+  async getUserReferrals(userId: string): Promise<Referral[]> {
+    return await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.referrerId, userId))
+      .orderBy(desc(referrals.createdAt));
+  }
+
+  async markReferralPaid(referralId: string): Promise<Referral> {
+    const [updated] = await db
+      .update(referrals)
+      .set({ bonusPaid: true })
+      .where(eq(referrals.id, referralId))
+      .returning();
+    return updated;
+  }
+
+  // Saved search operations
+  async createSavedSearch(search: InsertSavedSearch): Promise<SavedSearch> {
+    const [saved] = await db.insert(savedSearches).values(search).returning();
+    return saved;
+  }
+
+  async getUserSavedSearches(userId: string): Promise<SavedSearch[]> {
+    return await db
+      .select()
+      .from(savedSearches)
+      .where(eq(savedSearches.userId, userId))
+      .orderBy(desc(savedSearches.createdAt));
+  }
+
+  async deleteSavedSearch(id: string): Promise<void> {
+    await db.delete(savedSearches).where(eq(savedSearches.id, id));
+  }
+
+  // Draft product operations
+  async saveDraft(sellerId: string, data: any): Promise<DraftProduct> {
+    const [draft] = await db
+      .insert(draftProducts)
+      .values({ sellerId, data })
+      .returning();
+    return draft;
+  }
+
+  async getUserDrafts(sellerId: string): Promise<DraftProduct[]> {
+    return await db
+      .select()
+      .from(draftProducts)
+      .where(eq(draftProducts.sellerId, sellerId))
+      .orderBy(desc(draftProducts.updatedAt));
+  }
+
+  async deleteDraft(id: string): Promise<void> {
+    await db.delete(draftProducts).where(eq(draftProducts.id, id));
+  }
+
+  // Scheduled post operations
+  async createScheduledPost(post: InsertScheduledPost): Promise<ScheduledPost> {
+    const [created] = await db.insert(scheduledPosts).values(post).returning();
+    return created;
+  }
+
+  async getUserScheduledPosts(sellerId: string): Promise<ScheduledPost[]> {
+    return await db
+      .select()
+      .from(scheduledPosts)
+      .where(and(eq(scheduledPosts.sellerId, sellerId), eq(scheduledPosts.published, false)))
+      .orderBy(scheduledPosts.scheduledFor);
+  }
+
+  async getPendingScheduledPosts(): Promise<ScheduledPost[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(scheduledPosts)
+      .where(
+        and(
+          eq(scheduledPosts.published, false),
+          sql`${scheduledPosts.scheduledFor} <= ${now}`
+        )
+      );
+  }
+
+  async markScheduledPostPublished(id: string, productId: string): Promise<ScheduledPost> {
+    const [updated] = await db
+      .update(scheduledPosts)
+      .set({ published: true, publishedProductId: productId })
+      .where(eq(scheduledPosts.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Voice post operations
+  async createVoicePost(post: any): Promise<VoicePost> {
+    const [created] = await db.insert(voicePosts).values(post).returning();
+    return created;
+  }
+
+  async getUserVoicePosts(userId: string): Promise<VoicePost[]> {
+    return await db
+      .select()
+      .from(voicePosts)
+      .where(eq(voicePosts.userId, userId))
+      .orderBy(desc(voicePosts.createdAt));
+  }
+
+  // Boost request operations
+  async createBoostRequest(request: InsertBoostRequest): Promise<BoostRequest> {
+    const [created] = await db.insert(boostRequests).values(request).returning();
+    return created;
+  }
+
+  async getUserBoostRequests(sellerId: string): Promise<BoostRequest[]> {
+    return await db
+      .select()
+      .from(boostRequests)
+      .where(eq(boostRequests.sellerId, sellerId))
+      .orderBy(desc(boostRequests.createdAt));
+  }
+
+  async getActiveBoosts(): Promise<BoostRequest[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(boostRequests)
+      .where(
+        and(
+          eq(boostRequests.status, 'active'),
+          sql`${boostRequests.expiresAt} > ${now}`
+        )
+      );
+  }
+
+  async expireBoost(id: string): Promise<BoostRequest> {
+    const [updated] = await db
+      .update(boostRequests)
+      .set({ status: 'expired' })
+      .where(eq(boostRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Dispute operations
+  async createDispute(dispute: InsertDispute): Promise<Dispute> {
+    const [created] = await db.insert(disputes).values(dispute).returning();
+    return created;
+  }
+
+  async getUserDisputes(userId: string): Promise<Dispute[]> {
+    return await db
+      .select()
+      .from(disputes)
+      .where(or(eq(disputes.buyerId, userId), eq(disputes.sellerId, userId)))
+      .orderBy(desc(disputes.createdAt));
+  }
+
+  async getAllDisputes(): Promise<Dispute[]> {
+    return await db.select().from(disputes).orderBy(desc(disputes.createdAt));
+  }
+
+  async resolveDispute(id: string, resolution: string, resolvedBy: string): Promise<Dispute> {
+    const [updated] = await db
+      .update(disputes)
+      .set({
+        status: 'resolved',
+        resolution,
+        resolvedBy,
+        resolvedAt: new Date(),
+      })
+      .where(eq(disputes.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Support ticket operations
+  async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
+    const [created] = await db.insert(supportTickets).values(ticket).returning();
+    return created;
+  }
+
+  async getUserSupportTickets(userId: string): Promise<SupportTicket[]> {
+    return await db
+      .select()
+      .from(supportTickets)
+      .where(eq(supportTickets.userId, userId))
+      .orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getAllSupportTickets(): Promise<SupportTicket[]> {
+    return await db
+      .select()
+      .from(supportTickets)
+      .orderBy(desc(supportTickets.createdAt));
+  }
+
+  async updateSupportTicket(id: string, data: Partial<SupportTicket>): Promise<SupportTicket> {
+    const [updated] = await db
+      .update(supportTickets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(supportTickets.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Login streak operations
+  async getOrCreateLoginStreak(userId: string): Promise<LoginStreak> {
+    const [existing] = await db
+      .select()
+      .from(loginStreaks)
+      .where(eq(loginStreaks.userId, userId));
+
+    if (existing) return existing;
+
+    const [created] = await db
+      .insert(loginStreaks)
+      .values({ userId })
+      .returning();
+    return created;
+  }
+
+  async updateLoginStreak(userId: string): Promise<{ streak: LoginStreak; reward: number }> {
+    const streak = await this.getOrCreateLoginStreak(userId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const lastLogin = streak.lastLoginDate ? new Date(streak.lastLoginDate) : null;
+    lastLogin?.setHours(0, 0, 0, 0);
+
+    const daysDiff = lastLogin
+      ? Math.floor((today.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24))
+      : 1;
+
+    let newStreak = streak.currentStreak;
+    let reward = 0;
+
+    if (daysDiff === 0) {
+      // Already logged in today
+      return { streak, reward: 0 };
+    } else if (daysDiff === 1) {
+      // Consecutive day - increment streak
+      newStreak = (streak.currentStreak || 0) + 1;
+      reward = Math.min(50 + (newStreak * 10), 1000); // ₦50 to ₦1,000
+    } else {
+      // Streak broken - reset
+      newStreak = 1;
+      reward = 50;
+    }
+
+    const [updated] = await db
+      .update(loginStreaks)
+      .set({
+        currentStreak: newStreak,
+        longestStreak: Math.max(newStreak, streak.longestStreak || 0),
+        lastLoginDate: new Date(),
+        totalRewards: sql`${loginStreaks.totalRewards} + ${reward}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(loginStreaks.id, streak.id))
+      .returning();
+
+    // Add reward to wallet
+    if (reward > 0) {
+      const wallet = await this.getOrCreateWallet(userId);
+      await this.updateWalletBalance(userId, reward.toString(), 'add');
+      await this.createTransaction({
+        walletId: wallet.id,
+        type: 'welcome_bonus',
+        amount: reward.toString(),
+        description: `${newStreak}-day login streak reward`,
+        status: 'completed',
+      });
+    }
+
+    return { streak: updated, reward };
+  }
+
+  // Seller analytics operations
+  async getOrCreateSellerAnalytics(sellerId: string): Promise<SellerAnalytics> {
+    const [existing] = await db
+      .select()
+      .from(sellerAnalytics)
+      .where(eq(sellerAnalytics.sellerId, sellerId));
+
+    if (existing) return existing;
+
+    const [created] = await db
+      .insert(sellerAnalytics)
+      .values({ sellerId })
+      .returning();
+    return created;
+  }
+
+  async updateSellerAnalytics(sellerId: string, data: Partial<SellerAnalytics>): Promise<SellerAnalytics> {
+    const analytics = await this.getOrCreateSellerAnalytics(sellerId);
+    const [updated] = await db
+      .update(sellerAnalytics)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(sellerAnalytics.id, analytics.id))
+      .returning();
+    return updated;
   }
 }
 
