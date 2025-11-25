@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Menu } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export function Header() {
   const { user, isAuthenticated, isSeller, isAdmin } = useAuth();
@@ -127,18 +128,39 @@ export function Header() {
                         Profile
                       </Link>
                     </DropdownMenuItem>
-                    {isSeller && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/seller/dashboard" data-testid="link-seller-dashboard">
-                          <ShoppingBag className="mr-2 h-4 w-4" />
-                          Seller Dashboard
-                        </Link>
-                      </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/wallet" data-testid="link-wallet">
+                        <Wallet className="mr-2 h-4 w-4" />
+                        Wallet
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/referrals" data-testid="link-referrals">
+                        <Users className="mr-2 h-4 w-4" />
+                        Referrals
+                      </Link>
+                    </DropdownMenuItem>
+                    {(isSeller || user?.role === "both") && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link href="/my-ads" data-testid="link-my-ads">
+                            <Megaphone className="mr-2 h-4 w-4" />
+                            My Ads
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/seller/dashboard" data-testid="link-seller-dashboard">
+                            <ShoppingBag className="mr-2 h-4 w-4" />
+                            Seller Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     {isAdmin && (
                       <DropdownMenuItem asChild>
                         <Link href="/admin" data-testid="link-admin">
-                          <User className="mr-2 h-4 w-4" />
+                          <Settings className="mr-2 h-4 w-4" />
                           Admin Panel
                         </Link>
                       </DropdownMenuItem>
@@ -148,14 +170,16 @@ export function Header() {
                       onClick={async () => {
                         try {
                           await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                          queryClient.clear();
                           window.location.href = '/';
                         } catch (error) {
                           console.error('Logout failed:', error);
                         }
                       }}
-                      className="cursor-pointer"
+                      className="cursor-pointer text-destructive"
                       data-testid="link-logout"
                     >
+                      <LogOut className="mr-2 h-4 w-4" />
                       Logout
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -180,8 +204,8 @@ export function Header() {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right">
-                <nav className="flex flex-col gap-4 mt-8">
+              <SheetContent side="right" className="w-[300px]">
+                <nav className="flex flex-col gap-2 mt-8">
                   <form onSubmit={handleSearch} className="mb-4">
                     <Input
                       type="search"
@@ -191,12 +215,68 @@ export function Header() {
                       data-testid="input-search-mobile"
                     />
                   </form>
+                  
+                  {!isAuthenticated && (
+                    <>
+                      <Link href="/">
+                        <Button variant="ghost" className="w-full justify-start">
+                          <Home className="mr-2 h-4 w-4" />
+                          Home
+                        </Button>
+                      </Link>
+                      <a href="#about">
+                        <Button variant="ghost" className="w-full justify-start">
+                          About
+                        </Button>
+                      </a>
+                      <a href="#features">
+                        <Button variant="ghost" className="w-full justify-start">
+                          Features
+                        </Button>
+                      </a>
+                      <a href="#how-it-works">
+                        <Button variant="ghost" className="w-full justify-start">
+                          How it Works
+                        </Button>
+                      </a>
+                      <div className="border-t my-2" />
+                      <a href="/auth/login">
+                        <Button variant="ghost" className="w-full justify-start">
+                          Login
+                        </Button>
+                      </a>
+                      <a href="/auth/signup">
+                        <Button className="w-full">
+                          Sign Up
+                        </Button>
+                      </a>
+                    </>
+                  )}
+                  
                   {isAuthenticated && (
                     <>
+                      <Link href="/">
+                        <Button variant="ghost" className="w-full justify-start">
+                          <Home className="mr-2 h-4 w-4" />
+                          Home
+                        </Button>
+                      </Link>
                       <Link href="/messages">
                         <Button variant="ghost" className="w-full justify-start">
                           <MessageSquare className="mr-2 h-4 w-4" />
                           Messages
+                        </Button>
+                      </Link>
+                      <Link href="/wallet">
+                        <Button variant="ghost" className="w-full justify-start">
+                          <Wallet className="mr-2 h-4 w-4" />
+                          Wallet
+                        </Button>
+                      </Link>
+                      <Link href="/referrals">
+                        <Button variant="ghost" className="w-full justify-start">
+                          <Users className="mr-2 h-4 w-4" />
+                          Referrals
                         </Button>
                       </Link>
                       <Link href="/profile">
@@ -205,14 +285,55 @@ export function Header() {
                           Profile
                         </Button>
                       </Link>
-                      {isSeller && (
-                        <Link href="/seller/dashboard">
-                          <Button variant="ghost" className="w-full justify-start">
-                            <ShoppingBag className="mr-2 h-4 w-4" />
-                            Seller Dashboard
-                          </Button>
-                        </Link>
+                      
+                      {(isSeller || user?.role === "both") && (
+                        <>
+                          <div className="border-t my-2" />
+                          <p className="px-3 text-xs font-medium text-muted-foreground uppercase">Seller</p>
+                          <Link href="/my-ads">
+                            <Button variant="ghost" className="w-full justify-start">
+                              <Megaphone className="mr-2 h-4 w-4" />
+                              My Ads
+                            </Button>
+                          </Link>
+                          <Link href="/seller/dashboard">
+                            <Button variant="ghost" className="w-full justify-start">
+                              <ShoppingBag className="mr-2 h-4 w-4" />
+                              Seller Dashboard
+                            </Button>
+                          </Link>
+                        </>
                       )}
+                      
+                      {isAdmin && (
+                        <>
+                          <div className="border-t my-2" />
+                          <Link href="/admin">
+                            <Button variant="ghost" className="w-full justify-start">
+                              <Settings className="mr-2 h-4 w-4" />
+                              Admin Panel
+                            </Button>
+                          </Link>
+                        </>
+                      )}
+                      
+                      <div className="border-t my-2" />
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start text-destructive"
+                        onClick={async () => {
+                          try {
+                            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                            queryClient.clear();
+                            window.location.href = '/';
+                          } catch (error) {
+                            console.error('Logout failed:', error);
+                          }
+                        }}
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout
+                      </Button>
                     </>
                   )}
                 </nav>

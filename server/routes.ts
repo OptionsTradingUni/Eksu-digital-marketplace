@@ -270,6 +270,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/wallet/deposit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { amount } = req.body;
+
+      if (!amount || parseFloat(amount) < 100) {
+        return res.status(400).json({ message: "Minimum deposit is 100 NGN" });
+      }
+
+      const wallet = await storage.getOrCreateWallet(userId);
+      
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'deposit',
+        amount: amount.toString(),
+        description: 'Wallet deposit',
+        status: 'pending',
+      });
+
+      res.json({ 
+        message: "Deposit initiated. Please complete payment.",
+        amount: amount
+      });
+    } catch (error) {
+      console.error("Error initiating deposit:", error);
+      res.status(500).json({ message: "Failed to initiate deposit" });
+    }
+  });
+
+  app.post('/api/wallet/withdraw', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { amount, bankName, accountNumber, accountName } = req.body;
+
+      if (!amount || parseFloat(amount) < 500) {
+        return res.status(400).json({ message: "Minimum withdrawal is 500 NGN" });
+      }
+
+      if (!bankName || !accountNumber || !accountName) {
+        return res.status(400).json({ message: "Bank details are required" });
+      }
+
+      const wallet = await storage.getOrCreateWallet(userId);
+      
+      if (parseFloat(wallet.balance) < parseFloat(amount)) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      await storage.updateWalletBalance(userId, amount.toString(), 'subtract');
+      
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'withdrawal',
+        amount: amount.toString(),
+        description: `Withdrawal to ${bankName} - ${accountNumber}`,
+        status: 'pending',
+      });
+
+      res.json({ message: "Withdrawal request submitted successfully" });
+    } catch (error) {
+      console.error("Error processing withdrawal:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
   // Role switcher
   app.put('/api/users/role', isAuthenticated, async (req: any, res) => {
     try {
@@ -657,6 +722,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/products/seller", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const products = await storage.getSellerProducts(userId);
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching seller products:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
   app.get("/api/products/:id", async (req, res) => {
     try {
       const product = await storage.getProduct(req.params.id);
@@ -679,9 +758,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Check if user is a seller or admin
       const user = await storage.getUser(userId);
-      if (user?.role !== "seller" && user?.role !== "admin") {
+      if (user?.role !== "seller" && user?.role !== "admin" && user?.role !== "both") {
         return res.status(403).json({ message: "Only sellers can create listings" });
       }
 
@@ -756,6 +834,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting product:", error);
       res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
+  // Mark product as sold
+  app.post("/api/products/:id/sold", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const product = await storage.getProduct(req.params.id);
+      if (!product || product.sellerId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const updated = await storage.updateProduct(req.params.id, {
+        isSold: true,
+        isAvailable: false,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking product as sold:", error);
+      res.status(500).json({ message: "Failed to mark product as sold" });
+    }
+  });
+
+  // Toggle product availability (pause/unpause)
+  app.post("/api/products/:id/toggle-visibility", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const product = await storage.getProduct(req.params.id);
+      if (!product || product.sellerId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const updated = await storage.updateProduct(req.params.id, {
+        isAvailable: !product.isAvailable,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error toggling product visibility:", error);
+      res.status(500).json({ message: "Failed to toggle product visibility" });
+    }
+  });
+
+  // Get seller products with analytics (inquiries count)
+  app.get("/api/seller/products", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const products = await storage.getSellerProductsWithAnalytics(userId);
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching seller products:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
     }
   });
 
@@ -1127,6 +1268,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error marking notification as read:", error);
       res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.markNotificationAsRead(req.params.id, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/read-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.deleteNotification(req.params.id, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Failed to delete notification" });
     }
   });
 

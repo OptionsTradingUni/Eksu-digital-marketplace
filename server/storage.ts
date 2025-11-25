@@ -93,9 +93,11 @@ export interface IStorage {
   getProduct(id: string): Promise<(Product & { seller: User }) | undefined>;
   getProducts(filters?: { search?: string; categoryId?: string; condition?: string; location?: string }): Promise<(Product & { seller: User })[]>;
   getSellerProducts(sellerId: string): Promise<Product[]>;
+  getSellerProductsWithAnalytics(sellerId: string): Promise<(Product & { inquiryCount: number })[]>;
   updateProduct(id: string, data: UpdateProduct): Promise<Product>;
   deleteProduct(id: string): Promise<void>;
   incrementProductViews(id: string): Promise<void>;
+  incrementProductInquiries(productId: string): Promise<void>;
   flagProduct(id: string, reason: string): Promise<Product>;
   approveProduct(id: string): Promise<Product>;
   
@@ -255,6 +257,8 @@ export interface IStorage {
   getUserNotifications(userId: string): Promise<any[]>;
   markNotificationAsRead(id: string, userId: string): Promise<void>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(id: string, userId: string): Promise<void>;
+  createNotification(data: { userId: string; type: string; title: string; message: string; link?: string; relatedUserId?: string; relatedProductId?: string }): Promise<any>;
   
   // Raw SQL execution for admin metrics
   executeRawSQL<T = any>(query: string, params?: any[]): Promise<T[]>;
@@ -458,6 +462,30 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(products.createdAt));
   }
 
+  async getSellerProductsWithAnalytics(sellerId: string): Promise<(Product & { inquiryCount: number })[]> {
+    const sellerProducts = await db
+      .select()
+      .from(products)
+      .where(eq(products.sellerId, sellerId))
+      .orderBy(desc(products.createdAt));
+
+    // Get inquiry counts for each product
+    const productsWithInquiries = await Promise.all(
+      sellerProducts.map(async (product) => {
+        const inquiries = await db
+          .select()
+          .from(messages)
+          .where(eq(messages.productId, product.id));
+        return {
+          ...product,
+          inquiryCount: inquiries.length,
+        };
+      })
+    );
+
+    return productsWithInquiries;
+  }
+
   async updateProduct(id: string, data: UpdateProduct): Promise<Product> {
     const [updated] = await db
       .update(products)
@@ -481,6 +509,13 @@ export class DatabaseStorage implements IStorage {
       .update(products)
       .set({ views: sql`${products.views} + 1` })
       .where(eq(products.id, id));
+  }
+
+  async incrementProductInquiries(productId: string): Promise<void> {
+    await db
+      .update(products)
+      .set({ inquiries: sql`${products.inquiries} + 1` })
+      .where(eq(products.id, productId));
   }
 
   async flagProduct(id: string, reason: string): Promise<Product> {
@@ -1603,20 +1638,75 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  // Notification operations
   async getUserNotifications(userId: string): Promise<any[]> {
-    // This would require a notifications table - for now return empty array
-    return [];
+    try {
+      const { notifications } = await import("@shared/schema");
+      return await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt));
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      return [];
+    }
   }
 
   async markNotificationAsRead(id: string, userId: string): Promise<void> {
-    // This would require a notifications table - for now do nothing
-    return;
+    try {
+      const { notifications } = await import("@shared/schema");
+      await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
-    // This would require a notifications table - for now do nothing
-    return;
+    try {
+      const { notifications } = await import("@shared/schema");
+      await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(eq(notifications.userId, userId));
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+    }
+  }
+
+  async deleteNotification(id: string, userId: string): Promise<void> {
+    try {
+      const { notifications } = await import("@shared/schema");
+      await db
+        .delete(notifications)
+        .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+    }
+  }
+
+  async createNotification(data: { userId: string; type: string; title: string; message: string; link?: string; relatedUserId?: string; relatedProductId?: string }): Promise<any> {
+    try {
+      const { notifications } = await import("@shared/schema");
+      const [notification] = await db
+        .insert(notifications)
+        .values({
+          userId: data.userId,
+          type: data.type as any,
+          title: data.title,
+          message: data.message,
+          link: data.link,
+          relatedUserId: data.relatedUserId,
+          relatedProductId: data.relatedProductId,
+        })
+        .returning();
+      return notification;
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      throw error;
+    }
   }
 
   // Raw SQL execution for admin metrics

@@ -96,6 +96,7 @@ export const products = pgTable("products", {
   location: varchar("location"), // Campus area
   // Status
   isAvailable: boolean("is_available").default(true),
+  isSold: boolean("is_sold").default(false),
   isFeatured: boolean("is_featured").default(false),
   isBoosted: boolean("is_boosted").default(false),
   boostedUntil: timestamp("boosted_until"),
@@ -106,6 +107,7 @@ export const products = pgTable("products", {
   // Analytics
   views: integer("views").default(0),
   watchers: integer("watchers").default(0),
+  inquiries: integer("inquiries").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

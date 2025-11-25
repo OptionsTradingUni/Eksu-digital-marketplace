@@ -17,6 +17,10 @@ import Messages from "@/pages/messages";
 import Profile from "@/pages/profile";
 import SellerDashboard from "@/pages/seller-dashboard";
 import AdminPanel from "@/pages/admin";
+import WalletPage from "@/pages/wallet";
+import ReferralsPage from "@/pages/referrals";
+import NotificationsPage from "@/pages/notifications";
+import MyAdsPage from "@/pages/my-ads";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { useEffect } from "react";
 
@@ -87,6 +91,26 @@ function Router() {
         <Route path="/admin" component={() => (
           <ErrorBoundary>
             <AdminPanel />
+          </ErrorBoundary>
+        )} />
+        <Route path="/wallet" component={() => (
+          <ErrorBoundary>
+            <WalletPage />
+          </ErrorBoundary>
+        )} />
+        <Route path="/referrals" component={() => (
+          <ErrorBoundary>
+            <ReferralsPage />
+          </ErrorBoundary>
+        )} />
+        <Route path="/notifications" component={() => (
+          <ErrorBoundary>
+            <NotificationsPage />
+          </ErrorBoundary>
+        )} />
+        <Route path="/my-ads" component={() => (
+          <ErrorBoundary>
+            <MyAdsPage />
           </ErrorBoundary>
         )} />
         <Route component={() => (
