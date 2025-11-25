@@ -246,6 +246,14 @@ export interface IStorage {
   // Leaderboard operations
   getTopSellers(limit?: number): Promise<any[]>;
   getMostTrustedUsers(limit?: number): Promise<any[]>;
+  
+  // Notification operations
+  getUserNotifications(userId: string): Promise<any[]>;
+  markNotificationAsRead(id: string, userId: string): Promise<void>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  
+  // Raw SQL execution for admin metrics
+  executeRawSQL<T = any>(query: string, params?: any[]): Promise<T[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1559,6 +1567,29 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(users.isTrustedSeller, true), eq(users.isActive, true)))
       .orderBy(desc(users.trustedSellerSince))
       .limit(limit);
+  }
+
+  // Notification operations
+  async getUserNotifications(userId: string): Promise<any[]> {
+    // This would require a notifications table - for now return empty array
+    return [];
+  }
+
+  async markNotificationAsRead(id: string, userId: string): Promise<void> {
+    // This would require a notifications table - for now do nothing
+    return;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    // This would require a notifications table - for now do nothing
+    return;
+  }
+
+  // Raw SQL execution for admin metrics
+  async executeRawSQL<T = any>(query: string, params?: any[]): Promise<T[]> {
+    const { pool } = await import("./db");
+    const result = await pool.query(query, params);
+    return result.rows as T[];
   }
 }
 

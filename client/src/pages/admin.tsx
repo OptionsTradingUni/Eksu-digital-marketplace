@@ -16,8 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban } from "lucide-react";
+import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban, Database, Activity, HardDrive } from "lucide-react";
 import type { User, Product } from "@shared/schema";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export default function AdminPanel() {
   const { user, isLoading: authLoading, isAdmin } = useAuth();
@@ -161,6 +162,7 @@ export default function AdminPanel() {
         <TabsList>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="products" data-testid="tab-products">Products</TabsTrigger>
+          <TabsTrigger value="metrics" data-testid="tab-metrics">Database Metrics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -335,7 +337,269 @@ export default function AdminPanel() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="metrics">
+          <DatabaseMetricsTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Database Metrics Types
+interface TableMetric {
+  table_name: string;
+  row_estimate: number;
+  total_size_bytes: number;
+  indexes_size_bytes: number;
+  table_size_bytes: number;
+}
+
+interface TableMetrics {
+  tables: TableMetric[];
+  totalDatabaseSize: number;
+}
+
+interface ConnectionState {
+  state: string;
+  count: number;
+}
+
+interface ActivityMetrics {
+  connectionsByState: ConnectionState[];
+  totalConnections: number;
+  maxConnectionAge: number;
+}
+
+interface PerformanceMetrics {
+  queryStats: any[];
+  databaseStats: {
+    deadlocks: number;
+    temp_files: number;
+    temp_bytes: number;
+  };
+  extensionAvailable: boolean;
+}
+
+// Database Metrics Component
+function DatabaseMetricsTab() {
+  // Poll metrics every 30 seconds
+  const { data: tableMetrics, isLoading: tablesLoading } = useQuery<TableMetrics>({
+    queryKey: ["/api/admin/metrics/tables"],
+    refetchInterval: 30000,
+  });
+
+  const { data: activityMetrics, isLoading: activityLoading } = useQuery<ActivityMetrics>({
+    queryKey: ["/api/admin/metrics/activity"],
+    refetchInterval: 30000,
+  });
+
+  const { data: performanceMetrics, isLoading: performanceLoading } = useQuery<PerformanceMetrics>({
+    queryKey: ["/api/admin/metrics/performance"],
+    refetchInterval: 30000,
+  });
+
+  // Format bytes to readable size
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Prepare data for charts
+  const tableChartData = tableMetrics?.tables.slice(0, 10).map((t: any) => ({
+    name: t.table_name.split('.')[1] || t.table_name,
+    size: Math.round(t.total_size_bytes / 1024 / 1024 * 100) / 100, // MB
+    rows: t.row_estimate,
+  })) || [];
+
+  const connectionData = activityMetrics?.connectionsByState.map((c: any) => ({
+    name: c.state || 'unknown',
+    value: c.count,
+  })) || [];
+
+  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+  if (tablesLoading || activityLoading || performanceLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-64" />
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Database Size</CardTitle>
+            <HardDrive className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-db-size">
+              {formatBytes(tableMetrics?.totalDatabaseSize || 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {tableMetrics?.tables.length || 0} tables
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Connections</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-connections">
+              {activityMetrics?.totalConnections || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Max age: {Math.round(activityMetrics?.maxConnectionAge || 0)}s
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Query Stats</CardTitle>
+            <Database className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-queries">
+              {performanceMetrics?.queryStats?.length || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {performanceMetrics?.extensionAvailable ? 'Extension enabled' : 'Enable pg_stat_statements'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Table Storage Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Table Storage (Top 10)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={tableChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+              <YAxis label={{ value: 'Size (MB)', angle: -90, position: 'insideLeft' }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="size" fill="#3b82f6" name="Size (MB)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Connection States */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Connection States</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={connectionData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={(entry) => `${entry.name}: ${entry.value}`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {connectionData.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Performance Stats</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Deadlocks</span>
+                <span className="font-medium" data-testid="text-deadlocks">
+                  {performanceMetrics?.databaseStats?.deadlocks || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Temp Files</span>
+                <span className="font-medium" data-testid="text-temp-files">
+                  {performanceMetrics?.databaseStats?.temp_files || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Temp Data</span>
+                <span className="font-medium">
+                  {formatBytes(performanceMetrics?.databaseStats?.temp_bytes || 0)}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detailed Table Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Table Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Table Name</TableHead>
+                  <TableHead className="text-right">Rows</TableHead>
+                  <TableHead className="text-right">Table Size</TableHead>
+                  <TableHead className="text-right">Index Size</TableHead>
+                  <TableHead className="text-right">Total Size</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableMetrics?.tables.map((table: any) => (
+                  <TableRow key={table.table_name}>
+                    <TableCell className="font-medium">
+                      {table.table_name.split('.')[1] || table.table_name}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {table.row_estimate.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatBytes(table.table_size_bytes)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatBytes(table.indexes_size_bytes)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatBytes(table.total_size_bytes)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

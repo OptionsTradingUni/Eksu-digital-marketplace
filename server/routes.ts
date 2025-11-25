@@ -1089,6 +1089,177 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Metrics Routes - Database & Memory Monitoring
+  app.get("/api/admin/metrics/tables", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      // Query PostgreSQL catalog for table statistics
+      const result = await storage.executeRawSQL<{
+        table_name: string;
+        row_estimate: number;
+        total_size_bytes: number;
+        indexes_size_bytes: number;
+        table_size_bytes: number;
+      }>(
+        `
+        SELECT 
+          schemaname || '.' || tablename as table_name,
+          n_live_tup as row_estimate,
+          pg_total_relation_size(schemaname||'.'||tablename) as total_size_bytes,
+          pg_indexes_size(schemaname||'.'||tablename) as indexes_size_bytes,
+          pg_relation_size(schemaname||'.'||tablename) as table_size_bytes
+        FROM pg_stat_user_tables
+        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY total_size_bytes DESC
+        LIMIT 50
+        `
+      );
+
+      // Get database size
+      const dbSize = await storage.executeRawSQL<{ db_size_bytes: number }>(
+        "SELECT pg_database_size(current_database()) as db_size_bytes"
+      );
+
+      res.json({
+        tables: result,
+        totalDatabaseSize: dbSize[0]?.db_size_bytes || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching table metrics:", error);
+      res.status(500).json({ message: "Failed to fetch table metrics" });
+    }
+  });
+
+  app.get("/api/admin/metrics/activity", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      // Query active connections from pg_stat_activity
+      const connections = await storage.executeRawSQL<{
+        state: string;
+        count: number;
+      }>(
+        `
+        SELECT 
+          state,
+          COUNT(*) as count
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+        GROUP BY state
+        `
+      );
+
+      // Get total connection count and max age
+      const stats = await storage.executeRawSQL<{
+        total_connections: number;
+        max_connection_age_seconds: number;
+      }>(
+        `
+        SELECT 
+          COUNT(*) as total_connections,
+          EXTRACT(EPOCH FROM MAX(NOW() - state_change)) as max_connection_age_seconds
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+        `
+      );
+
+      res.json({
+        connectionsByState: connections,
+        totalConnections: stats[0]?.total_connections || 0,
+        maxConnectionAge: stats[0]?.max_connection_age_seconds || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching activity metrics:", error);
+      res.status(500).json({ message: "Failed to fetch activity metrics" });
+    }
+  });
+
+  app.get("/api/admin/metrics/performance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      // Check if pg_stat_statements extension is available
+      const hasExtension = await storage.executeRawSQL<{ exists: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements') as exists`
+      );
+
+      let queryStats = [];
+      if (hasExtension[0]?.exists) {
+        // Get query performance stats from pg_stat_statements
+        queryStats = await storage.executeRawSQL<{
+          query: string;
+          calls: number;
+          total_time_ms: number;
+          mean_time_ms: number;
+          rows: number;
+        }>(
+          `
+          SELECT 
+            LEFT(query, 100) as query,
+            calls,
+            total_exec_time as total_time_ms,
+            mean_exec_time as mean_time_ms,
+            rows
+          FROM pg_stat_statements
+          WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+          ORDER BY mean_exec_time DESC
+          LIMIT 20
+          `
+        );
+      }
+
+      // Get database-level stats (always available)
+      const dbStats = await storage.executeRawSQL<{
+        deadlocks: number;
+        temp_files: number;
+        temp_bytes: number;
+      }>(
+        `
+        SELECT 
+          deadlocks,
+          temp_files,
+          temp_bytes
+        FROM pg_stat_database
+        WHERE datname = current_database()
+        `
+      );
+
+      res.json({
+        queryStats,
+        databaseStats: dbStats[0] || { deadlocks: 0, temp_files: 0, temp_bytes: 0 },
+        extensionAvailable: hasExtension[0]?.exists || false,
+      });
+    } catch (error) {
+      console.error("Error fetching performance metrics:", error);
+      res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
   // Create HTTP server
   const httpServer = createServer(app);
 
