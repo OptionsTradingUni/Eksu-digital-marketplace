@@ -3,6 +3,7 @@ import { ShoppingBag, MessageSquare, User, Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import NotificationBell from "@/components/NotificationBell";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -77,6 +78,9 @@ export function Header() {
                   </Link>
                 </Button>
 
+                {/* Notifications */}
+                <NotificationBell />
+
                 {/* Theme Toggle */}
                 <ThemeToggle />
 
@@ -89,7 +93,7 @@ export function Header() {
                       data-testid="button-user-menu"
                     >
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={user.profileImageUrl || undefined} />
+                        <AvatarImage src={user?.profileImageUrl || undefined} />
                         <AvatarFallback>{initials}</AvatarFallback>
                       </Avatar>
                     </Button>
@@ -98,13 +102,13 @@ export function Header() {
                     <DropdownMenuLabel>
                       <div className="flex flex-col gap-1">
                         <p className="text-sm font-medium">
-                          {user.firstName || user.email}
+                          {user?.firstName || user?.email}
                         </p>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">
-                            {user.role}
+                            {user?.role}
                           </Badge>
-                          {user.isVerified && (
+                          {user?.isVerified && (
                             <Badge variant="default" className="text-xs">
                               Verified
                             </Badge>

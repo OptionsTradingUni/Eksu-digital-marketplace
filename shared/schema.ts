@@ -435,6 +435,44 @@ export const withdrawals = pgTable("withdrawals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Notification types
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "message", "sale", "purchase", "review", "follow", "product_update", 
+  "announcement", "dispute", "verification_approved", "verification_rejected",
+  "escrow_released", "wallet_credit", "boost_expired", "price_alert"
+]);
+
+// Notifications for real time updates
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: notificationTypeEnum("type").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  link: varchar("link"), // Where to navigate when clicked
+  isRead: boolean("is_read").default(false),
+  relatedUserId: varchar("related_user_id").references(() => users.id, { onDelete: "set null" }),
+  relatedProductId: varchar("related_product_id").references(() => products.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_user_notifications").on(table.userId, table.isRead),
+]);
+
+// Marketplace announcements (only verified accounts can post)
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  type: varchar("type", { length: 50 }).default("general"), // general, update, event, promotion, safety
+  isApproved: boolean("is_approved").default(false),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+  isPinned: boolean("is_pinned").default(false),
+  views: integer("views").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   products: many(products),
@@ -910,6 +948,21 @@ export const insertWithdrawalSchema = createInsertSchema(withdrawals).omit({
   processedAt: true,
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+  isRead: true,
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
+  approvedAt: true,
+  views: true,
+  isApproved: true,
+  approvedBy: true,
+});
+
 // API-specific schemas for new features
 export const createHostelSchema = insertHostelSchema.extend({
   title: z.string().min(5, "Title must be at least 5 characters"),
@@ -958,3 +1011,7 @@ export type PaystackPayment = typeof paystackPayments.$inferSelect;
 export type InsertPaystackPayment = z.infer<typeof insertPaystackPaymentSchema>;
 export type Withdrawal = typeof withdrawals.$inferSelect;
 export type InsertWithdrawal = z.infer<typeof insertWithdrawalSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
