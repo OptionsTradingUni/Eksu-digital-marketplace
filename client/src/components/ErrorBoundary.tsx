@@ -1,7 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, RefreshCw, Copy, Mail } from "lucide-react";
+import { AlertTriangle, RefreshCw, Copy } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -13,17 +13,16 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: string;
-  emailSent: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: "", emailSent: false };
+    this.state = { hasError: false, error: null, errorInfo: "" };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, errorInfo: error.message, emailSent: false };
+    return { hasError: true, error, errorInfo: error.message };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -47,7 +46,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   reportError = async (error: Error, errorInfo: ErrorInfo) => {
     try {
-      const response = await fetch("/api/errors/report", {
+      await fetch("/api/errors/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -59,10 +58,6 @@ export class ErrorBoundary extends Component<Props, State> {
           timestamp: new Date().toISOString(),
         }),
       });
-      
-      if (response.ok) {
-        this.setState({ emailSent: true });
-      }
     } catch (err) {
       console.error("Failed to report error:", err);
     }
@@ -77,7 +72,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: "", emailSent: false });
+    this.setState({ hasError: false, error: null, errorInfo: "" });
   };
 
   copyToClipboard = () => {
@@ -103,18 +98,8 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground">
-                The application encountered an error. Don't worry - the error has been logged
-                {this.state.emailSent && " and we've been notified via email"}.
+                The application encountered an error. The error has been logged and reported.
               </p>
-
-              {this.state.emailSent && (
-                <div className="bg-muted/50 p-3 rounded-md flex items-start gap-2">
-                  <Mail className="h-4 w-4 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    Email notification sent to the development team with full error details.
-                  </p>
-                </div>
-              )}
               
               <details className="text-sm">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-semibold">

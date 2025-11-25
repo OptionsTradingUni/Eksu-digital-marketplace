@@ -113,6 +113,9 @@ This platform enables students to:
 - `GET /api/reviews/:userId` - User's reviews
 - `POST /api/reviews` - Create review
 
+### Error Reporting
+- `POST /api/errors/report` - Report frontend errors (logs to console, optional email notifications)
+
 ## Running the Project
 
 ```bash
@@ -196,6 +199,22 @@ shared/
 ```bash
 GROQ_API_KEY=your_groq_api_key_here  # Get FREE at console.groq.com
 ```
+
+## Error Handling System (November 25, 2025)
+
+### Comprehensive Error Boundaries
+- **Multi-level ErrorBoundary**: Wraps entire app and each individual route
+- **User-friendly error UI**: Shows clear error messages with technical details
+- **Copy to clipboard**: Users can copy error details for support
+- **Multiple recovery options**: Try again, reload page, or go home
+- **Global error handlers**: Catches uncaught errors and unhandled promise rejections
+- **Backend error reporting**: `/api/errors/report` endpoint logs all frontend errors
+
+### Email Notifications (TODO)
+To enable email notifications for errors:
+1. Set up Resend integration OR provide SMTP credentials
+2. Add email sending logic to `/api/errors/report` endpoint in `server/routes.ts`
+3. Set environment variable `ERROR_EMAIL_RECIPIENT` with your email address
 
 ## Recently Added Features (November 2025)
 
