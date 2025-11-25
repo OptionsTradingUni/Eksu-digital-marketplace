@@ -4,6 +4,8 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import passport from "./auth";
+import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -50,8 +52,13 @@ const upload = multer({
   },
 });
 
-// Helper to get user ID from session
+// Helper to get user ID from session (supports both Replit Auth and Passport.js)
 function getUserId(req: any): string | null {
+  // Try Passport.js auth first (new system)
+  if (req.user?.id) {
+    return req.user.id;
+  }
+  // Fall back to Replit Auth (old system, for migration)
   return req.user?.claims?.sub || null;
 }
 
@@ -66,6 +73,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.use("/uploads", express.static(uploadDir));
 
+  // ==================== NEW AUTH ROUTES (Passport.js Local) ====================
+  
+  // Registration route
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email, password, firstName, lastName, phoneNumber } = req.body;
+
+      // Validate required fields
+      if (!email || !password || !firstName || !lastName) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const user = await storage.createUser({
+        email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        phoneNumber,
+      });
+
+      // Log the user in
+      req.login(user, (err) => {
+        if (err) {
+          console.error("Error logging in after registration:", err);
+          return res.status(500).json({ message: "Registration successful but login failed" });
+        }
+        res.json(user);
+      });
+    } catch (error) {
+      console.error("Error registering user:", error);
+      res.status(500).json({ message: "Failed to register user" });
+    }
+  });
+
+  // Login route
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) {
+        console.error("Error during login:", err);
+        return res.status(500).json({ message: "Login failed" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Invalid credentials" });
+      }
+      req.login(user, (err) => {
+        if (err) {
+          console.error("Error establishing session:", err);
+          return res.status(500).json({ message: "Failed to establish session" });
+        }
+        res.json(user);
+      });
+    })(req, res, next);
+  });
+
+  // Logout route
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        console.error("Error logging out:", err);
+        return res.status(500).json({ message: "Failed to logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // ==================== EXISTING AUTH ROUTES ====================
+  
   // Auth routes
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
