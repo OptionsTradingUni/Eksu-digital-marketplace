@@ -58,12 +58,8 @@ function getUserId(req: any): string | null {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup Passport.js authentication (email/password) for Railway deployment
+  // Setup Passport.js authentication (email/password) for Render deployment
   await setupPassportAuth(app);
-  
-  // TODO: Replit Auth has been replaced with Passport.js local auth for Railway deployment
-  // Remove setupReplitAuth call to avoid session conflicts
-  // await setupReplitAuth(app);
 
   // Serve uploaded images
   app.use("/uploads", (req, res, next) => {
@@ -1340,7 +1336,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements') as exists`
       );
 
-      let queryStats = [];
+      let queryStats: Array<{
+        query: string;
+        calls: number;
+        total_time_ms: number;
+        mean_time_ms: number;
+        rows: number;
+      }> = [];
       if (hasExtension[0]?.exists) {
         // Get query performance stats from pg_stat_statements
         queryStats = await storage.executeRawSQL<{

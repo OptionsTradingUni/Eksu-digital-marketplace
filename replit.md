@@ -23,7 +23,7 @@ This platform enables students to:
 **Backend:**
 - Express.js
 - PostgreSQL + Drizzle ORM
-- Replit Auth (email/password + Google login)
+- Passport.js Auth (email/password authentication)
 - WebSocket server (Socket.io-like real-time messaging)
 - Multer (image uploads)
 
@@ -39,11 +39,12 @@ This platform enables students to:
 
 ## Key Features Implemented
 
-### Authentication (Replit Auth)
-- Email/password and Google login
+### Authentication (Passport.js)
+- Email/password authentication
 - Role selection during registration (buyer/seller)
 - Session management with PostgreSQL store
 - Protected routes with middleware
+- Secure cookie configuration for Render deployment
 
 ### Products
 - Create listings with multi-image upload (up to 10 images)
@@ -132,16 +133,11 @@ The app runs on port 5000 and includes both backend API and frontend SPA.
 
 ## Environment Variables
 
-Required secrets (already configured):
-- `DATABASE_URL` - PostgreSQL connection
-- `SESSION_SECRET` - Session encryption
-- `REPL_ID` - Replit app ID
-- `ISSUER_URL` - OIDC issuer (defaults to Replit)
-- `GROQ_API_KEY` - AI chatbot (get FREE at console.groq.com)
-
-Optional (for Replit Auth):
-- `REPLIT_CLIENT_ID` - Replit OAuth client ID
-- `REPLIT_CLIENT_SECRET` - Replit OAuth secret
+Required secrets for Render deployment:
+- `DATABASE_URL` - PostgreSQL connection string
+- `SESSION_SECRET` - Session encryption key (generate with `openssl rand -base64 32`)
+- `GROQ_API_KEY` - AI chatbot API key (get FREE at console.groq.com)
+- `NODE_ENV` - Set to `production` for Render deployment
 
 ## File Structure
 
@@ -157,7 +153,7 @@ server/
   db.ts             # Database connection
   storage.ts        # Data access layer
   routes.ts         # API endpoints + WebSocket
-  replitAuth.ts     # Authentication setup
+  auth.ts           # Passport.js authentication setup
   seed.ts           # Database seeding
 shared/
   schema.ts         # Drizzle schema + Zod validation
