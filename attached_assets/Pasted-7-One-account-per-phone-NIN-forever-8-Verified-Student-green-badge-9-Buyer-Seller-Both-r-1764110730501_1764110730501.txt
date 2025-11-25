@@ -1,0 +1,97 @@
+7.  One account per phone + NIN forever
+8.  Verified Student green badge
+9.  Buyer / Seller / Both role selection
+10.  ₦1- 50 naira welcome wallet bonus
+11.  Next.js 14 + Tailwind + shadcn/ui
+12.  Vercel / Railway free hosting
+13.  Supabase / Neon free PostgreSQL
+14.  Cloudinary free images
+15.  Paystack/Flutterwave escrow wallet
+16.  3–6 % escrow fee (your main money)
+17.  Boosted listings ₦500–₦2,000 choose the best 
+18.  Urgent red badge
+19.  Extra photos package
+20.  Premium seller subscription
+21.  TikTok-style infinite feed
+22.  Dark mode + auto
+23.  Skeleton loaders
+24.  WebP + lazy load images
+25.  Redis cache (Upstash free)
+26.  <1 sec load even on 2G
+27.  Offline mode
+28.  Cart system (multi-seller)
+29.  Bundle discount 30–100. All basic marketplace features (messages, watchlist, reviews, reports, etc.)
+101-200 | SEARCH ENGINE THAT READS MINDS
+1.  Full Nigerian slang / Pidgin search
+2.  99 % typo tolerance
+3.  Voice search (Pidgin, English, Yoruba, Igbo, Hausa)
+4.  Emoji search (₦ = phones, ✨ = premium)
+5.  Course code search (MEE203, CSC101)
+6.  Hostel + distance filter
+7.  Reverse image search
+8.  Instant results as you type
+9.  Price slider + “under 200k” voice 110–200. Every filter (battery %, RAM, colour, verified only, has video, etc.)
+201-300 | AI & AUTOMATION (2026 Level)
+1.  AI creates listing from 3 photos + voice
+2.  AI price suggestion
+3.  AI scam photo detector
+4.  AI haggles in chat for buyer
+5.  AI stylist (try-on clothes)
+6.  AI 3D spin from 2 photos
+7.  AI auto-reply when seller offline 208–300. Every AI feature possible
+301-400 | SELLER PROFILES & CUSTOM SHOPS
+1.  Custom @username shop (yoursite.ng/@bigmama_tech)
+2.  Gradient + sparkle banner
+3.  Emoji bio allowed
+4.  Choose accent colour
+5.  Follow seller
+6.  New item push to followers
+7.  Trust score 0–100
+8.  Items sold counter
+9.  Response time badge 310–400. Super Seller crowns, analytics, custom URL, etc.
+401-500 | GAMIFICATION & VIRAL GROWTH
+1.  Daily login streak ₦50 → ₦1,000
+2.  Referral ₦500 each
+3.  XP + levels (Level 50 = legend)
+4.  Weekly King of Sales crown
+5.  Confetti when item sells
+6.  Spin wheel after purchase
+7.  Campus billionaire title (first to ₦10M) 408–500. Duels, seasons, badges, leaderboards, etc.
+501-600 | CAMPUS LIFE INTEGRATION
+1.  Textbook ISBN scanner
+2.  Sublet & bedspace board
+3.  Ride-share (airport runs)
+4.  Ticket exchange
+5.  Lost & Found
+6.  Free food alerts
+7.  JAPA sale mode
+8.  Sapa emergency badge
+9.  Rain delay notification
+10.  NEPA light tracker per hostel 511–600. Cafeteria menu, shuttle timetable, printing directory, etc.
+601-700 | SAFETY, SUPPORT & ADMIN (₦0 Cost)
+1.  Support team system (add 100 people free)
+2.  Admin + support dashboard
+3.  One-click freeze / ban
+4.  Manual verification queue
+5.  Dispute centre with photos
+6.  Report → instant freeze
+7.  Scam score flag
+8.  Emergency SOS button
+9.  Real-time safe location sharing 610–700. Every anti-scam, support, and admin tool
+701-800+ | CRAZY NAIJA-ONLY FEATURES (Pure Vibes)
+1.  Valentine love letter delivery
+2.  “Ghost delivery” (anonymous drop-off)
+3.  “Roast my price” public thread
+4.  Campus radio announcements
+5.  “Who dey owe me” debt list
+6.  Prayer request section
+7.  Free boost Friday
+8.  Broke student filter (under ₦5k)
+9.  USSD version (*code#)
+10.  WhatsApp bot mirror 711–800+. Every meme, prank, seasonal, cultural feature imaginable
+BONUS 50 MONEY-MAKING FEATURES
+1.  Banner ads from hostel owners
+2.  Sponsored push notifications
+3.  Featured homepage slots
+4.  Coupon system
+5.  Donation button (“help pay server bill”) 756–800. Partnerships, sponsorships, premium themes, etc.
