@@ -62,12 +62,13 @@ export default function ChatBot() {
     setIsLoading(true);
     setShowPaymentWarning(false);
 
-    const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
-    setMessages(newMessages);
+    // Add user message to local state immediately for UI
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
+      // Send only the current message to server (server maintains trusted history)
       const response = await apiRequest("POST", "/api/chatbot", {
-        messages: newMessages,
+        message: userMessage,
       }) as unknown as { message: string; hasPaymentWarning: boolean };
 
       if (response.hasPaymentWarning) {

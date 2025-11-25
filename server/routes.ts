@@ -788,13 +788,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== AI CHATBOT ROUTES ====================
   
+  // Zod schema for chatbot request validation
+  const chatbotRequestSchema = z.object({
+    message: z.string().min(1).max(2000),
+  });
+  
   app.post("/api/chatbot", async (req: any, res) => {
     try {
-      const { messages } = req.body;
+      // Validate request
+      const validated = chatbotRequestSchema.parse(req.body);
       
-      if (!messages || !Array.isArray(messages)) {
-        return res.status(400).json({ message: "Invalid messages format" });
-      }
+      // SECURITY: Only accept the current user message, not full history
+      // We'll maintain conversation history server-side in the future
+      const userMessage = validated.message;
 
       // Get user context if authenticated
       let userContext;
@@ -810,24 +816,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Check for payment scam patterns in the last user message
-      const lastUserMessage = messages
-        .filter((m: ChatMessage) => m.role === "user")
-        .pop();
-      
-      let warningAdded = false;
-      if (lastUserMessage && checkForPaymentScam(lastUserMessage.content)) {
-        // Prepend a safety warning to the response
-        warningAdded = true;
-      }
+      // Check for payment scam patterns in the user message
+      const hasPaymentWarning = checkForPaymentScam(userMessage);
 
-      const response = await getChatbotResponse(messages, userContext);
+      // Build trusted conversation (for now just single message)
+      // In production, this should pull from server-side session storage
+      const trustedMessages: ChatMessage[] = [
+        { role: "user", content: userMessage }
+      ];
+
+      const response = await getChatbotResponse(trustedMessages, userContext);
 
       res.json({
         message: response,
-        hasPaymentWarning: warningAdded,
+        hasPaymentWarning,
       });
     } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid input - message required and must be under 2000 characters" 
+        });
+      }
       console.error("Chatbot error:", error);
       res.status(500).json({ 
         message: "Omo, something don wrong. The AI bot no dey available now. Try again later or contact support!",
