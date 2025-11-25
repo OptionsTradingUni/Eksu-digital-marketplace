@@ -21,6 +21,8 @@ import WalletPage from "@/pages/wallet";
 import ReferralsPage from "@/pages/referrals";
 import NotificationsPage from "@/pages/notifications";
 import MyAdsPage from "@/pages/my-ads";
+import GamesPage from "@/pages/games";
+import SupportPage from "@/pages/support";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { useEffect } from "react";
 
@@ -111,6 +113,16 @@ function Router() {
         <Route path="/my-ads" component={() => (
           <ErrorBoundary>
             <MyAdsPage />
+          </ErrorBoundary>
+        )} />
+        <Route path="/games" component={() => (
+          <ErrorBoundary>
+            <GamesPage />
+          </ErrorBoundary>
+        )} />
+        <Route path="/support" component={() => (
+          <ErrorBoundary>
+            <SupportPage />
           </ErrorBoundary>
         )} />
         <Route component={() => (

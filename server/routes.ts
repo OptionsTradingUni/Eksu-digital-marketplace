@@ -25,6 +25,8 @@ import {
   createBoostSchema,
   createDisputeSchema,
   createSupportTicketSchema,
+  createGameSchema,
+  completeGameSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 
@@ -929,6 +931,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Image upload endpoint
+  app.post("/api/upload", isAuthenticated, upload.single("image"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file provided" });
+      }
+
+      const imageUrl = `/uploads/${req.file.filename}`;
+      res.json({ url: imageUrl });
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      res.status(500).json({ message: "Failed to upload image" });
+    }
+  });
+
+  // Update profile image
+  app.put("/api/users/:id/profile-image", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId || userId !== req.params.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { profileImageUrl } = req.body;
+      if (!profileImageUrl) {
+        return res.status(400).json({ message: "Profile image URL is required" });
+      }
+
+      const updated = await storage.updateUserProfile(req.params.id, { profileImageUrl });
+      const { password: _, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating profile image:", error);
+      res.status(500).json({ message: "Failed to update profile image" });
+    }
+  });
+
   // Follow routes
   app.post("/api/users/:id/follow", isAuthenticated, async (req: any, res) => {
     try {
@@ -1723,6 +1762,269 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clearing cart:", error);
       res.status(500).json({ message: "Failed to clear cart" });
+    }
+  });
+
+  // ==================== GAMES API ROUTES ====================
+
+  // Get available game lobbies
+  app.get("/api/games", isAuthenticated, async (req: any, res) => {
+    try {
+      const { gameType } = req.query;
+      const games = await storage.getAvailableGames(gameType as string | undefined);
+      res.json(games);
+    } catch (error) {
+      console.error("Error fetching games:", error);
+      res.status(500).json({ message: "Failed to fetch games" });
+    }
+  });
+
+  // Get user's game history
+  app.get("/api/games/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const games = await storage.getUserGames(userId);
+      res.json(games);
+    } catch (error) {
+      console.error("Error fetching game history:", error);
+      res.status(500).json({ message: "Failed to fetch game history" });
+    }
+  });
+
+  // Get single game with players
+  app.get("/api/games/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const game = await storage.getGame(req.params.id);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+      res.json(game);
+    } catch (error) {
+      console.error("Error fetching game:", error);
+      res.status(500).json({ message: "Failed to fetch game" });
+    }
+  });
+
+  // Create a new game lobby
+  app.post("/api/games/create", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validated = createGameSchema.parse(req.body);
+      const stakeAmount = parseFloat(validated.stakeAmount);
+
+      // Verify sufficient balance
+      const wallet = await storage.getOrCreateWallet(userId);
+      if (parseFloat(wallet.balance) < stakeAmount) {
+        return res.status(400).json({ 
+          message: `Insufficient balance. You need ${stakeAmount} but have ${wallet.balance}` 
+        });
+      }
+
+      // Deduct stake from wallet
+      await storage.updateWalletBalance(userId, validated.stakeAmount, 'subtract');
+
+      // Create transaction for stake
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'escrow_hold',
+        amount: validated.stakeAmount,
+        description: `Game stake for ${validated.gameType.replace('_', ' ')}`,
+        status: 'completed',
+      });
+
+      // Create game
+      const game = await storage.createGame({
+        gameType: validated.gameType,
+        player1Id: userId,
+        stakeAmount: validated.stakeAmount,
+      });
+
+      res.json(game);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating game:", error);
+      res.status(500).json({ message: "Failed to create game" });
+    }
+  });
+
+  // Join an existing game
+  app.post("/api/games/join/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const gameId = req.params.id;
+
+      // Get the game first to check stake amount
+      const existingGame = await storage.getGame(gameId);
+      if (!existingGame) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      if (existingGame.status !== "waiting") {
+        return res.status(400).json({ message: "Game is no longer available" });
+      }
+
+      if (existingGame.player1Id === userId) {
+        return res.status(400).json({ message: "Cannot join your own game" });
+      }
+
+      const stakeAmount = parseFloat(existingGame.stakeAmount);
+
+      // Verify sufficient balance
+      const wallet = await storage.getOrCreateWallet(userId);
+      if (parseFloat(wallet.balance) < stakeAmount) {
+        return res.status(400).json({ 
+          message: `Insufficient balance. You need ${stakeAmount} but have ${wallet.balance}` 
+        });
+      }
+
+      // Deduct stake from wallet
+      await storage.updateWalletBalance(userId, existingGame.stakeAmount, 'subtract');
+
+      // Create transaction for stake
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'escrow_hold',
+        amount: existingGame.stakeAmount,
+        description: `Game stake for ${existingGame.gameType.replace('_', ' ')}`,
+        status: 'completed',
+      });
+
+      // Join the game
+      const game = await storage.joinGame(gameId, userId);
+
+      res.json(game);
+    } catch (error) {
+      console.error("Error joining game:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to join game" });
+    }
+  });
+
+  // Complete a game and pay winner
+  app.post("/api/games/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const gameId = req.params.id;
+      const validated = completeGameSchema.parse(req.body);
+
+      // Get the game
+      const game = await storage.getGame(gameId);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Verify user is a player in this game
+      if (game.player1Id !== userId && game.player2Id !== userId) {
+        return res.status(403).json({ message: "You are not a player in this game" });
+      }
+
+      if (game.status !== "in_progress") {
+        return res.status(400).json({ message: "Game is not in progress" });
+      }
+
+      // Verify winner is a valid player
+      if (validated.winnerId !== game.player1Id && validated.winnerId !== game.player2Id) {
+        return res.status(400).json({ message: "Invalid winner" });
+      }
+
+      // Calculate prize (total stakes - platform fee)
+      const totalStake = parseFloat(game.stakeAmount) * 2;
+      const platformFee = totalStake * 0.05; // 5% platform fee
+      const winnerPrize = totalStake - platformFee;
+
+      // Complete the game
+      const completedGame = await storage.completeGame(gameId, validated.winnerId);
+
+      // Pay winner
+      const winnerWallet = await storage.getOrCreateWallet(validated.winnerId);
+      await storage.updateWalletBalance(validated.winnerId, winnerPrize.toFixed(2), 'add');
+
+      // Create transaction for winnings
+      await storage.createTransaction({
+        walletId: winnerWallet.id,
+        type: 'escrow_release',
+        amount: winnerPrize.toFixed(2),
+        description: `${game.gameType.replace('_', ' ')} game winnings`,
+        status: 'completed',
+      });
+
+      res.json({
+        game: completedGame,
+        winnings: winnerPrize,
+        platformFee,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error completing game:", error);
+      res.status(500).json({ message: "Failed to complete game" });
+    }
+  });
+
+  // Cancel a game (only creator can cancel before anyone joins)
+  app.post("/api/games/:id/cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const gameId = req.params.id;
+
+      // Get the game
+      const game = await storage.getGame(gameId);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Only creator can cancel
+      if (game.player1Id !== userId) {
+        return res.status(403).json({ message: "Only the game creator can cancel" });
+      }
+
+      // Can only cancel waiting games
+      if (game.status !== "waiting") {
+        return res.status(400).json({ message: "Cannot cancel a game that has already started" });
+      }
+
+      // Refund the stake
+      const wallet = await storage.getOrCreateWallet(userId);
+      await storage.updateWalletBalance(userId, game.stakeAmount, 'add');
+
+      // Create refund transaction
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'refund',
+        amount: game.stakeAmount,
+        description: `Refund for cancelled ${game.gameType.replace('_', ' ')} game`,
+        status: 'completed',
+      });
+
+      // Cancel the game
+      const cancelledGame = await storage.cancelGame(gameId);
+
+      res.json(cancelledGame);
+    } catch (error) {
+      console.error("Error cancelling game:", error);
+      res.status(500).json({ message: "Failed to cancel game" });
     }
   });
 

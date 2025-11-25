@@ -27,6 +27,8 @@ import {
   paystackPayments,
   withdrawals,
   cartItems,
+  games,
+  gameMatches,
   type User,
   type UpsertUser,
   type Product,
@@ -73,6 +75,10 @@ import {
   type Follow,
   type InsertFollow,
   type CartItem,
+  type Game,
+  type InsertGame,
+  type GameMatch,
+  type InsertGameMatch,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
@@ -269,6 +275,18 @@ export interface IStorage {
   updateCartItemQuantity(cartItemId: string, quantity: number): Promise<CartItem>;
   removeFromCart(cartItemId: string): Promise<void>;
   clearCart(userId: string): Promise<void>;
+  
+  // Game operations
+  createGame(game: { gameType: "ludo" | "word_battle" | "trivia"; player1Id: string; stakeAmount: string }): Promise<Game>;
+  getGame(id: string): Promise<(Game & { player1: User; player2: User | null }) | undefined>;
+  getAvailableGames(gameType?: string): Promise<(Game & { player1: User })[]>;
+  getUserGames(userId: string): Promise<Game[]>;
+  joinGame(gameId: string, player2Id: string): Promise<Game>;
+  startGame(gameId: string): Promise<Game>;
+  completeGame(gameId: string, winnerId: string): Promise<Game>;
+  cancelGame(gameId: string): Promise<Game>;
+  createGameMatch(match: InsertGameMatch): Promise<GameMatch>;
+  getGameMatches(gameId: string): Promise<GameMatch[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1776,6 +1794,170 @@ export class DatabaseStorage implements IStorage {
 
   async clearCart(userId: string): Promise<void> {
     await db.delete(cartItems).where(eq(cartItems.userId, userId));
+  }
+
+  // Game operations
+  async createGame(game: { gameType: "ludo" | "word_battle" | "trivia"; player1Id: string; stakeAmount: string }): Promise<Game> {
+    const [created] = await db.insert(games).values({
+      gameType: game.gameType,
+      player1Id: game.player1Id,
+      stakeAmount: game.stakeAmount,
+      status: "waiting",
+    }).returning();
+    return created;
+  }
+
+  async getGame(id: string): Promise<(Game & { player1: User; player2: User | null }) | undefined> {
+    const result = await db
+      .select()
+      .from(games)
+      .leftJoin(users, eq(games.player1Id, users.id))
+      .where(eq(games.id, id));
+
+    if (result.length === 0 || !result[0].games || !result[0].users) return undefined;
+
+    const game = result[0].games;
+    const player1 = result[0].users;
+
+    let player2: User | null = null;
+    if (game.player2Id) {
+      const [p2] = await db.select().from(users).where(eq(users.id, game.player2Id));
+      player2 = p2 || null;
+    }
+
+    return {
+      ...game,
+      player1,
+      player2,
+    };
+  }
+
+  async getAvailableGames(gameType?: string): Promise<(Game & { player1: User })[]> {
+    let query = db
+      .select()
+      .from(games)
+      .leftJoin(users, eq(games.player1Id, users.id))
+      .where(eq(games.status, "waiting"))
+      .orderBy(desc(games.createdAt));
+
+    const results = await query;
+
+    let filtered = results
+      .filter(r => r.games && r.users)
+      .map(r => ({
+        ...r.games!,
+        player1: r.users!,
+      }));
+
+    if (gameType) {
+      filtered = filtered.filter(g => g.gameType === gameType);
+    }
+
+    return filtered;
+  }
+
+  async getUserGames(userId: string): Promise<Game[]> {
+    return await db
+      .select()
+      .from(games)
+      .where(or(eq(games.player1Id, userId), eq(games.player2Id, userId)))
+      .orderBy(desc(games.createdAt));
+  }
+
+  async joinGame(gameId: string, player2Id: string): Promise<Game> {
+    const [game] = await db
+      .select()
+      .from(games)
+      .where(eq(games.id, gameId));
+
+    if (!game) {
+      throw new Error("Game not found");
+    }
+
+    if (game.status !== "waiting") {
+      throw new Error("Game is not available to join");
+    }
+
+    if (game.player1Id === player2Id) {
+      throw new Error("Cannot join your own game");
+    }
+
+    const [updated] = await db
+      .update(games)
+      .set({
+        player2Id,
+        status: "in_progress",
+        startedAt: new Date(),
+      })
+      .where(eq(games.id, gameId))
+      .returning();
+
+    return updated;
+  }
+
+  async startGame(gameId: string): Promise<Game> {
+    const [updated] = await db
+      .update(games)
+      .set({
+        status: "in_progress",
+        startedAt: new Date(),
+      })
+      .where(eq(games.id, gameId))
+      .returning();
+
+    if (!updated) {
+      throw new Error("Game not found");
+    }
+
+    return updated;
+  }
+
+  async completeGame(gameId: string, winnerId: string): Promise<Game> {
+    const [updated] = await db
+      .update(games)
+      .set({
+        status: "completed",
+        winnerId,
+        completedAt: new Date(),
+      })
+      .where(eq(games.id, gameId))
+      .returning();
+
+    if (!updated) {
+      throw new Error("Game not found");
+    }
+
+    return updated;
+  }
+
+  async cancelGame(gameId: string): Promise<Game> {
+    const [updated] = await db
+      .update(games)
+      .set({
+        status: "cancelled",
+        completedAt: new Date(),
+      })
+      .where(eq(games.id, gameId))
+      .returning();
+
+    if (!updated) {
+      throw new Error("Game not found");
+    }
+
+    return updated;
+  }
+
+  async createGameMatch(match: InsertGameMatch): Promise<GameMatch> {
+    const [created] = await db.insert(gameMatches).values(match).returning();
+    return created;
+  }
+
+  async getGameMatches(gameId: string): Promise<GameMatch[]> {
+    return await db
+      .select()
+      .from(gameMatches)
+      .where(eq(gameMatches.gameId, gameId))
+      .orderBy(gameMatches.roundNumber);
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -16,15 +16,17 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { updateUserProfileSchema, type User } from "@shared/schema";
 import { z } from "zod";
-import { Shield, Star, ShoppingBag, Users } from "lucide-react";
+import { Shield, Star, ShoppingBag, Users, Camera, Loader2, X } from "lucide-react";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
 export default function Profile() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Fetch follow stats
   const { data: followStats } = useQuery<{
     followerCount: number;
     followingCount: number;
@@ -57,7 +59,6 @@ export default function Profile() {
     }
   }, [currentUser, form]);
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !currentUser) {
       toast({
@@ -70,6 +71,14 @@ export default function Profile() {
       }, 500);
     }
   }, [authLoading, currentUser, toast]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateProfileData) => {
@@ -102,6 +111,106 @@ export default function Profile() {
     },
   });
 
+  const uploadImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to upload image");
+      }
+
+      const { url } = await response.json();
+
+      const updateResponse = await apiRequest("PUT", `/api/users/${currentUser?.id}/profile-image`, {
+        profileImageUrl: url,
+      });
+
+      return updateResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      toast({
+        title: "Success",
+        description: "Profile picture updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload profile picture",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleCancelUpload = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleUpload = () => {
+    if (selectedFile) {
+      uploadImageMutation.mutate(selectedFile);
+    }
+  };
+
   if (authLoading || !currentUser) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-3xl">
@@ -117,14 +226,36 @@ export default function Profile() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <div className="space-y-6">
-        {/* Profile Header */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center gap-6">
-              <Avatar className="h-24 w-24">
-                <AvatarImage src={currentUser.profileImageUrl || undefined} />
-                <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={previewUrl || currentUser.profileImageUrl || undefined} />
+                  <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
+                </Avatar>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 p-1.5 rounded-full bg-primary text-primary-foreground hover-elevate active-elevate-2 transition-colors"
+                  data-testid="button-change-avatar"
+                  disabled={uploadImageMutation.isPending}
+                >
+                  {uploadImageMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  data-testid="input-avatar-file"
+                />
+              </div>
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="text-2xl font-bold" data-testid="text-profile-name">
                   {currentUser.firstName || currentUser.email}
@@ -179,10 +310,51 @@ export default function Profile() {
                 </div>
               )}
             </div>
+
+            {selectedFile && (
+              <div className="mt-4 p-4 rounded-md bg-muted/50">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={previewUrl || undefined} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">New profile picture</p>
+                      <p className="text-xs text-muted-foreground">{selectedFile.name}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCancelUpload}
+                      disabled={uploadImageMutation.isPending}
+                      data-testid="button-cancel-upload"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      onClick={handleUpload}
+                      disabled={uploadImageMutation.isPending}
+                      data-testid="button-upload-avatar"
+                    >
+                      {uploadImageMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        "Upload"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Edit Profile Form */}
         <Card>
           <CardHeader>
             <CardTitle>Edit Profile</CardTitle>

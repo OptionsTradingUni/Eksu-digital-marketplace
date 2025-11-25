@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -138,6 +138,12 @@ export function Header() {
                       <Link href="/referrals" data-testid="link-referrals">
                         <Users className="mr-2 h-4 w-4" />
                         Referrals
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/support" data-testid="link-support">
+                        <LifeBuoy className="mr-2 h-4 w-4" />
+                        Support
                       </Link>
                     </DropdownMenuItem>
                     {(isSeller || user?.role === "both") && (
@@ -283,6 +289,12 @@ export function Header() {
                         <Button variant="ghost" className="w-full justify-start">
                           <User className="mr-2 h-4 w-4" />
                           Profile
+                        </Button>
+                      </Link>
+                      <Link href="/support">
+                        <Button variant="ghost" className="w-full justify-start" data-testid="link-support-mobile">
+                          <LifeBuoy className="mr-2 h-4 w-4" />
+                          Support
                         </Button>
                       </Link>
                       
