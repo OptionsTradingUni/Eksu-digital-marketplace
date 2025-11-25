@@ -3,8 +3,9 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import passport from "./auth";
+import { setupAuth as setupReplitAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth as setupPassportAuth } from "./auth";
+import passport from "passport";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
@@ -63,8 +64,12 @@ function getUserId(req: any): string | null {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup auth middleware
-  await setupAuth(app);
+  // Setup Passport.js authentication (email/password) for Railway deployment
+  await setupPassportAuth(app);
+  
+  // TODO: Replit Auth has been replaced with Passport.js local auth for Railway deployment
+  // Remove setupReplitAuth call to avoid session conflicts
+  // await setupReplitAuth(app);
 
   // Serve uploaded images
   app.use("/uploads", (req, res, next) => {
