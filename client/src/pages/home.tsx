@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Plus, SlidersHorizontal, X } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Card, CardContent } from "@/components/ui/card";
 import type { Product, Category } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
