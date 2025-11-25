@@ -33,7 +33,7 @@ export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "both", "adm
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").notNull().unique(),
-  password: varchar("password").notNull(), // Hashed password using bcrypt
+  password: varchar("password"), // Hashed password using bcrypt (nullable for migration from OAuth users)
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
@@ -1018,7 +1018,6 @@ export const loginSchema = z.object({
 // TypeScript types for auth
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
-export type User = typeof users.$inferSelect;
 export type SafeUser = Omit<User, 'password'>; // User without password field
 
 // TypeScript types for new tables

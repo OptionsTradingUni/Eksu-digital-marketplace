@@ -76,9 +76,11 @@ import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (required for Replit Auth)
+  // User operations (authentication & profiles)
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  createUser(user: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string }): Promise<User>;
   updateUserProfile(id: string, data: Partial<User>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   verifyUser(id: string): Promise<User>;
@@ -260,6 +262,29 @@ export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUser(userData: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string }): Promise<User> {
+    const [user] = await db.insert(users).values(userData).returning();
+    
+    // Create wallet and give welcome bonus for new users
+    const bonusAmount = (Math.random() * 48 + 2).toFixed(2); // Random ₦2-₦50
+    await this.createWelcomeBonus(user.id, bonusAmount);
+    
+    // Create login streak
+    await this.getOrCreateLoginStreak(user.id);
+    
+    // If seller, create analytics
+    if (user.role === 'seller' || user.role === 'admin') {
+      await this.getOrCreateSellerAnalytics(user.id);
+    }
+    
     return user;
   }
 
