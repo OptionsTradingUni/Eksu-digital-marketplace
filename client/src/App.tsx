@@ -20,30 +20,36 @@ import AdminPanel from "@/pages/admin";
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Show landing page for confirmed unauthenticated users (after loading completes)
-  if (!isLoading && !isAuthenticated) {
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show landing page for unauthenticated users
+  if (!isAuthenticated) {
     return <Landing />;
   }
 
-  // While loading or authenticated, show full app with routes
+  // Show authenticated app
   return (
     <>
-      {isAuthenticated && <Header />}
+      <Header />
       <Switch>
-        {isAuthenticated ? (
-          <>
-            <Route path="/" component={Home} />
-            <Route path="/products/new" component={CreateProduct} />
-            <Route path="/products/:id" component={ProductView} />
-            <Route path="/products/:id/edit" component={CreateProduct} />
-            <Route path="/messages" component={Messages} />
-            <Route path="/profile" component={Profile} />
-            <Route path="/seller/dashboard" component={SellerDashboard} />
-            <Route path="/admin" component={AdminPanel} />
-          </>
-        ) : (
-          <Route path="/" component={Landing} />
-        )}
+        <Route path="/" component={Home} />
+        <Route path="/products/new" component={CreateProduct} />
+        <Route path="/products/:id" component={ProductView} />
+        <Route path="/products/:id/edit" component={CreateProduct} />
+        <Route path="/messages" component={Messages} />
+        <Route path="/profile" component={Profile} />
+        <Route path="/seller/dashboard" component={SellerDashboard} />
+        <Route path="/admin" component={AdminPanel} />
         <Route component={NotFound} />
       </Switch>
     </>
