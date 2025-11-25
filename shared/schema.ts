@@ -47,6 +47,7 @@ export const users = pgTable("users", {
   ninVerified: boolean("nin_verified").default(false),
   ninVerificationDate: timestamp("nin_verification_date"),
   ninHash: varchar("nin_hash").unique(), // Hashed NIN (NOT the actual NIN - illegal to store)
+  ninVnin: varchar("nin_vnin"), // Virtual NIN token from verification provider (Korapay/Dojah)
   ninConfidenceScore: decimal("nin_confidence_score", { precision: 5, scale: 2 }), // Selfie match confidence
   // Social media links
   instagramHandle: varchar("instagram_handle"),

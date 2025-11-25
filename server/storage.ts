@@ -20,6 +20,11 @@ import {
   supportTickets,
   loginStreaks,
   sellerAnalytics,
+  hostels,
+  events,
+  escrowTransactions,
+  paystackPayments,
+  withdrawals,
   type User,
   type UpsertUser,
   type Product,
@@ -53,6 +58,16 @@ import {
   type InsertSupportTicket,
   type LoginStreak,
   type SellerAnalytics,
+  type Hostel,
+  type InsertHostel,
+  type Event,
+  type InsertEvent,
+  type EscrowTransaction,
+  type InsertEscrowTransaction,
+  type PaystackPayment,
+  type InsertPaystackPayment,
+  type Withdrawal,
+  type InsertWithdrawal,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
@@ -162,6 +177,63 @@ export interface IStorage {
   // Seller analytics operations
   getOrCreateSellerAnalytics(sellerId: string): Promise<SellerAnalytics>;
   updateSellerAnalytics(sellerId: string, data: Partial<SellerAnalytics>): Promise<SellerAnalytics>;
+  
+  // Hostel operations
+  createHostel(hostel: InsertHostel & { agentId: string }): Promise<Hostel>;
+  getHostel(id: string): Promise<(Hostel & { agent: User }) | undefined>;
+  getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]>;
+  getUserHostels(agentId: string): Promise<Hostel[]>;
+  updateHostel(id: string, data: Partial<Hostel>): Promise<Hostel>;
+  deleteHostel(id: string): Promise<void>;
+  incrementHostelViews(id: string): Promise<void>;
+  
+  // Event operations
+  createEvent(event: InsertEvent & { organizerId: string }): Promise<Event>;
+  getEvent(id: string): Promise<(Event & { organizer: User }) | undefined>;
+  getEvents(filters?: { eventType?: string; upcoming?: boolean }): Promise<Event[]>;
+  getUserEvents(organizerId: string): Promise<Event[]>;
+  updateEvent(id: string, data: Partial<Event>): Promise<Event>;
+  deleteEvent(id: string): Promise<void>;
+  incrementEventViews(id: string): Promise<void>;
+  purchaseTicket(eventId: string, userId: string): Promise<Event>;
+  
+  // Escrow operations
+  createEscrowTransaction(transaction: InsertEscrowTransaction & { buyerId: string; sellerId: string }): Promise<EscrowTransaction>;
+  getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined>;
+  getUserEscrowTransactions(userId: string): Promise<EscrowTransaction[]>;
+  confirmEscrowByBuyer(id: string): Promise<EscrowTransaction>;
+  confirmEscrowBySeller(id: string): Promise<EscrowTransaction>;
+  releaseEscrowFunds(id: string): Promise<EscrowTransaction>;
+  refundEscrow(id: string): Promise<EscrowTransaction>;
+  
+  // Paystack payment operations
+  createPaystackPayment(payment: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment>;
+  updatePaystackPayment(reference: string, data: Partial<PaystackPayment>): Promise<PaystackPayment>;
+  getPaystackPayment(reference: string): Promise<PaystackPayment | undefined>;
+  getUserPaystackPayments(userId: string): Promise<PaystackPayment[]>;
+  processPaystackSuccess(reference: string, amount: string): Promise<void>;
+  
+  // Withdrawal operations
+  createWithdrawal(withdrawal: InsertWithdrawal & { userId: string }): Promise<Withdrawal>;
+  getUserWithdrawals(userId: string): Promise<Withdrawal[]>;
+  updateWithdrawal(id: string, data: Partial<Withdrawal>): Promise<Withdrawal>;
+  
+  // NIN verification operations
+  updateNINVerification(userId: string, ninHash: string, vnin: string): Promise<User>;
+  
+  // Social media update operations
+  updateSocialMedia(userId: string, data: { instagramHandle?: string; tiktokHandle?: string; facebookProfile?: string }): Promise<User>;
+  
+  // Trust badge operations
+  awardTrustBadge(userId: string): Promise<User>;
+  revokeTrustBadge(userId: string): Promise<User>;
+  
+  // Referral update operations
+  markReferralPurchase(referredUserId: string, purchaseId: string): Promise<void>;
+  
+  // Leaderboard operations
+  getTopSellers(limit?: number): Promise<any[]>;
+  getMostTrustedUsers(limit?: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -173,7 +245,7 @@ export class DatabaseStorage implements IStorage {
 
   async upsertUser(userData: UpsertUser): Promise<User> {
     // Check if this is a new user
-    const existing = await this.getUser(userData.id);
+    const existing = userData.id ? await this.getUser(userData.id) : undefined;
     const isNewUser = !existing;
 
     const [user] = await db
@@ -190,7 +262,7 @@ export class DatabaseStorage implements IStorage {
 
     // For new users, create wallet and give welcome bonus
     if (isNewUser) {
-      const bonusAmount = (Math.random() * 700 + 300).toFixed(2); // Random ₦300-₦1000
+      const bonusAmount = (Math.random() * 48 + 2).toFixed(2); // Random ₦2-₦50
       await this.createWelcomeBonus(user.id, bonusAmount);
       
       // Create login streak
@@ -411,10 +483,10 @@ export class DatabaseStorage implements IStorage {
       .from(messages)
       .where(eq(messages.receiverId, userId));
 
-    const userIds = [...new Set([
+    const userIds = Array.from(new Set([
       ...sentMessages.map(m => m.userId),
       ...receivedMessages.map(m => m.userId),
-    ])];
+    ]));
 
     // Get user details and last message for each thread
     const threads = await Promise.all(
@@ -888,11 +960,11 @@ export class DatabaseStorage implements IStorage {
     } else if (daysDiff === 1) {
       // Consecutive day - increment streak
       newStreak = (streak.currentStreak || 0) + 1;
-      reward = Math.min(50 + (newStreak * 10), 1000); // ₦50 to ₦1,000
+      reward = Math.floor(Math.random() * 48 + 2); // Random ₦2-₦50
     } else {
       // Streak broken - reset
       newStreak = 1;
-      reward = 50;
+      reward = Math.floor(Math.random() * 48 + 2); // Random ₦2-₦50
     }
 
     const [updated] = await db
@@ -947,6 +1019,449 @@ export class DatabaseStorage implements IStorage {
       .where(eq(sellerAnalytics.id, analytics.id))
       .returning();
     return updated;
+  }
+
+  // Hostel operations
+  async createHostel(hostelData: InsertHostel & { agentId: string }): Promise<Hostel> {
+    const [created] = await db.insert(hostels).values(hostelData).returning();
+    return created;
+  }
+
+  async getHostel(id: string): Promise<(Hostel & { agent: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(hostels)
+      .leftJoin(users, eq(hostels.agentId, users.id))
+      .where(eq(hostels.id, id));
+    
+    if (!result[0]) return undefined;
+    return { ...result[0].hostels, agent: result[0].users! };
+  }
+
+  async getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]> {
+    const conditions = [eq(hostels.isAvailable, true)];
+    
+    if (filters?.location) {
+      conditions.push(like(hostels.location, `%${filters.location}%`));
+    }
+    
+    return await db
+      .select()
+      .from(hostels)
+      .where(and(...conditions))
+      .orderBy(desc(hostels.createdAt));
+  }
+
+  async getUserHostels(agentId: string): Promise<Hostel[]> {
+    return await db.select().from(hostels).where(eq(hostels.agentId, agentId)).orderBy(desc(hostels.createdAt));
+  }
+
+  async updateHostel(id: string, data: Partial<Hostel>): Promise<Hostel> {
+    const [updated] = await db
+      .update(hostels)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(hostels.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHostel(id: string): Promise<void> {
+    await db.delete(hostels).where(eq(hostels.id, id));
+  }
+
+  async incrementHostelViews(id: string): Promise<void> {
+    await db
+      .update(hostels)
+      .set({ views: sql`${hostels.views} + 1` })
+      .where(eq(hostels.id, id));
+  }
+
+  // Event operations
+  async createEvent(eventData: InsertEvent & { organizerId: string }): Promise<Event> {
+    const [created] = await db.insert(events).values(eventData).returning();
+    return created;
+  }
+
+  async getEvent(id: string): Promise<(Event & { organizer: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(events)
+      .leftJoin(users, eq(events.organizerId, users.id))
+      .where(eq(events.id, id));
+    
+    if (!result[0]) return undefined;
+    return { ...result[0].events, organizer: result[0].users! };
+  }
+
+  async getEvents(filters?: { eventType?: string; upcoming?: boolean }): Promise<Event[]> {
+    const conditions = [eq(events.isActive, true)];
+    
+    if (filters?.upcoming) {
+      conditions.push(sql`${events.eventDate} >= NOW()`);
+    }
+    
+    return await db
+      .select()
+      .from(events)
+      .where(and(...conditions))
+      .orderBy(events.eventDate);
+  }
+
+  async getUserEvents(organizerId: string): Promise<Event[]> {
+    return await db.select().from(events).where(eq(events.organizerId, organizerId)).orderBy(desc(events.createdAt));
+  }
+
+  async updateEvent(id: string, data: Partial<Event>): Promise<Event> {
+    const [updated] = await db
+      .update(events)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(events.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    await db.delete(events).where(eq(events.id, id));
+  }
+
+  async incrementEventViews(id: string): Promise<void> {
+    await db
+      .update(events)
+      .set({ views: sql`${events.views} + 1` })
+      .where(eq(events.id, id));
+  }
+
+  async purchaseTicket(eventId: string, userId: string): Promise<Event> {
+    const [updated] = await db
+      .update(events)
+      .set({ 
+        ticketsSold: sql`${events.ticketsSold} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(events.id, eventId))
+      .returning();
+    return updated;
+  }
+
+  // Escrow operations
+  async createEscrowTransaction(transactionData: InsertEscrowTransaction & { buyerId: string; sellerId: string }): Promise<EscrowTransaction> {
+    const [created] = await db.insert(escrowTransactions).values(transactionData).returning();
+    return created;
+  }
+
+  async getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined> {
+    const [transaction] = await db.select().from(escrowTransactions).where(eq(escrowTransactions.id, id));
+    return transaction;
+  }
+
+  async getUserEscrowTransactions(userId: string): Promise<EscrowTransaction[]> {
+    return await db
+      .select()
+      .from(escrowTransactions)
+      .where(or(eq(escrowTransactions.buyerId, userId), eq(escrowTransactions.sellerId, userId)))
+      .orderBy(desc(escrowTransactions.createdAt));
+  }
+
+  async confirmEscrowByBuyer(id: string): Promise<EscrowTransaction> {
+    const [updated] = await db
+      .update(escrowTransactions)
+      .set({ buyerConfirmed: true, updatedAt: new Date() })
+      .where(eq(escrowTransactions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async confirmEscrowBySeller(id: string): Promise<EscrowTransaction> {
+    const [updated] = await db
+      .update(escrowTransactions)
+      .set({ sellerConfirmed: true, updatedAt: new Date() })
+      .where(eq(escrowTransactions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async releaseEscrowFunds(id: string): Promise<EscrowTransaction> {
+    const transaction = await this.getEscrowTransaction(id);
+    if (!transaction) throw new Error("Escrow transaction not found");
+    if (transaction.status !== 'held') throw new Error("Can only release funds from 'held' status");
+
+    // Move funds from escrowBalance to balance for seller
+    const sellerWallet = await this.getWallet(transaction.sellerId);
+    if (!sellerWallet) throw new Error("Seller wallet not found");
+
+    await db
+      .update(wallets)
+      .set({
+        escrowBalance: sql`${wallets.escrowBalance} - ${transaction.amount}`,
+        balance: sql`${wallets.balance} + ${transaction.amount}`,
+        totalEarned: sql`${wallets.totalEarned} + ${transaction.amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(wallets.id, sellerWallet.id));
+    
+    // Create transaction record
+    await this.createTransaction({
+      walletId: sellerWallet.id,
+      type: 'escrow_release',
+      amount: transaction.amount,
+      description: 'Escrow funds released',
+      relatedUserId: transaction.buyerId,
+      status: 'completed',
+    });
+
+    // Deduct platform fee
+    const feeAmount = parseFloat(transaction.platformFee);
+    if (feeAmount > 0) {
+      await db
+        .update(wallets)
+        .set({
+          balance: sql`${wallets.balance} - ${transaction.platformFee}`,
+          updatedAt: new Date()
+        })
+        .where(eq(wallets.id, sellerWallet.id));
+
+      await this.createTransaction({
+        walletId: sellerWallet.id,
+        type: 'platform_fee',
+        amount: `-${transaction.platformFee}`,
+        description: 'Platform fee deducted',
+        status: 'completed',
+      });
+    }
+
+    const [updated] = await db
+      .update(escrowTransactions)
+      .set({ 
+        status: 'released',
+        releasedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(escrowTransactions.id, id))
+      .returning();
+    
+    return updated;
+  }
+
+  async refundEscrow(id: string): Promise<EscrowTransaction> {
+    const transaction = await this.getEscrowTransaction(id);
+    if (!transaction) throw new Error("Escrow transaction not found");
+    if (transaction.status !== 'held') throw new Error("Can only refund funds from 'held' status");
+
+    // Move funds from seller's escrowBalance to buyer's balance
+    const sellerWallet = await this.getWallet(transaction.sellerId);
+    const buyerWallet = await this.getWallet(transaction.buyerId);
+    if (!sellerWallet) throw new Error("Seller wallet not found");
+    if (!buyerWallet) throw new Error("Buyer wallet not found");
+
+    // Deduct from seller's escrow balance
+    await db
+      .update(wallets)
+      .set({
+        escrowBalance: sql`${wallets.escrowBalance} - ${transaction.amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(wallets.id, sellerWallet.id));
+
+    // Add to buyer's balance
+    await db
+      .update(wallets)
+      .set({
+        balance: sql`${wallets.balance} + ${transaction.amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(wallets.id, buyerWallet.id));
+    
+    // Create transaction records
+    await this.createTransaction({
+      walletId: buyerWallet.id,
+      type: 'refund',
+      amount: transaction.amount,
+      description: 'Escrow refunded',
+      relatedUserId: transaction.sellerId,
+      status: 'completed',
+    });
+
+    const [updated] = await db
+      .update(escrowTransactions)
+      .set({ 
+        status: 'refunded',
+        updatedAt: new Date()
+      })
+      .where(eq(escrowTransactions.id, id))
+      .returning();
+    
+    return updated;
+  }
+
+  // Paystack payment operations
+  async createPaystackPayment(paymentData: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment> {
+    const [created] = await db.insert(paystackPayments).values(paymentData).returning();
+    return created;
+  }
+
+  async updatePaystackPayment(reference: string, data: Partial<PaystackPayment>): Promise<PaystackPayment> {
+    const [updated] = await db
+      .update(paystackPayments)
+      .set(data)
+      .where(eq(paystackPayments.reference, reference))
+      .returning();
+    return updated;
+  }
+
+  async getPaystackPayment(reference: string): Promise<PaystackPayment | undefined> {
+    const [payment] = await db.select().from(paystackPayments).where(eq(paystackPayments.reference, reference));
+    return payment;
+  }
+
+  async getUserPaystackPayments(userId: string): Promise<PaystackPayment[]> {
+    return await db
+      .select()
+      .from(paystackPayments)
+      .where(eq(paystackPayments.userId, userId))
+      .orderBy(desc(paystackPayments.createdAt));
+  }
+
+  // Withdrawal operations
+  async createWithdrawal(withdrawalData: InsertWithdrawal & { userId: string }): Promise<Withdrawal> {
+    const [created] = await db.insert(withdrawals).values(withdrawalData).returning();
+    return created;
+  }
+
+  async getUserWithdrawals(userId: string): Promise<Withdrawal[]> {
+    return await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.userId, userId))
+      .orderBy(desc(withdrawals.createdAt));
+  }
+
+  async updateWithdrawal(id: string, data: Partial<Withdrawal>): Promise<Withdrawal> {
+    const [updated] = await db
+      .update(withdrawals)
+      .set(data)
+      .where(eq(withdrawals.id, id))
+      .returning();
+    return updated;
+  }
+
+  // NIN verification operations
+  async updateNINVerification(userId: string, ninHash: string, vnin: string): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        ninHash,
+        ninVnin: vnin,
+        ninVerified: true,
+        ninVerificationDate: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Social media update operations
+  async updateSocialMedia(userId: string, data: { instagramHandle?: string; tiktokHandle?: string; facebookProfile?: string }): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Trust badge operations
+  async awardTrustBadge(userId: string): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        isTrustedSeller: true,
+        trustedSellerSince: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async revokeTrustBadge(userId: string): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        isTrustedSeller: false,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Referral update operations
+  async markReferralPurchase(referredUserId: string, purchaseId: string): Promise<void> {
+    // Find referral where this user was referred
+    const [referral] = await db
+      .select()
+      .from(referrals)
+      .where(and(
+        eq(referrals.referredUserId, referredUserId),
+        eq(referrals.bonusPaid, false),
+        eq(referrals.referredUserMadePurchase, false)
+      ));
+
+    if (!referral) return;
+
+    // Generate random bonus amount ₦2-50
+    const bonusAmount = (Math.random() * 48 + 2).toFixed(2);
+
+    // Update referral
+    await db
+      .update(referrals)
+      .set({
+        referredUserMadePurchase: true,
+        firstPurchaseId: purchaseId,
+        bonusAmount,
+        bonusPaid: true,
+        bonusPaidAt: new Date(),
+      })
+      .where(eq(referrals.id, referral.id));
+
+    // Pay bonus to referrer
+    const referrerWallet = await this.getOrCreateWallet(referral.referrerId);
+    await this.updateWalletBalance(referral.referrerId, bonusAmount, 'add');
+    await this.createTransaction({
+      walletId: referrerWallet.id,
+      type: 'referral_bonus',
+      amount: bonusAmount,
+      description: `Referral bonus for ${referredUserId}'s first purchase`,
+      status: 'completed',
+    });
+  }
+
+  // Leaderboard operations
+  async getTopSellers(limit: number = 10): Promise<any[]> {
+    return await db
+      .select({
+        user: users,
+        productCount: sql<number>`COUNT(${products.id})`,
+      })
+      .from(users)
+      .leftJoin(products, eq(users.id, products.sellerId))
+      .where(eq(users.isActive, true))
+      .groupBy(users.id)
+      .orderBy(sql`COUNT(${products.id}) DESC`)
+      .limit(limit);
+  }
+
+  async getMostTrustedUsers(limit: number = 10): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .where(and(eq(users.isTrustedSeller, true), eq(users.isActive, true)))
+      .orderBy(desc(users.trustedSellerSince))
+      .limit(limit);
   }
 }
 
