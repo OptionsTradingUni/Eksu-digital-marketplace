@@ -24,6 +24,7 @@ import {
   createDisputeSchema,
   createSupportTicketSchema,
 } from "@shared/schema";
+import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 
 // Setup multer for image uploads
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -782,6 +783,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating report:", error);
       res.status(400).json({ message: error.message || "Failed to create report" });
+    }
+  });
+
+  // ==================== AI CHATBOT ROUTES ====================
+  
+  app.post("/api/chatbot", async (req: any, res) => {
+    try {
+      const { messages } = req.body;
+      
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ message: "Invalid messages format" });
+      }
+
+      // Get user context if authenticated
+      let userContext;
+      const userId = getUserId(req);
+      if (userId) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          userContext = {
+            role: user.role,
+            isVerified: user.isVerified ?? undefined,
+            trustScore: user.trustScore ?? undefined,
+          };
+        }
+      }
+
+      // Check for payment scam patterns in the last user message
+      const lastUserMessage = messages
+        .filter((m: ChatMessage) => m.role === "user")
+        .pop();
+      
+      let warningAdded = false;
+      if (lastUserMessage && checkForPaymentScam(lastUserMessage.content)) {
+        // Prepend a safety warning to the response
+        warningAdded = true;
+      }
+
+      const response = await getChatbotResponse(messages, userContext);
+
+      res.json({
+        message: response,
+        hasPaymentWarning: warningAdded,
+      });
+    } catch (error: any) {
+      console.error("Chatbot error:", error);
+      res.status(500).json({ 
+        message: "Omo, something don wrong. The AI bot no dey available now. Try again later or contact support!",
+        error: error.message 
+      });
+    }
+  });
+
+  // Quick help endpoint for common questions
+  app.get("/api/chatbot/quick-help", async (req: any, res) => {
+    try {
+      const topic = req.query.topic as string;
+      
+      const quickResponses: Record<string, string> = {
+        "how-to-sell": "To sell something: 1) Go to 'Sell' page 2) Upload clear photos 3) Add title, description, price 4) Choose category and condition 5) Post! Your item will be live immediately. Want to boost it for more visibility? That's ₦500-₦2000.",
+        "safety": "🚨 SAFETY RULES:\n✅ ALWAYS use escrow for payments\n✅ Check seller's trust score and badges\n✅ Report suspicious users\n🚫 NEVER pay outside the app\n🚫 Don't share bank details in chat\n\nIf someone asks you to pay outside the app = SCAM! Report them immediately.",
+        "escrow": "Escrow keeps your money SAFE! When you buy: 1) Your money is held by the app 2) Seller ships item 3) You confirm you got it 4) Money releases to seller. We charge 3-6% for this protection. Worth it to avoid scams!",
+        "verification": "Get verified to build trust! Available badges:\n✅ Verified Student - Upload student ID\n✅ NIN Verified - Verify government ID\n⭐ Trusted Seller - Earn through good sales\n\nGo to Profile > Verification to start!",
+      };
+
+      const response = quickResponses[topic] || "No quick help available for this topic. Use the chat for detailed help!";
+      res.json({ message: response });
+    } catch (error) {
+      console.error("Quick help error:", error);
+      res.status(500).json({ message: "Failed to get quick help" });
     }
   });
 

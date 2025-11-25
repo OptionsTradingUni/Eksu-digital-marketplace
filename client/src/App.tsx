@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 import { Header } from "@/components/Header";
+import ChatBot from "@/components/ChatBot";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -56,6 +57,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <ChatBot />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
