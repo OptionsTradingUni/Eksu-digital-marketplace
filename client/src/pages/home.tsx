@@ -21,9 +21,9 @@ export default function Home() {
   
   const { isSeller } = useAuth();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
-  const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "");
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "all");
   const [priceRange, setPriceRange] = useState([0, 100000]);
-  const [condition, setCondition] = useState(searchParams.get("condition") || "");
+  const [condition, setCondition] = useState(searchParams.get("condition") || "all");
   const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "");
 
   // Fetch categories
@@ -33,22 +33,27 @@ export default function Home() {
 
   // Fetch products with filters
   const { data: products, isLoading } = useQuery<(Product & { seller?: any })[]>({
-    queryKey: ["/api/products", { search: searchQuery, category: selectedCategory, condition, location: locationFilter }],
+    queryKey: ["/api/products", { 
+      search: searchQuery, 
+      category: selectedCategory !== "all" ? selectedCategory : undefined, 
+      condition: condition !== "all" ? condition : undefined, 
+      location: locationFilter 
+    }],
   });
 
   const handleSearch = () => {
     const params = new URLSearchParams();
     if (searchQuery) params.set("search", searchQuery);
-    if (selectedCategory) params.set("category", selectedCategory);
-    if (condition) params.set("condition", condition);
+    if (selectedCategory && selectedCategory !== "all") params.set("category", selectedCategory);
+    if (condition && condition !== "all") params.set("condition", condition);
     if (locationFilter) params.set("location", locationFilter);
     setLocation(`/?${params.toString()}`);
   };
 
   const clearFilters = () => {
     setSearchQuery("");
-    setSelectedCategory("");
-    setCondition("");
+    setSelectedCategory("all");
+    setCondition("all");
     setLocationFilter("");
     setPriceRange([0, 100000]);
     setLocation("/");
@@ -63,7 +68,7 @@ export default function Home() {
             <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Categories</SelectItem>
+            <SelectItem value="all">All Categories</SelectItem>
             {categories?.map((cat) => (
               <SelectItem key={cat.id} value={cat.id}>
                 {cat.name}
@@ -80,7 +85,7 @@ export default function Home() {
             <SelectValue placeholder="Any Condition" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Any Condition</SelectItem>
+            <SelectItem value="all">Any Condition</SelectItem>
             <SelectItem value="new">New</SelectItem>
             <SelectItem value="like_new">Like New</SelectItem>
             <SelectItem value="good">Good</SelectItem>
