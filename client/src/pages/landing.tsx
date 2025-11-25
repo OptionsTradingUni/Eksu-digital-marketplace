@@ -1,8 +1,23 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShoppingBag, MessageSquare, Shield, TrendingUp } from "lucide-react";
+import { AuthModal } from "@/components/AuthModal";
 
 export default function Landing() {
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<"signin" | "signup">("signup");
+
+  const handleGetStarted = () => {
+    setAuthModalTab("signup");
+    setAuthModalOpen(true);
+  };
+
+  const handleBrowse = () => {
+    setAuthModalTab("signin");
+    setAuthModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -17,11 +32,11 @@ export default function Landing() {
               fashion to furniture - your campus marketplace for everything.
             </p>
             <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
-              <Button size="lg" asChild data-testid="button-get-started">
-                <a href="/api/login">Get Started</a>
+              <Button size="lg" onClick={handleGetStarted} data-testid="button-get-started">
+                Get Started
               </Button>
-              <Button size="lg" variant="outline" asChild data-testid="button-browse">
-                <a href="/api/login">Browse Listings</a>
+              <Button size="lg" variant="outline" onClick={handleBrowse} data-testid="button-browse">
+                Browse Listings
               </Button>
             </div>
           </div>
@@ -101,11 +116,17 @@ export default function Landing() {
           <p className="text-lg text-muted-foreground mb-8">
             Join thousands of EKSU students buying and selling safely on campus.
           </p>
-          <Button size="lg" asChild data-testid="button-join-now">
-            <a href="/api/login">Join Now - It's Free</a>
+          <Button size="lg" onClick={handleGetStarted} data-testid="button-join-now">
+            Join Now - It's Free
           </Button>
         </div>
       </section>
+
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={setAuthModalOpen}
+        defaultTab={authModalTab}
+      />
     </div>
   );
 }
