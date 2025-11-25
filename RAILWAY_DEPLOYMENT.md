@@ -24,28 +24,34 @@ This guide helps you deploy the EKSU Campus Marketplace to Railway.
 1. In your Railway project, click "+ New"
 2. Select "Database" → "PostgreSQL"
 3. Railway will automatically create a PostgreSQL instance
-4. Copy the `DATABASE_URL` (Railway sets this automatically)
+4. **IMPORTANT**: Railway creates TWO database URLs:
+   - `DATABASE_URL` - Internal URL (only works between Railway services)
+   - `DATABASE_PUBLIC_URL` - **Public URL (USE THIS ONE)**
+5. Go to your Postgres service → Variables tab
+6. **Copy the `DATABASE_PUBLIC_URL`** value (contains `proxy.rlwy.net`)
 
 ### 3. Configure Environment Variables
 
 Click on your web service → "Variables" and add:
 
 ```bash
-# Database (auto-set by Railway)
-DATABASE_URL=<auto-set-by-railway>
+# Database - CRITICAL: Use PUBLIC URL from Postgres service
+# Go to Postgres service → Variables → Copy DATABASE_PUBLIC_URL
+# Should contain "proxy.rlwy.net" NOT "railway.internal"
+DATABASE_URL=postgresql://postgres:PASSWORD@roundhouse.proxy.rlwy.net:PORT/railway
+
+# Session Secret (use the one generated below)
+SESSION_SECRET=eb5b5ffee77c780593d5781bcfd6c8b08bb2b90523f47299da007cb54a9e2cad
 
 # Groq AI Chatbot (required)
 GROQ_API_KEY=your_groq_api_key_here
 
-# Replit Auth (optional - only if using Replit Auth)
-REPLIT_CLIENT_ID=your_replit_client_id
-REPLIT_CLIENT_SECRET=your_replit_client_secret
-
-# Session Secret (generate a random string)
-SESSION_SECRET=your_random_secret_here_make_it_long_and_random
-
 # Node Environment
 NODE_ENV=production
+
+# Replit Auth (optional - only if using Replit Auth, otherwise skip)
+REPL_ID=your_replit_id
+ISSUER_URL=https://replit.com/oidc
 ```
 
 #### How to Get Groq API Key (FREE):
