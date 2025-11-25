@@ -137,6 +137,11 @@ Required secrets (already configured):
 - `SESSION_SECRET` - Session encryption
 - `REPL_ID` - Replit app ID
 - `ISSUER_URL` - OIDC issuer (defaults to Replit)
+- `GROQ_API_KEY` - AI chatbot (get FREE at console.groq.com)
+
+Optional (for Replit Auth):
+- `REPLIT_CLIENT_ID` - Replit OAuth client ID
+- `REPLIT_CLIENT_SECRET` - Replit OAuth secret
 
 ## File Structure
 
@@ -165,6 +170,36 @@ shared/
 - **Dark Mode**: Full support with persistent preference
 - **Responsive**: Mobile-first design optimized for Nigerian students
 - **Components**: Shadcn UI for consistent, accessible components
+
+## AI Chatbot (NEW - November 25, 2025) ✨
+
+### Smart AI Assistant
+- **Powered by Groq** (llama-3.3-70b-versatile) - 100% FREE API
+- Understands Nigerian languages: Pidgin, Yoruba, Igbo, English
+- Knows ALL marketplace operations (buying, selling, escrow, verification, etc.)
+- Personality: Friendly, sassy with scammers, helpful always
+
+### Key Features
+- **Automatic Payment Scam Detection**: Alerts users when sellers ask for outside-app payments
+- **Big Red Safety Warnings**: "We're not responsible for transactions outside the app!"
+- **Quick Help Buttons**: How to Sell, Safety Tips, How Escrow Works, Get Verified
+- **Nigerian Language Support**: Speaks naturally in Pidgin, responds in user's language
+- **Security Hardened**: Server-side message validation, 2000 char limit, Zod validation
+
+### API Endpoints
+- `POST /api/chatbot` - Chat with AI (single message, returns response + scam warning flag)
+- `GET /api/chatbot/quick-help` - Get pre-defined helpful responses
+
+### Security Features
+- Only accepts single user messages (prevents conversation history spoofing)
+- Server-side scam detection (client can't bypass warnings)
+- Input validation with Zod (max 2000 characters)
+- Rate limiting ready (future enhancement)
+
+### Environment Variables Required
+```bash
+GROQ_API_KEY=your_groq_api_key_here  # Get FREE at console.groq.com
+```
 
 ## Recently Added Features (November 2025)
 
@@ -212,17 +247,42 @@ shared/
 - Photo evidence upload
 - Admin resolution tracking
 
+## Deployment
+
+### Railway Deployment (Recommended)
+See `RAILWAY_DEPLOYMENT.md` for complete Railway setup guide.
+
+**Quick Steps:**
+1. Push to GitHub
+2. Create Railway project from repo
+3. Add PostgreSQL database
+4. Set environment variables (DATABASE_URL, GROQ_API_KEY, SESSION_SECRET)
+5. Deploy - Railway handles everything automatically!
+
+**Cost:** FREE tier includes 500 hours/month + PostgreSQL
+
+### Local Development (Replit)
+1. Clone/fork the repo
+2. Add secrets in Replit Secrets panel
+3. Run `npm install`
+4. Run `npm run db:push` to create database tables
+5. Run `npm run dev` - app runs on port 5000
+
 ## Future Enhancements (Phase 2)
 
+- ✅ AI Chatbot with Nigerian language support (COMPLETED)
+- ✅ Payment scam detection and warnings (COMPLETED)
 - Stripe/Paystack payment integration
 - Student ID & NIN verification (YouVerify/Dojah)
-- AI-powered scam detection
+- Advanced AI scam detection (listing analysis)
 - Video uploads for products
 - Push notifications
 - Instant search (<300ms with Nigerian slang support)
 - Voice-to-text posting UI
 - Multi-language support UI
 - USSD payment fallback
+- AI listing generation from photos + voice
+- Server-side conversation history for chatbot
 
 ## Revenue Model
 
