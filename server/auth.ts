@@ -49,6 +49,11 @@ export async function setupAuth(app: Express) {
             return done(null, false, { message: "Invalid email or password" });
           }
 
+          // Check if user has a password set (null for OAuth migrated users)
+          if (!user.password) {
+            return done(null, false, { message: "Please set a password for your account" });
+          }
+
           const isValidPassword = await bcrypt.compare(password, user.password);
           
           if (!isValidPassword) {
