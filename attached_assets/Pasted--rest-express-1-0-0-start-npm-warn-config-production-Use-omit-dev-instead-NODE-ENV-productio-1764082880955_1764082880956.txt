@@ -1,0 +1,31 @@
+> rest-express@1.0.0 start
+npm warn config production Use `--omit=dev` instead.
+> NODE_ENV=production node dist/index.js
+2:55:52 PM [express] serving on port 8080
+2:58:27 PM [express] GET /api/login 302 in 106ms
+Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client
+    at ServerResponse.setHeader (node:_http_outgoing:700:11)
+    at ServerResponse.header (/app/node_modules/express/lib/response.js:794:10)
+    at ServerResponse.json (/app/node_modules/express/lib/response.js:275:10)
+    at res.json (file:///app/dist/index.js:3121:28)
+    at file:///app/dist/index.js:3143:24
+    at Layer.handle_error (/app/node_modules/express/lib/router/layer.js:71:5)
+    at trim_prefix (/app/node_modules/express/lib/router/index.js:326:13)
+    at /app/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/app/node_modules/express/lib/router/index.js:346:12)
+    at Immediate.next (/app/node_modules/express/lib/router/index.js:280:10)
+2:58:30 PM [express] GET /api/login 500 in 86ms :: {"message":"relation \"sessions\" does not exist"}
+error: relation "sessions" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async PGStore._asyncQuery (/app/node_modules/connect-pg-simple/index.js:322:21)
+2:58:31 PM [express] GET /api/auth/user 500 in 22ms :: {"message":"relation \"sessions\" does not ex…
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async PGStore._asyncQuery (/app/node_modules/connect-pg-simple/index.js:322:21)
+2:58:33 PM [express] GET /api/login 500 in 72ms :: {"message":"relation \"sessions\" does not exist"}
+error: relation "sessions" does not exist
+error: relation "sessions" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at async PGStore._asyncQuery (/app/node_modules/connect-pg-simple/index.js:322:21)
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process
