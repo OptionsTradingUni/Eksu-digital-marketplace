@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShoppingBag, MessageSquare, Shield, TrendingUp } from "lucide-react";
 import { AuthModal } from "@/components/AuthModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -20,6 +21,19 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen">
+      {/* Header with Theme Toggle */}
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="h-6 w-6 text-primary" />
+              <span className="text-lg font-bold">EKSU Marketplace</span>
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section */}
       <section className="relative bg-gradient-to-b from-primary/10 to-background py-20 px-4">
         <div className="container mx-auto text-center">

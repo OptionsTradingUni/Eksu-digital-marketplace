@@ -153,6 +153,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Forgot password route (placeholder - email sending to be implemented)
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      
+      // For security, always return success even if user doesn't exist
+      // This prevents email enumeration attacks
+      if (!user) {
+        return res.json({ 
+          message: "If an account exists with this email, a password reset link will be sent." 
+        });
+      }
+
+      // TODO: Implement email sending functionality
+      // For now, just log the reset request
+      console.log(`Password reset requested for user: ${email}`);
+      
+      // In production, this would:
+      // 1. Generate a unique reset token
+      // 2. Store it in database with expiration
+      // 3. Send email with reset link
+      
+      res.json({ 
+        message: "If an account exists with this email, a password reset link will be sent." 
+      });
+    } catch (error) {
+      console.error("Error in forgot password:", error);
+      res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
   // ==================== EXISTING AUTH ROUTES ====================
   
   // Auth routes

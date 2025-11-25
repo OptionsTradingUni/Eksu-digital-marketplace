@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, AlertTriangle, HelpCircle, ShieldCheck } from "lucide-react";
+import { MessageCircle, X, Send, AlertTriangle, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
@@ -18,13 +17,18 @@ export default function ChatBot() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hey! 👋 I'm your campus marketplace assistant. I know everything about buying, selling, safety, and avoiding scams. How I fit help you today?",
+      content: "Hey! I'm your campus marketplace assistant. I know everything about buying, selling, safety, and avoiding scams. How I fit help you today?",
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentWarning, setShowPaymentWarning] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -32,27 +36,46 @@ export default function ChatBot() {
     }
   }, [messages]);
 
-  const quickHelp = [
-    { topic: "how-to-sell", label: "How to Sell", icon: "📦" },
-    { topic: "safety", label: "Safety Tips", icon: "🚨" },
-    { topic: "escrow", label: "How Escrow Works", icon: "💰" },
-    { topic: "verification", label: "Get Verified", icon: "✅" },
-  ];
-
-  const handleQuickHelp = async (topic: string) => {
-    try {
-      const response = await fetch(`/api/chatbot/quick-help?topic=${topic}`);
-      const data = await response.json();
-      
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: quickHelp.find(h => h.topic === topic)?.label || topic },
-        { role: "assistant", content: data.message },
-      ]);
-    } catch (error) {
-      console.error("Quick help error:", error);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (buttonRef.current && !isOpen) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
     }
   };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isDragging) {
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      
+      const maxX = window.innerWidth - 56;
+      const maxY = window.innerHeight - 56;
+      
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, dragOffset]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -62,11 +85,9 @@ export default function ChatBot() {
     setIsLoading(true);
     setShowPaymentWarning(false);
 
-    // Add user message to local state immediately for UI
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
-      // Send only the current message to server (server maintains trusted history)
       const response = await apiRequest("POST", "/api/chatbot", {
         message: userMessage,
       }) as unknown as { message: string; hasPaymentWarning: boolean };
@@ -103,21 +124,34 @@ export default function ChatBot() {
   if (!isOpen) {
     return (
       <Button
+        ref={buttonRef}
         size="icon"
-        className="fixed bottom-6 right-6 rounded-full shadow-2xl z-[9999] relative"
-        onClick={() => setIsOpen(true)}
+        className="fixed rounded-full shadow-2xl z-[9999] bg-primary/90 backdrop-blur-sm hover:bg-primary/95 border-2 border-primary-foreground/10 cursor-move"
+        style={{
+          left: position.x || 'auto',
+          right: position.x ? 'auto' : '24px',
+          top: position.y || 'auto',
+          bottom: position.y ? 'auto' : '24px',
+        }}
+        onMouseDown={handleMouseDown}
+        onClick={(e) => {
+          if (!isDragging) {
+            setIsOpen(true);
+          }
+        }}
         data-testid="button-open-chatbot"
         aria-label="Open chat assistant"
       >
         <MessageCircle className="h-6 w-6" />
         <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-background animate-pulse"></span>
+        <GripVertical className="absolute -top-1 -left-1 h-3 w-3 text-primary-foreground/50" />
       </Button>
     );
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 w-[90vw] sm:w-[400px] h-[85vh] sm:h-[650px] max-h-[650px] shadow-2xl flex flex-col z-[9999] border-2" data-testid="card-chatbot">
-      <div className="flex items-center justify-between gap-2 p-4 border-b">
+    <Card className="fixed bottom-6 right-6 w-[90vw] sm:w-[400px] h-[85vh] sm:h-[650px] max-h-[650px] shadow-2xl flex flex-col z-[9999] border-2 bg-background/95 backdrop-blur-sm" data-testid="card-chatbot">
+      <div className="flex items-center justify-between gap-2 p-4 border-b bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
             <MessageCircle className="h-5 w-5 text-primary-foreground" />
@@ -144,28 +178,12 @@ export default function ChatBot() {
         <Alert variant="destructive" className="m-4 mb-0">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            🚨 <strong>PAYMENT WARNING:</strong> Only pay through app escrow! Outside payments = scam risk. We're not responsible!
+            <strong>PAYMENT WARNING:</strong> Only pay through app escrow! Outside payments = scam risk. We're not responsible!
           </AlertDescription>
         </Alert>
       )}
 
-      <div className="flex flex-wrap gap-2 p-3 border-b">
-        {quickHelp.map((help) => (
-          <Button
-            key={help.topic}
-            variant="outline"
-            size="sm"
-            className="text-xs h-7"
-            onClick={() => handleQuickHelp(help.topic)}
-            data-testid={`button-quickhelp-${help.topic}`}
-          >
-            <span className="mr-1">{help.icon}</span>
-            {help.label}
-          </Button>
-        ))}
-      </div>
-
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-4 bg-background/50 backdrop-blur-sm" ref={scrollRef}>
         <div className="space-y-4">
           {messages.map((message, index) => (
             <div
@@ -177,22 +195,16 @@ export default function ChatBot() {
                 className={`max-w-[280px] rounded-lg p-3 ${
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                    : "bg-muted/80 backdrop-blur-sm"
                 }`}
               >
-                {message.role === "assistant" && message.content.includes("🚨") && (
-                  <div className="flex items-start gap-2 mb-2">
-                    <ShieldCheck className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                    <span className="text-xs font-semibold text-destructive">Security Alert</span>
-                  </div>
-                )}
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
               </div>
             </div>
           ))}
           {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-muted rounded-lg p-3">
+              <div className="bg-muted/80 backdrop-blur-sm rounded-lg p-3">
                 <div className="flex gap-1">
                   <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"></span>
                   <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.2s]"></span>
@@ -204,7 +216,7 @@ export default function ChatBot() {
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t bg-background/80 backdrop-blur-sm">
         <div className="flex gap-2">
           <Input
             placeholder="Ask anything... (Pidgin or English)"
@@ -212,7 +224,7 @@ export default function ChatBot() {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 bg-background/60 backdrop-blur-sm"
             data-testid="input-chatbot-message"
           />
           <Button
