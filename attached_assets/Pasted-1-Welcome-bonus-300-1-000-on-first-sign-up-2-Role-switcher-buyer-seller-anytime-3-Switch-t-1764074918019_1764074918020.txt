@@ -1,0 +1,64 @@
+1. Welcome bonus ₦300–₦1,000 on first sign-up
+2. Role switcher – buyer ↔ seller anytime
+3. “Switch to Admin” hidden gesture (you only)
+4. Referral link + ₦500 each (trackable)
+5. Onboarding tour (skipable)
+6. Profile completion % (encourages uploads)
+7. “Verify now” nag banner until NIN + ID done
+8. Temporary guest mode (can browse 20 listings only)
+9. Auto-logout after 30 days inactivity
+10. “Remember me” toggle
+
+11. Wallet balance always visible top-right
+12. Transaction history (in/out)
+13. Escrow countdown timer (“₦45,000 held – 6 days left to confirm”)
+14. “Boost expiry” countdown
+15. Live online users counter
+
+16. Report user → 5 reasons + photo upload
+17. Block user (disappears forever)
+18. “Item no longer available” one-tap report
+19. Chat auto-translate (Pidgin → English)
+20. Chat photo + video send
+
+21. “Item sold” → confetti + sound
+22. “You just made ₦25,000” celebration screen
+23. Rating prompt after every sale
+24. “Rate your experience” 1–5 stars + comment
+25. Review approval queue (admin hides bad ones)
+
+26. Search history (clearable)
+27. Recently viewed items row
+28. “Watch this item” → price drop alert
+29. “Out of stock” auto-hide
+30. “Back in stock” notification
+
+31. Bulk actions for sellers (delete 50 listings at once)
+32. Drafts (save listing for later)
+33. Scheduled posting (“Post this tomorrow 8pm”)
+34. Analytics for sellers (views, messages, conversion %)
+35. Best posting time suggestion
+
+36. Campus map with pins (all hostels + faculties)
+37. “Meet here” suggested safe spots (library steps, SUB, etc.)
+38. Weather widget (“Rain in 20 mins – bring umbrella”)
+39. Light/Dark mode toggle + auto
+40. 10+ app themes (Valentine pink, Sallah green, etc.)
+
+41. In-app camera with filters (for better photos)
+42. Photo editor (crop, brightness, remove background)
+43. Video trimmer
+44. “Boost with video” = 5× views
+45. Listing views counter
+
+46. “Featured on homepage” slot (you sell for ₦10k–₦50k)
+47. Sponsored notifications (₦50k blast)
+48. Banner ads manager
+49. Coupon code system (e.g. WELCOME500)
+50. Flash sale event creator
+
+51. Maintenance mode toggle (admin only)
+52. Backup database button
+53. Auto-night mode for admin (8pm–6am)
+54. Support ticket system
+55. “PlugBot” AI assistant in admin panel too

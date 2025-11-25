@@ -1,0 +1,67 @@
+1. Lightning Instant Search
+   - Results appear as you type (after 2nd character)
+   - <300 ms even on 2G
+
+2. Full Nigerian Slang & Pidgin Support
+   - “clean uk iphone 14 pro max under 400k” → perfect results
+   - “neat fairly used macbook for indo” → understands every word
+   - Synonyms built-in: uk = london used, neat = fairly used, okrika = fairly used
+
+3. 99 % Typo Tolerance
+   - “iphne”, “ipone”, “samsang”, “mackbook” → still finds correct items
+
+4. Voice Search (Hold Mic Button)
+   - Speak in Pidgin, English, Yoruba, Igbo, Hausa
+   - Example: “Boss I dey find MEE203 textbook for Odili Hall” → instant results
+
+5. Emoji & Symbol Search
+   - Type ₦ → shows phones & laptops
+   - Type ✨ → premium items
+   - Type 📚 → textbooks only
+
+6. Course Code Magic Search
+   - Type “CSC 201”, “MEE203”, “ACC 101” → shows only items for that exact course
+   - Auto-suggests department courses as you type
+
+7. Super Smart Filters (One-Tap)
+   - Hostel/Dorm filter (e.g., “Only Eni-Njoku Hall”)
+   - Price slider + voice (“under 200k only”)
+   - Condition (Brand new / UK used / Neat / Nigerian used)
+   - Verified sellers only
+   - Same department / Same level
+   - Has video / Multiple photos
+
+8. Location + Distance Search
+   - “Items within 5 mins walk from faculty”
+   - “Anything in Queen Idia Hall right now”
+   - Map view + pins on exact hostels
+
+9. AI Smart Suggestions Dropdown
+   - Type “mac” → dropdown shows:
+     • macbook air m1
+     • macbook pro 2020
+     • macbook air rose gold
+     • macbook charger
+
+10. Reverse Image Search
+    - Take photo or upload → finds exact/similar items on campus
+    - “I saw this bag in Indo, who’s selling it?”
+
+11. “People Also Searched For” Section
+    - After searching “iPhone 13”, shows:
+      • pouch for iphone 13
+      • screen protector
+      • charger 20w
+
+12. Save Search + Push Alerts
+    - “Notify me when iPhone 14 drops below ₦350k in UNIBEN”
+    - Push comes instantly when someone posts it
+
+13. Trending & Hot Searches Live
+    - Top bar shows: “iPhone 15 pro max” • “formal gown” • “ps5” • “free food”
+
+14. Search by Seller Rating
+    - Toggle: “Only 95+ trust score sellers”
+
+15. Recent Searches + Clear History
+    - Auto-saves your last 10 searches

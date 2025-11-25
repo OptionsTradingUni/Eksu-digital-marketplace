@@ -1,0 +1,104 @@
+PEED & PERFORMANCE (11–18)
+1.  Next.js 14 App Router + React Server Components
+2.  Automatic WebP + AVIF images
+3.  Redis cache for feed (Upstash free)
+4.  Edge functions in Lagos (Vercel/Cloudflare)
+5.  Skeleton UI everywhere
+6.  Preload critical listings
+7.  Offline mode (save listings)
+8.  2G-optimised bundle (<300 KB)
+HOME & DISCOVERY (19–30)
+1.  TikTok-style infinite scroll
+2.  “For You” AI feed
+3.  “In Your Hostel Right Now” tab
+4.  “Free Items Near You” live tab
+5.  “Flash Deals” 1-hour countdown
+6.  Price drop alerts
+7.  Saved searches
+8.  “Just Sold” live ticker
+9.  Trending items carousel
+10.  Department-specific feeds (e.g., Engineering only)
+11.  Course-code tagged feed
+12.  Live user count (“4,821 students online”)
+LISTING & POSTING (31–48)
+1.  AI title & description from photos
+2.  ISBN scanner for textbooks
+3.  30-sec video mandatory boost
+4.  Bulk upload CSV for graduating students
+5.  Price suggestion engine
+6.  Auto price-drop scheduler
+7.  “Boost for ₦500” button
+8.  “Make an offer” with auto-accept rules
+9.  Condition tags (brand new, UK used, neat, etc.)
+10.  Delivery method tags (pickup, dorm delivery, shipping)
+11.  “Reserve for 1 hour” timer
+12.  Duplicate listing detection
+13.  Auto-expire after 60 days
+14.  “Relist in 1-tap”
+15.  Listing templates (laptop, phone, shoe, textbook)
+16.  Voice-to-text description
+17.  Photo background remover
+18.  Watermark remover (for clean pics)
+CART & CHECKOUT (49–54)
+1.  Multi-seller cart
+2.  Bundle discount from same seller
+3.  “Add all to cart” from seller page
+4.  Cart survives 30 days
+5.  One-tap escrow checkout
+6.  Split payment (pay some now, some on delivery)
+PAYMENTS & ESCROW (55–62)
+1.  Paystack/Flutterwave wallet
+2.  Escrow holding (3–6% fee)
+3.  Cash on delivery option
+4.  Pay with airtime (via ShareIT API)
+5.  USSD top-up (329amount#)
+6.  Virtual account per user
+7.  Refund in 60 seconds
+8.  Dispute centre with photo upload
+SELLER PROFILES & CUSTOM SHOPS (63–75)
+1.  Custom @username shopfront
+2.  Gradient + sparkling banner
+3.  Emoji + text bio
+4.  Choose accent colour
+5.  Follow seller
+6.  New item push to followers
+7.  Trust score 0–100
+8.  Items sold counter
+9.  Response time badge
+10.  Super Seller gold crown
+11.  “Graduating Soon” badge
+12.  Mutual classmates counter
+13.  Seller analytics dashboard
+AI PLAYFUL CHATBOT – “PlugBot ₦” (76–85)
+1.  Always online, Naija Gen-Z voice
+2.  Inline buttons for every action
+3.  Can create listings by voice/text
+4.  Price checks in 2 secs
+5.  Scam warnings
+6.  “Connect to human” handover
+7.  Joke mode (“Boss, this iPhone 15 nor be 2015 o ₦”)
+8.  Remembers your department/hostel
+9.  Birthday wishes + ₦200 credit
+10.  Daily tips (“Post at 8 pm = 3× views”)
+CAMPUS-SPECIFIC FEATURES (86–100)
+1.  Textbook buyback requests
+2.  Sublet & room rental board
+3.  Ride-share (airport runs)
+4.  Ticket exchange (formal, match, concert)
+5.  Lost & Found with photo
+6.  Free food alerts
+7.  Internship notes sharing (course-based)
+8.  Old exam papers (private per course)
+9.  Group buys (“need 10 people for table”)
+10.  Charity donation pickup
+11.  “Request Item” board
+12.  End-of-semester Moving-Out mode
+13.  Department WhatsApp group links
+14.  Printing & laundry service directory
+15.  Campus event marketplace (DJ, decorator, makeup)
+Bonus 5 that will make you legendary
+101. Daily login streak rewards (₦50 → ₦1,000)
+102. Referral ₦500 each
+103. Confetti when item sells
+104. Leaderboard “Top Sellers This Week”
+105. Dark mode + 10 themes (Valentine, Sallah, Christmas, etc.)
