@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import NotificationBell from "@/components/NotificationBell";
+import { CartDrawer } from "@/components/CartDrawer";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -66,6 +67,9 @@ export function Header() {
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <>
+                {/* Cart */}
+                <CartDrawer />
+
                 {/* Messages */}
                 <Button
                   variant="ghost"
@@ -140,10 +144,19 @@ export function Header() {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <a href="/api/logout" data-testid="link-logout">
-                        Logout
-                      </a>
+                    <DropdownMenuItem 
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                          window.location.href = '/';
+                        } catch (error) {
+                          console.error('Logout failed:', error);
+                        }
+                      }}
+                      className="cursor-pointer"
+                      data-testid="link-logout"
+                    >
+                      Logout
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

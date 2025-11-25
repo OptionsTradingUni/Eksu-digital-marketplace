@@ -201,7 +201,7 @@ export default function Home() {
 
             {/* Products Grid */}
             {isLoading ? (
-              <div className="grid gap-6 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
                 {[...Array(8)].map((_, i) => (
                   <Card key={i}>
                     <Skeleton className="aspect-square" />
@@ -213,7 +213,7 @@ export default function Home() {
                 ))}
               </div>
             ) : filteredProducts && filteredProducts.length > 0 ? (
-              <div className="grid gap-6 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
                 {filteredProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

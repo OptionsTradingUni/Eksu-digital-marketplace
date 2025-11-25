@@ -23,8 +23,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -38,6 +40,7 @@ const signUpSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
+  role: z.enum(["buyer", "seller", "both"]).default("buyer"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -86,6 +89,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
       firstName: "",
       lastName: "",
       phoneNumber: "",
+      role: "both",
     },
   });
 
@@ -433,6 +437,67 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
                               {...field}
                             />
                           </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={signUpForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>What do you want to do?</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="grid grid-cols-3 gap-2"
+                          >
+                            <div>
+                              <RadioGroupItem
+                                value="buyer"
+                                id="role-buyer"
+                                className="peer sr-only"
+                              />
+                              <label
+                                htmlFor="role-buyer"
+                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                              >
+                                <ShoppingCart className="h-5 w-5 mb-1" />
+                                <span className="text-xs font-medium">Buy</span>
+                              </label>
+                            </div>
+                            <div>
+                              <RadioGroupItem
+                                value="seller"
+                                id="role-seller"
+                                className="peer sr-only"
+                              />
+                              <label
+                                htmlFor="role-seller"
+                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                              >
+                                <Store className="h-5 w-5 mb-1" />
+                                <span className="text-xs font-medium">Sell</span>
+                              </label>
+                            </div>
+                            <div>
+                              <RadioGroupItem
+                                value="both"
+                                id="role-both"
+                                className="peer sr-only"
+                              />
+                              <label
+                                htmlFor="role-both"
+                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                              >
+                                <Users className="h-5 w-5 mb-1" />
+                                <span className="text-xs font-medium">Both</span>
+                              </label>
+                            </div>
+                          </RadioGroup>
                         </FormControl>
                         <FormMessage />
                       </FormItem>

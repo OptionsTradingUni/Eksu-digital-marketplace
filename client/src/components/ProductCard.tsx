@@ -1,20 +1,61 @@
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Eye, ShoppingCart, Loader2 } from "lucide-react";
+import { useCart } from "@/hooks/use-cart";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
+import { useState } from "react";
 
 interface ProductCardProps {
   product: Product & { seller?: { firstName?: string; isVerified?: boolean } };
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const { isAuthenticated } = useAuth();
+  const { addToCart } = useCart();
+  const { toast } = useToast();
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+
   if (!product) return null;
   
   const images = product.images || [];
   const imageUrl = images[0] || "/placeholder-product.png";
   const priceValue = product.price;
   const price = typeof priceValue === 'number' ? priceValue : parseFloat(priceValue as string) || 0;
+
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!isAuthenticated) {
+      toast({
+        variant: "destructive",
+        title: "Login Required",
+        description: "Please log in to add items to your cart",
+      });
+      return;
+    }
+
+    setIsAddingToCart(true);
+    try {
+      await addToCart({ productId: product.id });
+      toast({
+        title: "Added to Cart",
+        description: `${product.title} has been added to your cart`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to add item to cart",
+      });
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
 
   return (
     <Link href={`/products/${product.id}`}>
@@ -41,10 +82,23 @@ export function ProductCard({ product }: ProductCardProps) {
           <h3 className="font-semibold line-clamp-2 mb-2" data-testid={`text-product-title-${product.id}`}>
             {product.title}
           </h3>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between gap-2 mb-2">
             <p className="text-2xl font-bold text-primary" data-testid={`text-product-price-${product.id}`}>
               ₦{price.toLocaleString()}
             </p>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleAddToCart}
+              disabled={isAddingToCart || !product.isAvailable}
+              data-testid={`button-add-to-cart-${product.id}`}
+            >
+              {isAddingToCart ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShoppingCart className="h-4 w-4" />
+              )}
+            </Button>
           </div>
           {product.location && (
             <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">

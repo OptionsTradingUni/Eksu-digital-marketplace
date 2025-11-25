@@ -73,12 +73,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registration route
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, phoneNumber } = req.body;
+      const { email, password, firstName, lastName, phoneNumber, role } = req.body;
 
       // Validate required fields
       if (!email || !password || !firstName || !lastName) {
         return res.status(400).json({ message: "Missing required fields" });
       }
+
+      // Validate role if provided
+      const validRoles = ["buyer", "seller", "both"] as const;
+      const userRole: "buyer" | "seller" | "both" = validRoles.includes(role) ? role : "buyer";
 
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);
@@ -96,6 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName,
         lastName,
         phoneNumber,
+        role: userRole,
       });
 
       // Remove password from user object before storing in session/sending to client
@@ -1421,6 +1426,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching performance metrics:", error);
       res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
+  // ==================== CART API ROUTES ====================
+
+  // Get user's cart items with products
+  app.get("/api/cart", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const cartItems = await storage.getCartItems(userId);
+      res.json(cartItems);
+    } catch (error) {
+      console.error("Error fetching cart:", error);
+      res.status(500).json({ message: "Failed to fetch cart items" });
+    }
+  });
+
+  // Add item to cart
+  app.post("/api/cart", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { productId, quantity = 1 } = req.body;
+
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+
+      if (typeof quantity !== 'number' || quantity < 1) {
+        return res.status(400).json({ message: "Quantity must be a positive number" });
+      }
+
+      // Verify product exists and is available
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      if (!product.isAvailable) {
+        return res.status(400).json({ message: "Product is not available" });
+      }
+
+      const cartItem = await storage.addToCart(userId, productId, quantity);
+      res.json(cartItem);
+    } catch (error) {
+      console.error("Error adding to cart:", error);
+      res.status(500).json({ message: "Failed to add item to cart" });
+    }
+  });
+
+  // Update cart item quantity
+  app.patch("/api/cart/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { quantity } = req.body;
+
+      if (typeof quantity !== 'number' || quantity < 1) {
+        return res.status(400).json({ message: "Quantity must be a positive number" });
+      }
+
+      const cartItem = await storage.updateCartItemQuantity(id, quantity);
+      res.json(cartItem);
+    } catch (error) {
+      console.error("Error updating cart item:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Cart item not found" });
+      }
+      res.status(500).json({ message: "Failed to update cart item" });
+    }
+  });
+
+  // Remove item from cart
+  app.delete("/api/cart/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      await storage.removeFromCart(id);
+      res.json({ message: "Item removed from cart" });
+    } catch (error) {
+      console.error("Error removing from cart:", error);
+      res.status(500).json({ message: "Failed to remove item from cart" });
+    }
+  });
+
+  // Clear entire cart
+  app.delete("/api/cart", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.clearCart(userId);
+      res.json({ message: "Cart cleared" });
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+      res.status(500).json({ message: "Failed to clear cart" });
     }
   });
 

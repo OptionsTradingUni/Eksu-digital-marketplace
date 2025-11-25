@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, AlertTriangle, GripVertical } from "lucide-react";
+import { MessageCircle, X, Send, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { apiRequest } from "@/lib/queryClient";
 
 interface Message {
   role: "user" | "assistant";
@@ -25,57 +24,11 @@ export default function ChatBot() {
   const [showPaymentWarning, setShowPaymentWarning] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (buttonRef.current && !isOpen) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setIsDragging(true);
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    }
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (isDragging) {
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-      
-      const maxX = window.innerWidth - 56;
-      const maxY = window.innerHeight - 56;
-      
-      setPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY)),
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, dragOffset]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -88,17 +41,22 @@ export default function ChatBot() {
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
-      const response = await apiRequest("POST", "/api/chatbot", {
-        message: userMessage,
-      }) as unknown as { message: string; hasPaymentWarning: boolean };
-
-      if (response.hasPaymentWarning) {
+      const res = await fetch("/api/chatbot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: userMessage }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.hasPaymentWarning) {
         setShowPaymentWarning(true);
       }
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: response.message },
+        { role: "assistant", content: data.message || "I no fit get response now. Try again!" },
       ]);
     } catch (error: any) {
       console.error("Chatbot error:", error);
@@ -124,27 +82,14 @@ export default function ChatBot() {
   if (!isOpen) {
     return (
       <Button
-        ref={buttonRef}
-        size="icon"
-        className="fixed rounded-full shadow-2xl z-[9999] bg-primary/90 backdrop-blur-sm hover:bg-primary/95 border-2 border-primary-foreground/10 cursor-move"
-        style={{
-          left: position.x || 'auto',
-          right: position.x ? 'auto' : '24px',
-          top: position.y || 'auto',
-          bottom: position.y ? 'auto' : '24px',
-        }}
-        onMouseDown={handleMouseDown}
-        onClick={(e) => {
-          if (!isDragging) {
-            setIsOpen(true);
-          }
-        }}
+        size="lg"
+        className="fixed bottom-6 right-6 rounded-full shadow-2xl z-[9999] bg-primary hover:bg-primary/90 border-2 border-primary-foreground/10 h-14 w-14"
+        onClick={() => setIsOpen(true)}
         data-testid="button-open-chatbot"
         aria-label="Open chat assistant"
       >
         <MessageCircle className="h-6 w-6" />
         <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-background animate-pulse"></span>
-        <GripVertical className="absolute -top-1 -left-1 h-3 w-3 text-primary-foreground/50" />
       </Button>
     );
   }

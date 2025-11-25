@@ -140,10 +140,16 @@ export default function Profile() {
                   )}
                   <div className="flex items-center gap-1 text-sm">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-medium">{currentUser.trustScore || "5.0"}</span>
-                    <span className="text-muted-foreground">
-                      ({currentUser.totalRatings || 0})
-                    </span>
+                    {currentUser.totalRatings && currentUser.totalRatings > 0 ? (
+                      <>
+                        <span className="font-medium">{currentUser.trustScore}</span>
+                        <span className="text-muted-foreground">
+                          ({currentUser.totalRatings})
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">No reviews yet</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <div className="flex items-center gap-1">

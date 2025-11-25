@@ -26,6 +26,7 @@ import {
   escrowTransactions,
   paystackPayments,
   withdrawals,
+  cartItems,
   type User,
   type UpsertUser,
   type Product,
@@ -71,6 +72,7 @@ import {
   type InsertWithdrawal,
   type Follow,
   type InsertFollow,
+  type CartItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
@@ -80,7 +82,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  createUser(user: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string }): Promise<User>;
+  createUser(user: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User>;
   updateUserProfile(id: string, data: Partial<User>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   verifyUser(id: string): Promise<User>;
@@ -256,6 +258,13 @@ export interface IStorage {
   
   // Raw SQL execution for admin metrics
   executeRawSQL<T = any>(query: string, params?: any[]): Promise<T[]>;
+  
+  // Cart operations
+  getCartItems(userId: string): Promise<(CartItem & { product: Product })[]>;
+  addToCart(userId: string, productId: string, quantity?: number): Promise<CartItem>;
+  updateCartItemQuantity(cartItemId: string, quantity: number): Promise<CartItem>;
+  removeFromCart(cartItemId: string): Promise<void>;
+  clearCart(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -270,7 +279,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async createUser(userData: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string }): Promise<User> {
+  async createUser(userData: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User> {
     const [user] = await db.insert(users).values(userData).returning();
     
     // Create wallet and give welcome bonus for new users
@@ -1615,6 +1624,68 @@ export class DatabaseStorage implements IStorage {
     const { pool } = await import("./db");
     const result = await pool.query(query, params);
     return result.rows as T[];
+  }
+
+  // Cart operations
+  async getCartItems(userId: string): Promise<(CartItem & { product: Product })[]> {
+    const results = await db
+      .select()
+      .from(cartItems)
+      .leftJoin(products, eq(cartItems.productId, products.id))
+      .where(eq(cartItems.userId, userId))
+      .orderBy(desc(cartItems.createdAt));
+
+    return results
+      .filter(r => r.cart_items && r.products)
+      .map(r => ({
+        ...r.cart_items!,
+        product: r.products!,
+      }));
+  }
+
+  async addToCart(userId: string, productId: string, quantity: number = 1): Promise<CartItem> {
+    const existing = await db
+      .select()
+      .from(cartItems)
+      .where(and(eq(cartItems.userId, userId), eq(cartItems.productId, productId)));
+
+    if (existing.length > 0) {
+      const newQuantity = existing[0].quantity + quantity;
+      const [updated] = await db
+        .update(cartItems)
+        .set({ quantity: newQuantity, updatedAt: new Date() })
+        .where(eq(cartItems.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db
+      .insert(cartItems)
+      .values({ userId, productId, quantity })
+      .returning();
+    return created;
+  }
+
+  async updateCartItemQuantity(cartItemId: string, quantity: number): Promise<CartItem> {
+    const [updated] = await db
+      .update(cartItems)
+      .set({ quantity, updatedAt: new Date() })
+      .where(eq(cartItems.id, cartItemId))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Cart item ${cartItemId} not found`);
+    }
+
+    return updated;
+  }
+
+  async removeFromCart(cartItemId: string): Promise<void> {
+    await db.delete(cartItems).where(eq(cartItems.id, cartItemId));
+  }
+
+  async clearCart(userId: string): Promise<void> {
+    await db.delete(cartItems).where(eq(cartItems.userId, userId));
   }
 }
 
