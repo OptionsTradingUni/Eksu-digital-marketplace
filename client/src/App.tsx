@@ -18,7 +18,7 @@ import SellerDashboard from "@/pages/seller-dashboard";
 import AdminPanel from "@/pages/admin";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isError } = useAuth();
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -32,8 +32,8 @@ function Router() {
     );
   }
 
-  // Show landing page for unauthenticated users
-  if (!isAuthenticated) {
+  // Show landing page for unauthenticated users or auth errors
+  if (!isAuthenticated || isError) {
     return <Landing />;
   }
 
