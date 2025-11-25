@@ -1,0 +1,57 @@
+file:///app/node_modules/openid-client/build/index.js:89
+    const err = new TypeError(message, { cause });
+                ^
+TypeError: "clientId" must be a non-empty string
+    at CodedTypeError (file:///app/node_modules/openid-client/build/index.js:89:17)
+    at new Configuration (file:///app/node_modules/openid-client/build/index.js:463:19)
+    at Module.discovery (file:///app/node_modules/openid-client/build/index.js:244:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async memoize.maxAge (file:///app/dist/index.js:1676:12)
+    at async setupAuth (file:///app/dist/index.js:1724:18)
+    at async registerRoutes (file:///app/dist/index.js:1832:3)
+    at async runApp (file:///app/dist/index.js:2650:18)
+    at async file:///app/dist/index.js:2682:3 {
+  code: 'ERR_INVALID_ARG_TYPE',
+  [cause]: undefined
+}
+Node.js v22.21.1
+npm warn config production Use `--omit=dev` instead.
+> rest-express@1.0.0 start
+> NODE_ENV=production node dist/index.js
+    at async file:///app/dist/index.js:2682:3 {
+  code: 'ERR_INVALID_ARG_TYPE',
+  [cause]: undefined
+}
+Node.js v22.21.1
+file:///app/node_modules/openid-client/build/index.js:89
+    const err = new TypeError(message, { cause });
+                ^
+TypeError: "clientId" must be a non-empty string
+    at CodedTypeError (file:///app/node_modules/openid-client/build/index.js:89:17)
+    at new Configuration (file:///app/node_modules/openid-client/build/index.js:463:19)
+    at Module.discovery (file:///app/node_modules/openid-client/build/index.js:244:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async memoize.maxAge (file:///app/dist/index.js:1676:12)
+    at async setupAuth (file:///app/dist/index.js:1724:18)
+    at async registerRoutes (file:///app/dist/index.js:1832:3)
+    at async runApp (file:///app/dist/index.js:2650:18)
+npm warn config production Use `--omit=dev` instead.
+> rest-express@1.0.0 start
+> NODE_ENV=production node dist/index.js
+    at async memoize.maxAge (file:///app/dist/index.js:1676:12)
+    at async setupAuth (file:///app/dist/index.js:1724:18)
+    at async registerRoutes (file:///app/dist/index.js:1832:3)
+    at async runApp (file:///app/dist/index.js:2650:18)
+    at async file:///app/dist/index.js:2682:3 {
+file:///app/node_modules/openid-client/build/index.js:89
+  code: 'ERR_INVALID_ARG_TYPE',
+    const err = new TypeError(message, { cause });
+  [cause]: undefined
+                ^
+}
+TypeError: "clientId" must be a non-empty string
+Node.js v22.21.1
+    at CodedTypeError (file:///app/node_modules/openid-client/build/index.js:89:17)
+    at new Configuration (file:///app/node_modules/openid-client/build/index.js:463:19)
+    at Module.discovery (file:///app/node_modules/openid-client/build/index.js:244:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
