@@ -27,7 +27,7 @@ export const sessions = pgTable(
 );
 
 // User roles enum
-export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "admin"]);
+export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "both", "admin"]);
 
 // User storage table (required for Replit Auth with added fields for marketplace)
 export const users = pgTable("users", {
@@ -38,15 +38,25 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: userRoleEnum("role").notNull().default("buyer"),
   // Campus-specific fields
-  phoneNumber: varchar("phone_number"),
+  phoneNumber: varchar("phone_number").unique(), // UNIQUE - one account per phone
   location: varchar("location"), // Campus area/hostel
   bio: text("bio"),
   // Verification fields
   isVerified: boolean("is_verified").default(false),
   verificationBadges: text("verification_badges").array().default(sql`ARRAY[]::text[]`), // ["email", "phone", "student_id", "nin"]
+  ninVerified: boolean("nin_verified").default(false),
+  ninVerificationDate: timestamp("nin_verification_date"),
+  ninHash: varchar("nin_hash").unique(), // Hashed NIN (NOT the actual NIN - illegal to store)
+  ninConfidenceScore: decimal("nin_confidence_score", { precision: 5, scale: 2 }), // Selfie match confidence
+  // Social media links
+  instagramHandle: varchar("instagram_handle"),
+  tiktokHandle: varchar("tiktok_handle"),
+  facebookProfile: varchar("facebook_profile"),
   // Trust score
   trustScore: decimal("trust_score", { precision: 3, scale: 1 }).default("5.0"),
   totalRatings: integer("total_ratings").default(0),
+  isTrustedSeller: boolean("is_trusted_seller").default(false), // Manually set by admin
+  trustedSellerSince: timestamp("trusted_seller_since"),
   // Seller-specific
   totalSales: integer("total_sales").default(0),
   responseTime: integer("response_time"), // Average response time in minutes
@@ -154,8 +164,9 @@ export const wallets = pgTable("wallets", {
 
 // Transaction types
 export const transactionTypeEnum = pgEnum("transaction_type", [
-  "welcome_bonus", "referral_bonus", "sale", "purchase", "boost_payment", 
-  "featured_payment", "escrow_hold", "escrow_release", "refund", "withdrawal"
+  "welcome_bonus", "referral_bonus", "login_reward", "deposit", "sale", "purchase", 
+  "boost_payment", "featured_payment", "escrow_hold", "escrow_release", "escrow_fee",
+  "refund", "withdrawal", "agent_commission", "platform_fee"
 ]);
 
 // Wallet transactions
@@ -176,8 +187,11 @@ export const referrals = pgTable("referrals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   referrerId: varchar("referrer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   referredUserId: varchar("referred_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  bonusAmount: decimal("bonus_amount", { precision: 10, scale: 2 }).default("500.00"),
+  bonusAmount: decimal("bonus_amount", { precision: 10, scale: 2 }), // Will be randomized ₦2-50 when paid
   bonusPaid: boolean("bonus_paid").default(false),
+  referredUserMadePurchase: boolean("referred_user_made_purchase").default(false), // Track if they bought anything
+  firstPurchaseId: varchar("first_purchase_id"), // ID of their first purchase
+  bonusPaidAt: timestamp("bonus_paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -309,6 +323,104 @@ export const sellerAnalytics = pgTable("seller_analytics", {
   bestPostingHour: integer("best_posting_hour"), // 0-23
   bestPostingDay: integer("best_posting_day"), // 0-6 (Sunday-Saturday)
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Hostel listings (separate from products)
+export const hostels = pgTable("hostels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description").notNull(),
+  location: varchar("location").notNull(), // Campus area
+  address: text("address"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(), // Per year
+  images: text("images").array().default(sql`ARRAY[]::text[]`),
+  bedrooms: integer("bedrooms"),
+  bathrooms: integer("bathrooms"),
+  amenities: text("amenities").array().default(sql`ARRAY[]::text[]`), // ["wifi", "water", "security", etc]
+  distanceFromCampus: decimal("distance_from_campus", { precision: 5, scale: 2 }), // In KM
+  isAvailable: boolean("is_available").default(true),
+  agentFee: decimal("agent_fee", { precision: 10, scale: 2 }), // Agent commission
+  platformCommission: decimal("platform_commission", { precision: 5, scale: 2 }).default("5.00"), // % we take
+  views: integer("views").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Event listings (concerts, parties, campus events)
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizerId: varchar("organizer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description").notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // concert, party, conference, workshop, etc
+  bannerImage: text("banner_image"),
+  venue: varchar("venue").notNull(),
+  eventDate: timestamp("event_date").notNull(),
+  ticketPrice: decimal("ticket_price", { precision: 10, scale: 2 }),
+  isFree: boolean("is_free").default(false),
+  totalTickets: integer("total_tickets"),
+  ticketsSold: integer("tickets_sold").default(0),
+  contactInfo: varchar("contact_info"),
+  isActive: boolean("is_active").default(true),
+  views: integer("views").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Escrow status enum
+export const escrowStatusEnum = pgEnum("escrow_status", [
+  "pending", "held", "released", "refunded", "disputed"
+]);
+
+// Escrow transactions for buyer/seller safety
+export const escrowTransactions = pgTable("escrow_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  buyerId: varchar("buyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sellerId: varchar("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").references(() => products.id, { onDelete: "set null" }),
+  hostelId: varchar("hostel_id").references(() => hostels.id, { onDelete: "set null" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  platformFee: decimal("platform_fee", { precision: 10, scale: 2 }).notNull(), // 3-6% of amount
+  status: escrowStatusEnum("status").notNull().default("pending"),
+  holdDuration: integer("hold_duration").default(7), // Days to hold before auto-release
+  releasedAt: timestamp("released_at"),
+  disputeId: varchar("dispute_id").references(() => disputes.id, { onDelete: "set null" }),
+  buyerConfirmed: boolean("buyer_confirmed").default(false),
+  sellerConfirmed: boolean("seller_confirmed").default(false),
+  autoReleaseDate: timestamp("auto_release_date"), // Calculated from hold_duration
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Paystack payment records
+export const paystackPayments = pgTable("paystack_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reference: varchar("reference").notNull().unique(), // Paystack reference
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("NGN"),
+  status: varchar("status", { length: 20 }).notNull(), // success, failed, pending
+  channel: varchar("channel", { length: 20 }), // card, bank_transfer, ussd, etc
+  paidAt: timestamp("paid_at"),
+  metadata: jsonb("metadata"), // Additional Paystack data
+  purpose: varchar("purpose", { length: 50 }), // wallet_deposit, withdrawal, boost_payment, etc
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Withdrawals to bank accounts
+export const withdrawals = pgTable("withdrawals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  bankName: varchar("bank_name").notNull(),
+  accountNumber: varchar("account_number").notNull(),
+  accountName: varchar("account_name").notNull(),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, processing, completed, failed
+  paystackReference: varchar("paystack_reference"),
+  processedAt: timestamp("processed_at"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
@@ -656,7 +768,7 @@ export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit
 
 // API-specific validation schemas
 export const roleUpdateSchema = z.object({
-  role: z.enum(['buyer', 'seller', 'admin']),
+  role: z.enum(['buyer', 'seller', 'both', 'admin']),
 });
 
 export const createReferralSchema = z.object({
@@ -739,3 +851,90 @@ export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type LoginStreak = typeof loginStreaks.$inferSelect;
 export type SellerAnalytics = typeof sellerAnalytics.$inferSelect;
+
+// Zod schemas for new tables
+export const insertHostelSchema = createInsertSchema(hostels).omit({
+  id: true,
+  agentId: true,
+  views: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEventSchema = createInsertSchema(events).omit({
+  id: true,
+  organizerId: true,
+  views: true,
+  ticketsSold: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEscrowTransactionSchema = createInsertSchema(escrowTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  releasedAt: true,
+  status: true,
+});
+
+export const insertPaystackPaymentSchema = createInsertSchema(paystackPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWithdrawalSchema = createInsertSchema(withdrawals).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+  processedAt: true,
+});
+
+// API-specific schemas for new features
+export const createHostelSchema = insertHostelSchema.extend({
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid price format"),
+});
+
+export const createEventSchema = insertEventSchema.extend({
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  eventDate: z.coerce.date(),
+});
+
+export const createEscrowSchema = z.object({
+  sellerId: z.string(),
+  productId: z.string().optional(),
+  hostelId: z.string().optional(),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
+  platformFeePercentage: z.number().min(3).max(6).default(5),
+});
+
+export const verifyNINSchema = z.object({
+  nin: z.string().length(11, "NIN must be exactly 11 digits"),
+  selfieBase64: z.string().min(1, "Selfie image is required"),
+});
+
+export const updateSocialMediaSchema = z.object({
+  instagramHandle: z.string().optional(),
+  tiktokHandle: z.string().optional(),
+  facebookProfile: z.string().optional(),
+});
+
+export const initiateWithdrawalSchema = insertWithdrawalSchema.extend({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
+  bankName: z.string().min(1, "Bank name is required"),
+  accountNumber: z.string().min(10, "Invalid account number"),
+  accountName: z.string().min(1, "Account name is required"),
+});
+
+// TypeScript types for new tables
+export type Hostel = typeof hostels.$inferSelect;
+export type InsertHostel = z.infer<typeof insertHostelSchema>;
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type EscrowTransaction = typeof escrowTransactions.$inferSelect;
+export type InsertEscrowTransaction = z.infer<typeof insertEscrowTransactionSchema>;
+export type PaystackPayment = typeof paystackPayments.$inferSelect;
+export type InsertPaystackPayment = z.infer<typeof insertPaystackPaymentSchema>;
+export type Withdrawal = typeof withdrawals.$inferSelect;
+export type InsertWithdrawal = z.infer<typeof insertWithdrawalSchema>;
