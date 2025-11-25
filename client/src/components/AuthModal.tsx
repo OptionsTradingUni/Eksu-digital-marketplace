@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -54,6 +54,13 @@ interface AuthModalProps {
 export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const { toast } = useToast();
+
+  // Sync activeTab with defaultTab when modal opens or defaultTab changes
+  useEffect(() => {
+    if (open) {
+      setActiveTab(defaultTab);
+    }
+  }, [open, defaultTab]);
 
   const signInForm = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
