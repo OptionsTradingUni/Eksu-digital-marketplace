@@ -11,9 +11,13 @@ import { storage } from "./storage";
 
 const getOidcConfig = memoize(
   async () => {
+    const replId = process.env.REPL_ID;
+    if (!replId) {
+      throw new Error("REPL_ID not configured");
+    }
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID!
+      replId
     );
   },
   { maxAge: 3600 * 1000 }
@@ -68,6 +72,28 @@ export async function setupAuth(app: Express) {
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Check if auth is configured
+  if (!process.env.REPL_ID) {
+    console.warn("⚠️  REPL_ID not set - Authentication disabled. Set REPL_ID to enable Replit Auth.");
+    
+    // Add stub routes when auth is disabled
+    app.get("/api/login", (req, res) => {
+      res.status(503).json({ 
+        message: "Authentication not configured. Please contact administrator." 
+      });
+    });
+    
+    app.get("/api/callback", (req, res) => {
+      res.redirect("/");
+    });
+    
+    app.get("/api/logout", (req, res) => {
+      res.redirect("/");
+    });
+    
+    return;
+  }
 
   const config = await getOidcConfig();
 
