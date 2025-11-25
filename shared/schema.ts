@@ -29,10 +29,11 @@ export const sessions = pgTable(
 // User roles enum
 export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "both", "admin"]);
 
-// User storage table (required for Replit Auth with added fields for marketplace)
+// User storage table (email/password authentication with marketplace features)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
+  email: varchar("email").notNull().unique(),
+  password: varchar("password").notNull(), // Hashed password using bcrypt
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
@@ -999,6 +1000,26 @@ export const initiateWithdrawalSchema = insertWithdrawalSchema.extend({
   accountNumber: z.string().min(10, "Invalid account number"),
   accountName: z.string().min(1, "Account name is required"),
 });
+
+// Authentication schemas
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  phoneNumber: z.string().optional(),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+// TypeScript types for auth
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type User = typeof users.$inferSelect;
+export type SafeUser = Omit<User, 'password'>; // User without password field
 
 // TypeScript types for new tables
 export type Hostel = typeof hostels.$inferSelect;
