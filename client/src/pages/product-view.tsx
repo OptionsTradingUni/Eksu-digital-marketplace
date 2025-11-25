@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck } from "lucide-react";
 import type { Product, User } from "@shared/schema";
 
 export default function ProductView() {
@@ -21,6 +21,64 @@ export default function ProductView() {
 
   const { data: product, isLoading } = useQuery<Product & { seller: User }>({
     queryKey: ["/api/products", id],
+  });
+
+  // Fetch follow status for the seller
+  const { data: followStats } = useQuery<{
+    followerCount: number;
+    followingCount: number;
+    isFollowing: boolean;
+  }>({
+    queryKey: ["/api/users", product?.sellerId, "follow-stats"],
+    enabled: !!product?.sellerId,
+  });
+
+  const followMutation = useMutation({
+    mutationFn: async () => {
+      if (!isAuthenticated) {
+        window.location.href = "/api/login";
+        return;
+      }
+      return await apiRequest("POST", `/api/users/${product?.sellerId}/follow`, {});
+    },
+    onSuccess: () => {
+      // Invalidate follow stats and product query to refresh follower counts
+      queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products", id] });
+      toast({
+        title: "Followed",
+        description: "You are now following this seller",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to follow seller",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/users/${product?.sellerId}/follow`, {});
+    },
+    onSuccess: () => {
+      // Invalidate follow stats and product query to refresh follower counts
+      queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products", id] });
+      toast({
+        title: "Unfollowed",
+        description: "You have unfollowed this seller",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unfollow seller",
+        variant: "destructive",
+      });
+    },
   });
 
   const watchlistMutation = useMutation({
@@ -192,7 +250,7 @@ export default function ProductView() {
                     <AvatarFallback>{sellerInitials}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold" data-testid="text-seller-name">
                         {product.seller?.firstName || "Seller"}
                       </p>
@@ -208,7 +266,40 @@ export default function ProductView() {
                       <span>{product.seller?.trustScore || "5.0"}</span>
                       <span>({product.seller?.totalRatings || 0} reviews)</span>
                     </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                      <span data-testid="text-seller-follower-count">
+                        {followStats?.followerCount || 0} followers
+                      </span>
+                    </div>
                   </div>
+                  {!isOwner && isAuthenticated && (
+                    <Button
+                      variant={followStats?.isFollowing ? "secondary" : "default"}
+                      size="sm"
+                      onClick={() => {
+                        if (followStats?.isFollowing) {
+                          unfollowMutation.mutate();
+                        } else {
+                          followMutation.mutate();
+                        }
+                      }}
+                      disabled={followMutation.isPending || unfollowMutation.isPending}
+                      data-testid="button-follow-seller"
+                      className="gap-1"
+                    >
+                      {followStats?.isFollowing ? (
+                        <>
+                          <UserCheck className="h-4 w-4" />
+                          Following
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4" />
+                          Follow
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

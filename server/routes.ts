@@ -625,6 +625,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Follow routes
+  app.post("/api/users/:id/follow", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const follow = await storage.followUser(userId, req.params.id);
+      res.json(follow);
+    } catch (error: any) {
+      console.error("Error following user:", error);
+      res.status(400).json({ message: error.message || "Failed to follow user" });
+    }
+  });
+
+  app.delete("/api/users/:id/follow", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.unfollowUser(userId, req.params.id);
+      res.json({ message: "Unfollowed successfully" });
+    } catch (error) {
+      console.error("Error unfollowing user:", error);
+      res.status(500).json({ message: "Failed to unfollow user" });
+    }
+  });
+
+  app.get("/api/users/:id/followers", async (req, res) => {
+    try {
+      const followers = await storage.getFollowers(req.params.id);
+      res.json(followers);
+    } catch (error) {
+      console.error("Error fetching followers:", error);
+      res.status(500).json({ message: "Failed to fetch followers" });
+    }
+  });
+
+  app.get("/api/users/:id/following", async (req, res) => {
+    try {
+      const following = await storage.getFollowing(req.params.id);
+      res.json(following);
+    } catch (error) {
+      console.error("Error fetching following:", error);
+      res.status(500).json({ message: "Failed to fetch following" });
+    }
+  });
+
+  app.get("/api/users/:id/follow-stats", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const [followerCount, followingCount, isFollowing] = await Promise.all([
+        storage.getFollowerCount(req.params.id),
+        storage.getFollowingCount(req.params.id),
+        userId ? storage.isFollowing(userId, req.params.id) : Promise.resolve(false),
+      ]);
+
+      res.json({
+        followerCount,
+        followingCount,
+        isFollowing,
+      });
+    } catch (error) {
+      console.error("Error fetching follow stats:", error);
+      res.status(500).json({ message: "Failed to fetch follow stats" });
+    }
+  });
+
   // Message routes
   app.get("/api/messages/threads", isAuthenticated, async (req: any, res) => {
     try {

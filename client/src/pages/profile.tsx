@@ -16,13 +16,23 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { updateUserProfileSchema, type User } from "@shared/schema";
 import { z } from "zod";
-import { Shield, Star, ShoppingBag } from "lucide-react";
+import { Shield, Star, ShoppingBag, Users } from "lucide-react";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
 export default function Profile() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+
+  // Fetch follow stats
+  const { data: followStats } = useQuery<{
+    followerCount: number;
+    followingCount: number;
+    isFollowing: boolean;
+  }>({
+    queryKey: ["/api/users", currentUser?.id, "follow-stats"],
+    enabled: !!currentUser?.id,
+  });
 
   const form = useForm<UpdateProfileData>({
     resolver: zodResolver(updateUserProfileSchema),
@@ -134,6 +144,21 @@ export default function Profile() {
                     <span className="text-muted-foreground">
                       ({currentUser.totalRatings || 0})
                     </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className="flex items-center gap-1">
+                      <Users className="h-4 w-4" />
+                      <span className="font-medium" data-testid="text-follower-count">
+                        {followStats?.followerCount || 0}
+                      </span>
+                      <span className="text-muted-foreground">Followers</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium" data-testid="text-following-count">
+                        {followStats?.followingCount || 0}
+                      </span>
+                      <span className="text-muted-foreground">Following</span>
+                    </div>
                   </div>
                 </div>
               </div>

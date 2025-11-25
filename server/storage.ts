@@ -20,6 +20,7 @@ import {
   supportTickets,
   loginStreaks,
   sellerAnalytics,
+  follows,
   hostels,
   events,
   escrowTransactions,
@@ -68,6 +69,8 @@ import {
   type InsertPaystackPayment,
   type Withdrawal,
   type InsertWithdrawal,
+  type Follow,
+  type InsertFollow,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql } from "drizzle-orm";
@@ -177,6 +180,15 @@ export interface IStorage {
   // Seller analytics operations
   getOrCreateSellerAnalytics(sellerId: string): Promise<SellerAnalytics>;
   updateSellerAnalytics(sellerId: string, data: Partial<SellerAnalytics>): Promise<SellerAnalytics>;
+  
+  // Follow operations
+  followUser(followerId: string, followingId: string): Promise<Follow>;
+  unfollowUser(followerId: string, followingId: string): Promise<void>;
+  getFollowers(userId: string): Promise<(Follow & { follower: User })[]>;
+  getFollowing(userId: string): Promise<(Follow & { following: User })[]>;
+  getFollowerCount(userId: string): Promise<number>;
+  getFollowingCount(userId: string): Promise<number>;
+  isFollowing(followerId: string, followingId: string): Promise<boolean>;
   
   // Hostel operations
   createHostel(hostel: InsertHostel & { agentId: string }): Promise<Hostel>;
@@ -1019,6 +1031,91 @@ export class DatabaseStorage implements IStorage {
       .where(eq(sellerAnalytics.id, analytics.id))
       .returning();
     return updated;
+  }
+
+  // Follow operations
+  async followUser(followerId: string, followingId: string): Promise<Follow> {
+    // Prevent self-follow
+    if (followerId === followingId) {
+      throw new Error("Cannot follow yourself");
+    }
+
+    // Check if already following (idempotent)
+    const existing = await db
+      .select()
+      .from(follows)
+      .where(and(
+        eq(follows.followerId, followerId),
+        eq(follows.followingId, followingId)
+      ));
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const [created] = await db
+      .insert(follows)
+      .values({ followerId, followingId })
+      .returning();
+    return created;
+  }
+
+  async unfollowUser(followerId: string, followingId: string): Promise<void> {
+    await db
+      .delete(follows)
+      .where(and(
+        eq(follows.followerId, followerId),
+        eq(follows.followingId, followingId)
+      ));
+  }
+
+  async getFollowers(userId: string): Promise<(Follow & { follower: User })[]> {
+    const result = await db
+      .select()
+      .from(follows)
+      .leftJoin(users, eq(follows.followerId, users.id))
+      .where(eq(follows.followingId, userId))
+      .orderBy(desc(follows.createdAt));
+
+    return result.map(r => ({ ...r.follows, follower: r.users! }));
+  }
+
+  async getFollowing(userId: string): Promise<(Follow & { following: User })[]> {
+    const result = await db
+      .select()
+      .from(follows)
+      .leftJoin(users, eq(follows.followingId, users.id))
+      .where(eq(follows.followerId, userId))
+      .orderBy(desc(follows.createdAt));
+
+    return result.map(r => ({ ...r.follows, following: r.users! }));
+  }
+
+  async getFollowerCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(follows)
+      .where(eq(follows.followingId, userId));
+    return result[0]?.count || 0;
+  }
+
+  async getFollowingCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(follows)
+      .where(eq(follows.followerId, userId));
+    return result[0]?.count || 0;
+  }
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(follows)
+      .where(and(
+        eq(follows.followerId, followerId),
+        eq(follows.followingId, followingId)
+      ));
+    return result.length > 0;
   }
 
   // Hostel operations

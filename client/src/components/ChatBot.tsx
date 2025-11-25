@@ -104,17 +104,19 @@ export default function ChatBot() {
     return (
       <Button
         size="icon"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
+        className="fixed bottom-6 right-6 rounded-full shadow-2xl z-[100] relative"
         onClick={() => setIsOpen(true)}
         data-testid="button-open-chatbot"
+        aria-label="Open chat assistant"
       >
         <MessageCircle className="h-6 w-6" />
+        <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-background animate-pulse"></span>
       </Button>
     );
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 w-[380px] h-[600px] shadow-2xl flex flex-col z-50" data-testid="card-chatbot">
+    <Card className="fixed bottom-6 right-6 w-[90vw] sm:w-[400px] h-[85vh] sm:h-[650px] max-h-[650px] shadow-2xl flex flex-col z-[100] border-2" data-testid="card-chatbot">
       <div className="flex items-center justify-between gap-2 p-4 border-b">
         <div className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">

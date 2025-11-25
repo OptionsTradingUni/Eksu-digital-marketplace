@@ -326,6 +326,17 @@ export const sellerAnalytics = pgTable("seller_analytics", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Follows - user following system
+export const follows = pgTable("follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  followerId: varchar("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  followingId: varchar("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_follower").on(table.followerId),
+  index("idx_following").on(table.followingId),
+]);
+
 // Hostel listings (separate from products)
 export const hostels = pgTable("hostels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -852,6 +863,14 @@ export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type LoginStreak = typeof loginStreaks.$inferSelect;
 export type SellerAnalytics = typeof sellerAnalytics.$inferSelect;
+export type Follow = typeof follows.$inferSelect;
+export type InsertFollow = z.infer<typeof insertFollowSchema>;
+
+// Zod schemas for follows
+export const insertFollowSchema = createInsertSchema(follows).omit({
+  id: true,
+  createdAt: true,
+});
 
 // Zod schemas for new tables
 export const insertHostelSchema = createInsertSchema(hostels).omit({
