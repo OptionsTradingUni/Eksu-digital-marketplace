@@ -209,6 +209,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== ERROR REPORTING API ROUTES ====================
+
+  // Error reporting endpoint for ErrorBoundary
+  app.post("/api/errors/report", async (req, res) => {
+    try {
+      const { message, stack, componentStack, url, userAgent, timestamp } = req.body;
+
+      // Log error to console
+      console.error("Frontend Error Report:", {
+        message,
+        stack,
+        componentStack,
+        url,
+        userAgent,
+        timestamp,
+      });
+
+      // TODO: In production, you could:
+      // 1. Save to database for error tracking
+      // 2. Send email notification via Resend
+      // 3. Send to error monitoring service (Sentry, LogRocket, etc.)
+
+      // For now, just acknowledge receipt
+      res.json({ success: true, message: "Error report received" });
+    } catch (error) {
+      console.error("Error processing error report:", error);
+      res.status(500).json({ message: "Failed to process error report" });
+    }
+  });
+
   // ==================== NEW FEATURES API ROUTES ====================
 
   // Wallet routes

@@ -17,6 +17,8 @@ import Messages from "@/pages/messages";
 import Profile from "@/pages/profile";
 import SellerDashboard from "@/pages/seller-dashboard";
 import AdminPanel from "@/pages/admin";
+import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
+import { useEffect } from "react";
 
 function Router() {
   const { isAuthenticated, isLoading, isError } = useAuth();
@@ -35,7 +37,11 @@ function Router() {
 
   // Show landing page for unauthenticated users or auth errors
   if (!isAuthenticated || isError) {
-    return <Landing />;
+    return (
+      <ErrorBoundary>
+        <Landing />
+      </ErrorBoundary>
+    );
   }
 
   // Show authenticated app
@@ -43,21 +49,62 @@ function Router() {
     <>
       <Header />
       <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/products/new" component={CreateProduct} />
-        <Route path="/products/:id" component={ProductView} />
-        <Route path="/products/:id/edit" component={CreateProduct} />
-        <Route path="/messages" component={Messages} />
-        <Route path="/profile" component={Profile} />
-        <Route path="/seller/dashboard" component={SellerDashboard} />
-        <Route path="/admin" component={AdminPanel} />
-        <Route component={NotFound} />
+        <Route path="/" component={() => (
+          <ErrorBoundary>
+            <Home />
+          </ErrorBoundary>
+        )} />
+        <Route path="/products/new" component={() => (
+          <ErrorBoundary>
+            <CreateProduct />
+          </ErrorBoundary>
+        )} />
+        <Route path="/products/:id" component={() => (
+          <ErrorBoundary>
+            <ProductView />
+          </ErrorBoundary>
+        )} />
+        <Route path="/products/:id/edit" component={() => (
+          <ErrorBoundary>
+            <CreateProduct />
+          </ErrorBoundary>
+        )} />
+        <Route path="/messages" component={() => (
+          <ErrorBoundary>
+            <Messages />
+          </ErrorBoundary>
+        )} />
+        <Route path="/profile" component={() => (
+          <ErrorBoundary>
+            <Profile />
+          </ErrorBoundary>
+        )} />
+        <Route path="/seller/dashboard" component={() => (
+          <ErrorBoundary>
+            <SellerDashboard />
+          </ErrorBoundary>
+        )} />
+        <Route path="/admin" component={() => (
+          <ErrorBoundary>
+            <AdminPanel />
+          </ErrorBoundary>
+        )} />
+        <Route component={() => (
+          <ErrorBoundary>
+            <NotFound />
+          </ErrorBoundary>
+        )} />
       </Switch>
     </>
   );
 }
 
 function App() {
+  // Setup global error handlers on mount
+  useEffect(() => {
+    setupGlobalErrorHandler();
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
