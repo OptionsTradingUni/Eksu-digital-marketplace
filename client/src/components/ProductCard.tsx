@@ -9,8 +9,12 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const imageUrl = product.images[0] || "/placeholder-product.png";
-  const price = parseFloat(product.price as string);
+  if (!product) return null;
+  
+  const images = product.images || [];
+  const imageUrl = images[0] || "/placeholder-product.png";
+  const priceValue = product.price;
+  const price = typeof priceValue === 'number' ? priceValue : parseFloat(priceValue as string) || 0;
 
   return (
     <Link href={`/products/${product.id}`}>
