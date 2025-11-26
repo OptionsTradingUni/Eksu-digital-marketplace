@@ -1,0 +1,24 @@
+Continue from where it stopped check image and finish others too 
+Check my requests 
+
+1. The profile is so lame 
+Even when I go to help centre to very account 
+I can’t see verify account or button that works 
+
+2. No display name nothing the profile page doesn’t look unique and modern it’s somehow , I can only edit profile if I choose too not that it shows me edit profile directly 
+3. ⁠in seller dashboard, I’m unable to create a product you’ll see error in image 
+4. ⁠my ads , in my ads it’s taking me to create new products shouldn’t it hard the ones I already have already and ask if I want to create a new one then after that one would also be in seller dashboard 
+5. ⁠when I tried to sign up as a seller I got error too and when I try to scroll I wasn’t able to scroll it’s somehow fixed and the signup page is too long 
+6. ⁠there’s no option to switch roles on the site in profile 
+7. ⁠continue building the plug, social feed post 
+8. ⁠for the games side, trivial and word play game, it can’t be hardcoded maybe it would be generated somewhere or make it computer or search or use ChatGPT chatbot I dunno but it can’t be hardvided 
+9. ⁠also work on other games too 
+10. ⁠why is it so hard to get 6 on ludo lol, well not asking you to change anything do it the normal way how other normal ludo games are , make it have an option for 2 dice, 3 dice , 1 too also I think there's a programming error when I played the ai was playing it itself 
+11. Increase all the game UI, make it realistic and look like normal game, improve the look 
+12. Improve the overall site UI too make it modern 
+
+Some things has been completed single them out please don't work on them again once you confirm to avoid wasting the credits  
+Also add the ability to edit or write the price you want in filters to be able to edit by writing 
+Also in profile 
+After saving 
+It should show you how it looks like and would look like when people visit your page and create tools for all sort of decorations per the user need 
