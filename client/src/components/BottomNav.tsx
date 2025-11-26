@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Gamepad2, Search, ShoppingCart, User } from "lucide-react";
+import { Home, Zap, Search, ShoppingCart, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { useCart } from "@/hooks/use-cart";
@@ -60,11 +60,11 @@ export function BottomNav() {
         />
 
         <NavItem
-          icon={<Gamepad2 className="h-5 w-5" />}
-          label="Play"
-          href="/games"
-          isActive={isActive("/games")}
-          testId="button-nav-play"
+          icon={<Zap className="h-5 w-5" />}
+          label="The Plug"
+          href="/the-plug"
+          isActive={isActive("/the-plug")}
+          testId="button-nav-plug"
         />
 
         <NavItem

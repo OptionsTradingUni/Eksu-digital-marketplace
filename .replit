@@ -110,7 +110,3 @@ expertMode = true
 [userenv.shared]
 WEBSITE_COMMISSION_RATE = "0.10"
 SECURITY_DEPOSIT_AMOUNT = "0"
-MONNIFY_API_KEY = "MK_TEST_SUU44S6HTF"
-MONNIFY_SECRET_KEY = "W0B16RXP1P0PCC4LT3F8YA7ME3W3UX5D"
-MONNIFY_CONTRACT_CODE = "525RN81ZHUW2"
-DATABASE_URL = "postgresql://neondb_owner:npg_4Eswfa6SyHgC@ep-ancient-dust-agz33a36.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require"

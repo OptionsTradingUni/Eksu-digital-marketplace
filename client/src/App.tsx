@@ -26,6 +26,7 @@ import GamesPage from "@/pages/games";
 import SupportPage from "@/pages/support";
 import AnnouncementsPage from "@/pages/announcements";
 import CheckoutPage from "@/pages/checkout";
+import ThePlugPage from "@/pages/the-plug";
 import PaymentCallbackPage from "@/pages/payment-callback";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { useEffect } from "react";
@@ -133,6 +134,11 @@ function Router() {
           <Route path="/announcements" component={() => (
             <ErrorBoundary>
               <AnnouncementsPage />
+            </ErrorBoundary>
+          )} />
+          <Route path="/the-plug" component={() => (
+            <ErrorBoundary>
+              <ThePlugPage />
             </ErrorBoundary>
           )} />
           <Route path="/checkout" component={() => (
