@@ -1,0 +1,99 @@
+🛒 Checkout & Transaction Completion
+The checkout flow must be seamless and secure.
+A. The Flow
+1. Cart Review: User reviews items.
+2. Delivery Details: User selects delivery method (Pickup on Campus / Delivery to Hostel).
+3. Payment Method Selection:
+• Wallet Balance: Immediate deduction.
+• Direct Payment (Monnify/Paystack): Card/Transfer.
+4. Final Review: Show total breakdown (Item Price + Delivery + Service Fee).
+5. Processing:
+• Deduct funds.
+• Create Transaction record in Firestore (Status: pending_delivery).
+• Inventory Update: Mark item as sold or decrement quantity immediately.
+6. Success: Redirect to a "Order Confirmed" page with a unique Order ID.
+B. Seller Profile Integration (Product Page)
+Requirement: The seller's identity must be inseparable from the product.
+• UI Layout: On every single Product Detail page, a "Seller Card" must be displayed prominently (e.g., below the "Buy Now" button or in the sidebar).
+• Data Displayed:
+• Seller Profile Picture (Avatar).
+• Seller Name & Username (@bigmama_tech).
+• Verification Badge: (Green check) if verified.
+• Trust Score/Rating: (e.g., ⭐ 4.8/5).
+• "Joined CampusPlug": Date.
+• Online Status: (Active now / Last seen 2h ago).
+2. 💬 Chat System & Safety Guidelines
+Requirement: Safety is paramount. We cannot assume users know the rules.
+A. The "Safety Shield" Modal
+• Trigger: The first time a Buyer clicks "Chat" with a Seller for a specific item.
+• Behavior: A modal pops up before the chat opens.
+• Content:
+• 🛑 STOP: Do not pay this seller directly via bank transfer.
+• 💰 RULE: Only pay through the CampusPlug Wallet/Escrow.
+• 📍 MEET: Meet in open campus areas (e.g., SUB, Faculty).
+• Action: User must click "I Understand" to proceed to the chat.
+B. Chat Features
+• Voice Notes: Implement audio recording and playback within the chat bubble.
+• Media Sharing: Allow image sharing (scanned for malware if possible, see Section 3).
+3. 📢 "The Plug" (Social Feed - X/Bluesky Style)
+Goal: Keep users on the app even when they aren't buying. A "Town Square" for the campus.
+A. Feed Architecture
+• Navigation: A dedicated tab titled "The Plug".
+• Feed Logic:
+• "For You" (Discovery): Algorithm-based mix of popular posts and verified announcements.
+• "Following": Chronological posts only from people the user follows.
+B. Posting Privileges & Content
+• Post Types:
+• Text: Standard posts (limit 280-500 chars).
+• Voice Notes: "Voice Tweets" - highly engaging for students.
+• Images/GIFs: With automatic compression.
+• Malware Scanning: All file uploads must pass through a sanitizer or basic mime-type check before storage to prevent executables/viruses.
+• Interactions: Like, Repost, Comment, Share.
+4. 👤 The "CampusPlug Welcome" System
+Goal: Automated engagement and announcements.
+A. The "System User"
+• Create a specific user account in the database (e.g., Username: @CampusPlugOfficial or @ThePlug).
+• Env Configuration: The ID of this user is stored in NEXT_PUBLIC_SYSTEM_WELCOME_USER_ID.
+B. Automation Logic (On Sign Up)
+When a new user registers (user.create event):
+1. Auto-Follow: The new user is automatically made to follow @CampusPlugOfficial. (They can unfollow later).
+2. Welcome DM: The system triggers an automated Direct Message to the new user:
+• "Welcome to the family! 🔌 Check out 'The Plug' for campus gist and verify your account to start selling."
+C. Usage
+• You (the Admin) can log in as this user to post blog-style updates, campus news, or maintenance alerts on "The Plug" feed. Every user will see it because they follow you.
+5. 💳 Wallet: Deposit, Withdrawal & Bank Resolution
+A. Deposit (Add Money)
+• Method: Use Monnify or Paystack SDK.
+• Flow: User enters Amount -> Pop-up Gateway -> Pay via Transfer/Card -> Instant Credit to Wallet Balance.
+B. Withdrawal (Cash Out)
+• Bank Resolution (Crucial):
+• Step 1: User selects Bank Name from a dropdown (Fetched from API).
+• Step 2: User types Account Number.
+• Step 3: Auto-Resolve: System calls API (Monnify/Paystack resolve_account) to fetch the Account Name (e.g., "CHUKWUDI EMEKA").
+• Step 4: User confirms the name match before the withdrawal request is processed.
+• Processing: If "Payout on Demand" is active, use the Transfer API to send funds immediately.
+6. 🔐 Security & Hardcoding
+A. Hardcode HTTPS
+• Application Level: Ensure next.config.js or the server entry point forces redirect to https:// for all requests.
+• Link Handling: All internal links and image sources must explicitly use https.
+7. 👮 Admin & Support Access (Environment Variables)
+Goal: Grant admin/support privileges without building complex UI role management databases yet.
+A. The Mechanism
+We will use Environment Variables to store a comma-separated list of User IDs (UIDs) or Usernames.
+B. Role Definitions
+• Super Admin: Full access to Dashboard, Ban Users, View Financials.
+• Support Rep: Access to Chat Support Dashboard, View User Disputes (Cannot withdraw money or ban).
+
+D. Support Flow
+1. User opens "Help Center".
+2. Bot Greet: Chatbot answers FAQs.
+3. Escalation: If user clicks "Talk to Human", the chat is routed to the Support Dashboard.
+4. Access: Any user whose ID is in NEXT_PUBLIC_SUPPORT_IDS can see this dashboard and reply.
+8. Developer Action Checklist
+1. [ ] Implement Checkout: Complete the logic from Cart to Order Confirmation.
+2. [ ] Update Product Page: Embed the Seller Profile Card.
+3. [ ] Chat Guidelines: Add the "Safety Shield" modal on chat init.
+4. [ ] Wallet: Build the "Resolve Account Number" feature for withdrawals.
+5. [ ] The Plug: Build the social feed UI and backend (Posts/Likes).
+6. [ ] Welcome Script: Write the hook to auto-follow the System User on signup.
+7. [ ] Env Logic: Implement the Admin/Support ID check using the variables below.
