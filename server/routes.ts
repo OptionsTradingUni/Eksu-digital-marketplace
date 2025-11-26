@@ -563,12 +563,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Login streak rate limiting store (in-memory, per-user tracking)
+  const loginStreakRateLimits: Map<string, { count: number; windowStart: number }> = new Map();
+  const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+  const RATE_LIMIT_MAX_REQUESTS = 5; // Max 5 requests per minute per user
+
+  // Helper function to get client IP address
+  function getClientIp(req: any): string {
+    // Check for forwarded headers (common in reverse proxy setups)
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      // x-forwarded-for can contain multiple IPs, take the first one
+      const ips = forwarded.split(',').map((ip: string) => ip.trim());
+      return ips[0];
+    }
+    // Fallback to direct connection IP
+    return req.ip || req.connection?.remoteAddress || 'unknown';
+  }
+
+  // Helper function to check rate limit
+  function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
+    const now = Date.now();
+    const userLimit = loginStreakRateLimits.get(userId);
+    
+    if (!userLimit || (now - userLimit.windowStart) > RATE_LIMIT_WINDOW_MS) {
+      // New window or expired window
+      loginStreakRateLimits.set(userId, { count: 1, windowStart: now });
+      return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+    }
+    
+    if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
+      const resetIn = RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart);
+      return { allowed: false, remaining: 0, resetIn };
+    }
+    
+    userLimit.count++;
+    loginStreakRateLimits.set(userId, userLimit);
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - userLimit.count, resetIn: RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart) };
+  }
+
   // Login streak routes
   app.post('/api/login-streak', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const result = await storage.updateLoginStreak(userId);
-      res.json(result);
+      
+      // Check rate limit
+      const rateCheck = checkRateLimit(userId);
+      if (!rateCheck.allowed) {
+        console.log(`Rate limit exceeded for user ${userId}. Reset in ${rateCheck.resetIn}ms`);
+        return res.status(429).json({ 
+          message: "Too many requests. Please try again later.",
+          retryAfter: Math.ceil(rateCheck.resetIn / 1000),
+          remaining: 0
+        });
+      }
+      
+      // Get client IP address for security tracking
+      const ipAddress = getClientIp(req);
+      
+      // Update login streak with IP tracking
+      const result = await storage.updateLoginStreak(userId, ipAddress);
+      
+      // Include rate limit info in response
+      res.json({
+        ...result,
+        rateLimit: {
+          remaining: rateCheck.remaining,
+          resetIn: rateCheck.resetIn
+        }
+      });
     } catch (error) {
       console.error("Error updating login streak:", error);
       res.status(500).json({ message: "Failed to update login streak" });

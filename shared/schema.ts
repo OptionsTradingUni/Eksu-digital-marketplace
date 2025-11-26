@@ -328,6 +328,12 @@ export const loginStreaks = pgTable("login_streaks", {
   longestStreak: integer("longest_streak").default(0),
   lastLoginDate: timestamp("last_login_date"),
   totalRewards: decimal("total_rewards", { precision: 10, scale: 2 }).default("0.00"),
+  // Security enhancement columns
+  lastIpAddress: varchar("last_ip_address"), // Track IP for suspicious activity detection
+  dailyClaimHash: varchar("daily_claim_hash"), // Hash for replay attack prevention
+  claimCount: integer("claim_count").default(0), // Total claims for abuse detection
+  lastClaimAttempt: timestamp("last_claim_attempt"), // For rate limiting tracking
+  suspiciousActivityCount: integer("suspicious_activity_count").default(0), // Track potential abuse
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

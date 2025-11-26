@@ -1,4 +1,5 @@
 // Database storage implementation
+import crypto from "crypto";
 import {
   users,
   products,
@@ -213,7 +214,7 @@ export interface IStorage {
   
   // Login streak operations
   getOrCreateLoginStreak(userId: string): Promise<LoginStreak>;
-  updateLoginStreak(userId: string): Promise<{ streak: LoginStreak; reward: number }>;
+  updateLoginStreak(userId: string, ipAddress?: string): Promise<{ streak: LoginStreak; reward: number; securityWarning?: string }>;
   
   // Seller analytics operations
   getOrCreateSellerAnalytics(sellerId: string): Promise<SellerAnalytics>;
@@ -1151,10 +1152,37 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateLoginStreak(userId: string): Promise<{ streak: LoginStreak; reward: number }> {
+  async updateLoginStreak(userId: string, ipAddress?: string): Promise<{ streak: LoginStreak; reward: number; securityWarning?: string }> {
     const streak = await this.getOrCreateLoginStreak(userId);
     const today = new Date();
+    const todayDateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
     today.setHours(0, 0, 0, 0);
+    
+    let securityWarning: string | undefined;
+    
+    // Generate daily claim hash for replay attack prevention
+    const serverSecret = process.env.LOGIN_REWARD_SECRET || 'default-login-streak-secret-change-in-production';
+    const dailyHash = crypto.createHash('sha256')
+      .update(`${todayDateStr}:${userId}:${serverSecret}`)
+      .digest('hex');
+    
+    // Check if this exact claim was already processed today (replay attack prevention)
+    if (streak.dailyClaimHash === dailyHash) {
+      return { streak, reward: 0 };
+    }
+    
+    // Check for suspicious IP changes (potential account sharing or abuse)
+    const previousIp = streak.lastIpAddress;
+    if (previousIp && ipAddress && previousIp !== ipAddress) {
+      // Different IP detected - flag for monitoring but allow claim
+      const newSuspiciousCount = (streak.suspiciousActivityCount || 0) + 1;
+      
+      // If too many IP changes (more than 5), add warning
+      if (newSuspiciousCount > 5) {
+        securityWarning = 'Multiple IP address changes detected. Your account is being monitored for suspicious activity.';
+        console.log(`Security alert: User ${userId} has ${newSuspiciousCount} IP changes. Previous: ${previousIp}, Current: ${ipAddress}`);
+      }
+    }
     
     const lastLogin = streak.lastLoginDate ? new Date(streak.lastLoginDate) : null;
     lastLogin?.setHours(0, 0, 0, 0);
@@ -1167,8 +1195,19 @@ export class DatabaseStorage implements IStorage {
     let reward = 0;
 
     if (daysDiff === 0) {
-      // Already logged in today
-      return { streak, reward: 0 };
+      // Already logged in today - update IP if changed but no reward
+      if (ipAddress && ipAddress !== streak.lastIpAddress) {
+        await db
+          .update(loginStreaks)
+          .set({
+            lastIpAddress: ipAddress,
+            lastClaimAttempt: new Date(),
+            suspiciousActivityCount: (streak.suspiciousActivityCount || 0) + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(loginStreaks.id, streak.id));
+      }
+      return { streak, reward: 0, securityWarning };
     } else if (daysDiff === 1) {
       // Consecutive day - increment streak
       newStreak = (streak.currentStreak || 0) + 1;
@@ -1179,6 +1218,9 @@ export class DatabaseStorage implements IStorage {
       reward = Math.floor(Math.random() * 48 + 2); // Random ₦2-₦50
     }
 
+    // Calculate new suspicious activity count
+    const suspiciousIncrement = (previousIp && ipAddress && previousIp !== ipAddress) ? 1 : 0;
+
     const [updated] = await db
       .update(loginStreaks)
       .set({
@@ -1186,6 +1228,12 @@ export class DatabaseStorage implements IStorage {
         longestStreak: Math.max(newStreak, streak.longestStreak || 0),
         lastLoginDate: new Date(),
         totalRewards: sql`${loginStreaks.totalRewards} + ${reward}`,
+        // Security fields
+        lastIpAddress: ipAddress || streak.lastIpAddress,
+        dailyClaimHash: dailyHash,
+        claimCount: sql`COALESCE(${loginStreaks.claimCount}, 0) + 1`,
+        lastClaimAttempt: new Date(),
+        suspiciousActivityCount: sql`COALESCE(${loginStreaks.suspiciousActivityCount}, 0) + ${suspiciousIncrement}`,
         updatedAt: new Date(),
       })
       .where(eq(loginStreaks.id, streak.id))
@@ -1197,14 +1245,14 @@ export class DatabaseStorage implements IStorage {
       await this.updateWalletBalance(userId, reward.toString(), 'add');
       await this.createTransaction({
         walletId: wallet.id,
-        type: 'welcome_bonus',
+        type: 'login_reward',
         amount: reward.toString(),
         description: `${newStreak}-day login streak reward`,
         status: 'completed',
       });
     }
 
-    return { streak: updated, reward };
+    return { streak: updated, reward, securityWarning };
   }
 
   // Seller analytics operations
