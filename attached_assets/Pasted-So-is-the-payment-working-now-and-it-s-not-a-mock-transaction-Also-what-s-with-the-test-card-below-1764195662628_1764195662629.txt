@@ -1,0 +1,39 @@
+So is the payment working now and it's not a mock transaction? 
+Also what's with the test card below it looks like mock wtf
+Again pictures still not saving I upload or input I refresh it's gone 
+I can't post a media post on the plug 
+Also system account should send message to those who already joined and haven't send a message yet and new users 
+I think resend was configured  
+8. ⁠if someone messages or made an order and other things , notifications in a written up message should be sent to both sellers and buyers and sellers can reply via the email too and it reflect on chat message too and also create a .md for this so I know how to go about setting it up maybe a email.md
+9. ⁠whenever I add a profile picture whether it’s a product or profile it gets deleted , messages are not saved 
+
+14. ⁠in social post the plug I want you to improve the look it’s somehow make it sharp and nice improve the UI also 
+15. ⁠let seller be able to add many pictures in her profile and edit how it’s arranged so it’s not abnormal 
+16. ⁠add more things to add so the profile looks like a standard one and not too empty 
+
+18. ⁠is welcome message sending working? By a account from and for the website which could also be used to post in the plug and automatically followed by users . It follows no one unless I want to , also a email and password for it generated too 
+28. ⁠nudity photos or words not allowed, it would be deleted and warning sent by system message to the user if it persist account get banned or suspended immediately
+
+Instead of replit cuz I’m not deploying in reply can’t I use my database for storage in the object storage stuff and it will work
+Also during sign up make it possible for messages to be sent to recipient email after registration 
+Also
+Implement sending code for verification too
+Also can you do a captcha like this it brings all mannners of captcha a very unique captcha , funny easy and nice with good UI 
+Is campus updates functional 
+Aside photo on the plug videos should be posted too 
+Work on the algorithm let it be fair and smart 
+Also when I click following maybe I followed in home I check the plug it won't show followed not working not consistent and sometimes it unfollows itself and wherever I click a person bio I should be able to access it like a normal social media app Al
+Add repost function too just like X 
+Make it look like twitter and make the UI better 
+Also the messages online and offline status isn't correct or working well 
+Referrals link doesn't take me to sign up and fill the sign up referral code automatically or work 
+Under history in payment in wallet any canceled transaction would be cancelled there's success pending and canceled and has meanings 
+Views isn't authentic and let it be visible to the seller only not to everyone 
+Also in search categories in ads listing and filters add a search feature 
+You removed game feature add it somewhere there replace it with profile I mean profile is at the top 
+Two places it can be accessed and if you think it's not ideal remove cart there's already a cart feature at the top navigation 
+Put game navigation the below 
+My database url is
+postgresql://neondb_owner:npg_4Eswfa6SyHgC@ep-ancient-dust-agz33a36.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+You will need it don't worry about privacy 
