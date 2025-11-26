@@ -61,18 +61,20 @@ export default function CreateProduct() {
 
       const response = await fetch("/api/products", {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`${response.status}: ${error}`);
+        const errorData = await response.json().catch(() => ({ message: "Failed to create listing" }));
+        throw new Error(errorData.message || `Error ${response.status}: Failed to create listing`);
       }
 
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products/my-listings"] });
       toast({
         title: "Success",
         description: "Product listed successfully!",
@@ -87,7 +89,7 @@ export default function CreateProduct() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/api/auth/login";
         }, 500);
         return;
       }

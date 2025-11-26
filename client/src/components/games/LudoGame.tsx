@@ -94,7 +94,7 @@ const getAIHomePositions = (): { x: number; y: number }[] => [
 const secureRandom = (): number => {
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
-  return array[0] / (0xFFFFFFFF + 1);
+  return array[0] / 0x100000000;
 };
 
 const rollSingleDie = (): number => {
@@ -260,8 +260,10 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
   const [consecutiveSixes, setConsecutiveSixes] = useState(0);
   const [movableTokens, setMovableTokens] = useState<number[]>([]);
   const [captureAnimation, setCaptureAnimation] = useState<{ x: number; y: number } | null>(null);
+  const [isAiThinking, setIsAiThinking] = useState(false);
   
   const isProcessingRef = useRef(false);
+  const aiTurnRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -334,13 +336,15 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
     return SAFE_ZONES.includes(position % TOTAL_PATH_LENGTH);
   };
 
-  const endTurn = useCallback((gotSix: boolean) => {
+  const endTurn = useCallback((gotSix: boolean, currentTurnPlayer: Player) => {
     const newWinner = checkWinner();
     if (newWinner) {
       setWinner(newWinner);
       setGameOver(true);
       onGameEnd(newWinner === "player", newWinner === "player" ? 100 : 0);
       isProcessingRef.current = false;
+      aiTurnRef.current = false;
+      setIsAiThinking(false);
       return;
     }
     
@@ -348,7 +352,16 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
     setMovableTokens([]);
     
     if (!gotSix) {
-      setCurrentPlayer((prev) => (prev === "player" ? "ai" : "player"));
+      const nextPlayer = currentTurnPlayer === "player" ? "ai" : "player";
+      setCurrentPlayer(nextPlayer);
+      if (nextPlayer === "player") {
+        aiTurnRef.current = false;
+        setIsAiThinking(false);
+      }
+    } else {
+      if (currentTurnPlayer === "ai") {
+        aiTurnRef.current = false;
+      }
     }
     
     isProcessingRef.current = false;
@@ -408,12 +421,13 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
     moveToken(tokenId, diceResult.total, diceResult.hasSix);
     
     timeoutRef.current = setTimeout(() => {
-      endTurn(diceResult.hasSix);
+      endTurn(diceResult.hasSix, "player");
     }, 300);
   }, [hasRolled, movableTokens, currentPlayer, diceResult, moveToken, endTurn]);
 
-  const rollDice = useCallback(() => {
+  const rollDice = useCallback((forPlayer: Player) => {
     if (isRolling || hasRolled || gameOver || isProcessingRef.current) return;
+    if (forPlayer !== currentPlayer) return;
     
     isProcessingRef.current = true;
     setIsRolling(true);
@@ -438,7 +452,12 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
               timeoutRef.current = setTimeout(() => {
                 setHasRolled(false);
                 setMovableTokens([]);
-                setCurrentPlayer((p) => (p === "player" ? "ai" : "player"));
+                const nextPlayer = forPlayer === "player" ? "ai" : "player";
+                setCurrentPlayer(nextPlayer);
+                if (nextPlayer === "player") {
+                  aiTurnRef.current = false;
+                  setIsAiThinking(false);
+                }
                 isProcessingRef.current = false;
               }, 1000);
               return 0;
@@ -449,21 +468,21 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
           setConsecutiveSixes(0);
         }
         
-        const movable = getMovableTokens(currentPlayer, finalResult.total, finalResult.hasSix);
+        const movable = getMovableTokens(forPlayer, finalResult.total, finalResult.hasSix);
         setMovableTokens(movable);
         
         if (movable.length === 0) {
-          setMessage(`No valid moves. ${currentPlayer === "player" ? "AI's" : "Your"} turn.`);
+          setMessage(`No valid moves. ${forPlayer === "player" ? "AI's" : "Your"} turn.`);
           timeoutRef.current = setTimeout(() => {
-            endTurn(false);
+            endTurn(false, forPlayer);
           }, 1000);
-        } else if (currentPlayer === "player") {
+        } else if (forPlayer === "player") {
           if (movable.length === 1) {
             setMessage("Moving your only available token...");
             timeoutRef.current = setTimeout(() => {
               moveToken(movable[0], finalResult.total, finalResult.hasSix);
               timeoutRef.current = setTimeout(() => {
-                endTurn(finalResult.hasSix);
+                endTurn(finalResult.hasSix, "player");
               }, 300);
             }, 500);
           } else {
@@ -480,79 +499,88 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
 
   useEffect(() => {
     if (gamePhase !== "playing" || gameOver) return;
+    if (currentPlayer !== "ai") return;
+    if (!hasRolled || movableTokens.length === 0) return;
+    if (isProcessingRef.current || aiTurnRef.current) return;
     
-    if (currentPlayer === "ai" && hasRolled && movableTokens.length > 0 && !isProcessingRef.current) {
-      isProcessingRef.current = true;
+    aiTurnRef.current = true;
+    isProcessingRef.current = true;
+    
+    const savedDiceResult = { ...diceResult };
+    const savedMovableTokens = [...movableTokens];
+    
+    timeoutRef.current = setTimeout(() => {
+      const aiTokensOnBoard = savedMovableTokens.filter((id) => {
+        const token = tokens.find((t) => t.id === id);
+        return token && !token.isHome;
+      });
       
-      timeoutRef.current = setTimeout(() => {
-        const aiTokensOnBoard = movableTokens.filter((id) => {
-          const token = tokens.find((t) => t.id === id);
-          return token && !token.isHome;
-        });
+      const aiTokensAtHome = savedMovableTokens.filter((id) => {
+        const token = tokens.find((t) => t.id === id);
+        return token && token.isHome;
+      });
+      
+      let selectedToken: number;
+      
+      if (aiTokensOnBoard.length > 0) {
+        const playerTokens = tokens.filter((t) => t.player === "player" && !t.isHome && !t.isFinished);
         
-        const aiTokensAtHome = movableTokens.filter((id) => {
-          const token = tokens.find((t) => t.id === id);
-          return token && token.isHome;
-        });
-        
-        let selectedToken: number;
-        
-        if (aiTokensOnBoard.length > 0) {
-          const playerTokens = tokens.filter((t) => t.player === "player" && !t.isHome && !t.isFinished);
-          
-          let captureToken: number | null = null;
-          for (const tokenId of aiTokensOnBoard) {
-            const token = tokens.find((t) => t.id === tokenId);
-            if (token) {
-              const newPos = token.position + diceResult.total;
-              const path = AI_PATH;
-              if (newPos < path.length) {
-                const targetPos = path[newPos];
-                for (const pToken of playerTokens) {
-                  const pPos = getTokenPosition(pToken);
-                  if (pPos.x === targetPos.x && pPos.y === targetPos.y && !isSafeZone(pToken.position)) {
-                    captureToken = tokenId;
-                    break;
-                  }
+        let captureToken: number | null = null;
+        for (const tokenId of aiTokensOnBoard) {
+          const token = tokens.find((t) => t.id === tokenId);
+          if (token) {
+            const newPos = token.position + savedDiceResult.total;
+            const path = AI_PATH;
+            if (newPos < path.length) {
+              const targetPos = path[newPos];
+              for (const pToken of playerTokens) {
+                const pPos = getTokenPosition(pToken);
+                if (pPos.x === targetPos.x && pPos.y === targetPos.y && !isSafeZone(pToken.position)) {
+                  captureToken = tokenId;
+                  break;
                 }
               }
             }
           }
-          
-          if (captureToken !== null) {
-            selectedToken = captureToken;
-          } else {
-            const closestToFinish = aiTokensOnBoard.reduce((closest, id) => {
-              const token = tokens.find((t) => t.id === id);
-              const closestToken = tokens.find((t) => t.id === closest);
-              if (!token || !closestToken) return closest;
-              return token.position > closestToken.position ? id : closest;
-            }, aiTokensOnBoard[0]);
-            selectedToken = closestToFinish;
-          }
-        } else if (aiTokensAtHome.length > 0) {
-          selectedToken = aiTokensAtHome[0];
-        } else {
-          selectedToken = movableTokens[0];
         }
         
-        moveToken(selectedToken, diceResult.total, diceResult.hasSix);
-        
-        timeoutRef.current = setTimeout(() => {
-          endTurn(diceResult.hasSix);
-        }, 500);
-      }, 1000);
-    }
+        if (captureToken !== null) {
+          selectedToken = captureToken;
+        } else {
+          const closestToFinish = aiTokensOnBoard.reduce((closest, id) => {
+            const token = tokens.find((t) => t.id === id);
+            const closestToken = tokens.find((t) => t.id === closest);
+            if (!token || !closestToken) return closest;
+            return token.position > closestToken.position ? id : closest;
+          }, aiTokensOnBoard[0]);
+          selectedToken = closestToFinish;
+        }
+      } else if (aiTokensAtHome.length > 0) {
+        selectedToken = aiTokensAtHome[0];
+      } else {
+        selectedToken = savedMovableTokens[0];
+      }
+      
+      moveToken(selectedToken, savedDiceResult.total, savedDiceResult.hasSix);
+      
+      timeoutRef.current = setTimeout(() => {
+        endTurn(savedDiceResult.hasSix, "ai");
+      }, 500);
+    }, 1000);
   }, [gamePhase, currentPlayer, hasRolled, movableTokens, gameOver, tokens, diceResult, moveToken, endTurn, getTokenPosition]);
 
   useEffect(() => {
     if (gamePhase !== "playing" || gameOver) return;
+    if (currentPlayer !== "ai") return;
+    if (hasRolled) return;
+    if (isProcessingRef.current || aiTurnRef.current) return;
     
-    if (currentPlayer === "ai" && !hasRolled && !isProcessingRef.current) {
-      timeoutRef.current = setTimeout(() => {
-        rollDice();
-      }, 1000);
-    }
+    aiTurnRef.current = true;
+    setIsAiThinking(true);
+    
+    timeoutRef.current = setTimeout(() => {
+      rollDice("ai");
+    }, 1000);
   }, [gamePhase, currentPlayer, hasRolled, gameOver, rollDice]);
 
   const playerFinished = tokens.filter((t) => t.player === "player" && t.isFinished).length;
@@ -563,6 +591,7 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
       clearTimeout(timeoutRef.current);
     }
     isProcessingRef.current = false;
+    aiTurnRef.current = false;
     
     setTokens([
       { id: 0, player: "player", position: -1, isHome: true, isFinished: false },
@@ -581,6 +610,7 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
     setWinner(null);
     setConsecutiveSixes(0);
     setMovableTokens([]);
+    setIsAiThinking(false);
     setMessage("Roll the dice to start!");
   };
 
@@ -811,7 +841,7 @@ export default function LudoGame({ stake, onGameEnd, isPractice }: LudoGameProps
             </div>
             
             <Button
-              onClick={rollDice}
+              onClick={() => rollDice("player")}
               disabled={isRolling || hasRolled || currentPlayer !== "player" || gameOver}
               className="shadow-lg"
               size="lg"

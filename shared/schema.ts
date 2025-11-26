@@ -745,7 +745,24 @@ export const updateUserProfileSchema = createInsertSchema(users).pick({
   profileImageUrl: true,
 }).partial();
 
-export const insertProductSchema = createInsertSchema(products).omit({
+export const insertProductSchema = createInsertSchema(products, {
+  title: z.string().min(3, "Title must be at least 3 characters").max(200, "Title must be less than 200 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  categoryId: z.string().min(1, "Please select a category"),
+  price: z.string().min(1, "Price is required").refine(
+    (val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0,
+    "Please enter a valid price"
+  ),
+  condition: z.enum(["new", "like_new", "good", "fair"]).default("good"),
+  location: z.string().optional().nullable(),
+  images: z.array(z.string()).optional().default([]),
+  isAvailable: z.boolean().optional().default(true),
+  isSold: z.boolean().optional().default(false),
+  isFeatured: z.boolean().optional().default(false),
+  isBoosted: z.boolean().optional().default(false),
+  boostedUntil: z.date().optional().nullable(),
+  inquiries: z.number().optional().default(0),
+}).omit({
   id: true,
   sellerId: true,
   createdAt: true,

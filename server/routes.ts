@@ -983,17 +983,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const user = await storage.getUser(userId);
-      if (user?.role !== "seller" && user?.role !== "admin" && user?.role !== "both") {
-        return res.status(403).json({ message: "Only sellers can create listings" });
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      if (user.role !== "seller" && user.role !== "admin" && user.role !== "both") {
+        return res.status(403).json({ 
+          message: "Only sellers can create listings. Please update your role to 'Seller' or 'Both' in your profile settings." 
+        });
       }
 
-      const productData = JSON.parse(req.body.data);
-      const validated = insertProductSchema.parse(productData);
+      // Parse the product data from FormData
+      let productData;
+      try {
+        productData = JSON.parse(req.body.data || "{}");
+      } catch (parseError) {
+        return res.status(400).json({ message: "Invalid product data format" });
+      }
+
+      // Validate with Zod schema
+      const validationResult = insertProductSchema.safeParse(productData);
+      if (!validationResult.success) {
+        const errors = validationResult.error.flatten();
+        const errorMessages = Object.entries(errors.fieldErrors)
+          .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(", ")}`)
+          .join("; ");
+        console.log("Product validation failed:", errors);
+        return res.status(400).json({ 
+          message: errorMessages || "Validation failed",
+          errors: errors.fieldErrors
+        });
+      }
+
+      const validated = validationResult.data;
 
       // Get uploaded image paths
       const images = (req.files as Express.Multer.File[])?.map(
         (file) => `/uploads/${file.filename}`
       ) || [];
+
+      // Require at least one image
+      if (images.length === 0) {
+        return res.status(400).json({ message: "At least one product image is required" });
+      }
 
       const product = await storage.createProduct({
         ...validated,
@@ -1004,7 +1036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(product);
     } catch (error: any) {
       console.error("Error creating product:", error);
-      res.status(400).json({ message: error.message || "Failed to create product" });
+      res.status(500).json({ message: error.message || "Failed to create product" });
     }
   });
 
