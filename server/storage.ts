@@ -3,6 +3,7 @@ import crypto from "crypto";
 import {
   users,
   products,
+  productViews,
   categories,
   messages,
   reviews,
@@ -48,6 +49,7 @@ import {
   type User,
   type UpsertUser,
   type Product,
+  type ProductView,
   type InsertProduct,
   type UpdateProduct,
   type Category,
@@ -156,6 +158,11 @@ export interface IStorage {
   incrementProductInquiries(productId: string): Promise<void>;
   flagProduct(id: string, reason: string): Promise<Product>;
   approveProduct(id: string): Promise<Product>;
+  
+  // Unique product view tracking
+  hasViewedProduct(productId: string, viewerId: string): Promise<boolean>;
+  recordProductView(productId: string, viewerId: string): Promise<void>;
+  recordUniqueProductView(productId: string, viewerId: string): Promise<boolean>;
   
   // Category operations
   getCategories(): Promise<Category[]>;
@@ -758,6 +765,43 @@ export class DatabaseStorage implements IStorage {
       .where(eq(products.id, id))
       .returning();
     return product;
+  }
+
+  // Unique product view tracking methods
+  async hasViewedProduct(productId: string, viewerId: string): Promise<boolean> {
+    const existing = await db
+      .select()
+      .from(productViews)
+      .where(
+        and(
+          eq(productViews.productId, productId),
+          eq(productViews.viewerId, viewerId)
+        )
+      )
+      .limit(1);
+    return existing.length > 0;
+  }
+
+  async recordProductView(productId: string, viewerId: string): Promise<void> {
+    await db.insert(productViews).values({
+      productId,
+      viewerId,
+    });
+  }
+
+  async recordUniqueProductView(productId: string, viewerId: string): Promise<boolean> {
+    // Check if this viewer has already viewed this product
+    const hasViewed = await this.hasViewedProduct(productId, viewerId);
+    
+    if (!hasViewed) {
+      // Record the new view
+      await this.recordProductView(productId, viewerId);
+      // Increment the product's view counter
+      await this.incrementProductViews(productId);
+      return true; // New unique view recorded
+    }
+    
+    return false; // Already viewed, no increment
   }
 
   // Category operations

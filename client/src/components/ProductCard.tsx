@@ -173,8 +173,8 @@ export function ProductCard({ product }: ProductCardProps) {
             )}
           </Button>
           {isOnSale && (
-            <Badge className="absolute top-2 left-2 bg-red-500 text-white">
-              -{discountPercent}% OFF
+            <Badge className="absolute top-2 left-2 bg-red-500 text-white" data-testid={`badge-sale-${product.id}`}>
+              SALE -{discountPercent}%
             </Badge>
           )}
           {product.isBoosted && !isOnSale && (
@@ -194,7 +194,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </h3>
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex flex-col">
-              <p className="text-2xl font-bold text-primary" data-testid={`text-product-price-${product.id}`}>
+              <p className={`text-2xl font-bold ${isOnSale ? "text-red-500 dark:text-red-400" : "text-primary"}`} data-testid={`text-product-price-${product.id}`}>
                 ₦{price.toLocaleString()}
               </p>
               {isOnSale && originalPrice && (

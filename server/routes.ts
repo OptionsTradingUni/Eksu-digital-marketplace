@@ -1926,14 +1926,36 @@ Happy trading!`;
     }
   });
 
-  app.get("/api/products/:id", async (req, res) => {
+  app.get("/api/products/:id", async (req: any, res) => {
     try {
       const product = await storage.getProduct(req.params.id);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      // Increment view count
-      await storage.incrementProductViews(req.params.id);
+      
+      // Generate viewer ID for unique view tracking
+      const userId = getUserId(req);
+      let viewerId: string;
+      
+      if (userId) {
+        // Use user ID for logged-in users
+        viewerId = `user_${userId}`;
+      } else {
+        // For guests, create a hash from IP address and session ID
+        const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+        const sessionId = req.sessionID || req.headers['user-agent'] || 'unknown';
+        const combined = `${ip}_${sessionId}`;
+        viewerId = `guest_${crypto.createHash('sha256').update(combined).digest('hex').substring(0, 32)}`;
+      }
+      
+      // Record unique view (only increments if this viewer hasn't seen this product before)
+      try {
+        await storage.recordUniqueProductView(req.params.id, viewerId);
+      } catch (viewError) {
+        // Log but don't fail the request if view tracking fails
+        console.error("Error recording product view:", viewError);
+      }
+      
       res.json(product);
     } catch (error) {
       console.error("Error fetching product:", error);
@@ -2036,9 +2058,13 @@ Happy trading!`;
         newImages = objectNames.map(name => `/storage/${name}`);
       }
 
+      // Handle images: use client-provided images (with removed ones excluded) + new uploads
+      const clientImages = productData.images || existing.images || [];
+      const finalImages = [...clientImages, ...newImages];
+
       const updateData = {
         ...productData,
-        ...(newImages.length > 0 && { images: [...(existing.images || []), ...newImages] }),
+        images: finalImages.length > 0 ? finalImages : existing.images,
       };
 
       const updated = await storage.updateProduct(req.params.id, updateData);

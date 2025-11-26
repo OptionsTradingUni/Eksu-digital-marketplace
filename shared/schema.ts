@@ -123,6 +123,17 @@ export const products = pgTable("products", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Product views tracking for unique view counts
+export const productViews = pgTable("product_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  viewerId: varchar("viewer_id").notNull(), // User ID for logged-in users, or hashed IP+session for guests
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("product_views_product_viewer_idx").on(table.productId, table.viewerId),
+  index("product_views_product_idx").on(table.productId),
+]);
+
 // Cart items table
 export const cartItems = pgTable("cart_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1116,6 +1127,7 @@ export type User = typeof users.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type UpdateProduct = z.infer<typeof updateProductSchema>;
 export type Product = typeof products.$inferSelect;
+export type ProductView = typeof productViews.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Message = typeof messages.$inferSelect;

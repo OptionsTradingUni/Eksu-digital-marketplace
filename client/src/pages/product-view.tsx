@@ -256,6 +256,10 @@ export default function ProductView() {
   }
 
   const price = parseFloat(product.price as string);
+  const originalPriceValue = product.originalPrice;
+  const originalPrice = originalPriceValue ? (typeof originalPriceValue === 'number' ? originalPriceValue : parseFloat(originalPriceValue as string) || 0) : null;
+  const isOnSale = product.isOnSale && originalPrice && originalPrice > price;
+  const discountPercent = isOnSale ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
   const images = product.images.length > 0 ? product.images : ["/placeholder-product.png"];
   const sellerInitials = product.seller?.firstName?.[0] || product.seller?.email?.[0] || "S";
 
@@ -372,13 +376,30 @@ export default function ProductView() {
                 {product.isBoosted && (
                   <Badge className="bg-yellow-500">Featured</Badge>
                 )}
+                {isOnSale && (
+                  <Badge className="bg-red-500 text-white" data-testid="badge-sale">
+                    SALE
+                  </Badge>
+                )}
               </div>
             </div>
 
-            <div className="flex items-baseline gap-2">
-              <p className="text-4xl font-bold text-primary" data-testid="text-product-price">
-                ₦{price.toLocaleString()}
-              </p>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline gap-3">
+                <p className={`text-4xl font-bold ${isOnSale ? "text-red-500 dark:text-red-400" : "text-primary"}`} data-testid="text-product-price">
+                  ₦{price.toLocaleString()}
+                </p>
+                {isOnSale && originalPrice && (
+                  <p className="text-xl text-muted-foreground line-through" data-testid="text-product-original-price">
+                    ₦{originalPrice.toLocaleString()}
+                  </p>
+                )}
+              </div>
+              {isOnSale && discountPercent > 0 && (
+                <p className="text-sm font-semibold text-green-600 dark:text-green-500" data-testid="text-discount-percent">
+                  You save {discountPercent}% off the original price
+                </p>
+              )}
             </div>
 
             {product.location && (

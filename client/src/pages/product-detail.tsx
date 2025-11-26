@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-import { insertProductSchema, type InsertProduct, type Category } from "@shared/schema";
+import { useLocation, useParams } from "wouter";
+import { insertProductSchema, type InsertProduct, type Category, type Product } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Upload, X, Loader2, MapPin, Tag } from "lucide-react";
@@ -26,14 +27,24 @@ const EKSU_LOCATIONS = [
 ];
 
 export default function CreateProduct() {
+  const { id } = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  
+  const isEditMode = !!id;
 
   // Fetch categories
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+  });
+
+  // Fetch existing product when editing
+  const { data: existingProduct, isLoading: isLoadingProduct } = useQuery<Product>({
+    queryKey: ["/api/products", id],
+    enabled: isEditMode,
   });
 
   const form = useForm<InsertProduct>({
@@ -53,26 +64,57 @@ export default function CreateProduct() {
       isBoosted: false,
     },
   });
+
+  // Populate form when editing
+  useEffect(() => {
+    if (existingProduct && isEditMode) {
+      form.reset({
+        title: existingProduct.title,
+        description: existingProduct.description,
+        price: String(existingProduct.price),
+        originalPrice: existingProduct.originalPrice ? String(existingProduct.originalPrice) : "",
+        isOnSale: existingProduct.isOnSale ?? false,
+        categoryId: existingProduct.categoryId,
+        condition: existingProduct.condition,
+        location: existingProduct.location || "",
+        images: existingProduct.images || [],
+        isAvailable: existingProduct.isAvailable ?? true,
+        isFeatured: existingProduct.isFeatured ?? false,
+        isBoosted: existingProduct.isBoosted ?? false,
+      });
+      // Set existing images for preview
+      if (existingProduct.images && existingProduct.images.length > 0) {
+        setExistingImages(existingProduct.images);
+        setImagePreviews(existingProduct.images);
+      }
+    }
+  }, [existingProduct, isEditMode, form]);
   
   const isOnSale = form.watch("isOnSale");
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async (data: InsertProduct) => {
       const formData = new FormData();
-      formData.append("data", JSON.stringify(data));
+      
+      // Include existing images that weren't removed, plus any new files
+      const allImages = [...existingImages];
+      formData.append("data", JSON.stringify({ ...data, images: allImages }));
       imageFiles.forEach((file) => {
         formData.append("images", file);
       });
 
-      const response = await fetch("/api/products", {
-        method: "POST",
+      const url = isEditMode ? `/api/products/${id}` : "/api/products";
+      const method = isEditMode ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         credentials: "include",
         body: formData,
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to create listing" }));
-        throw new Error(errorData.message || `Error ${response.status}: Failed to create listing`);
+        const errorData = await response.json().catch(() => ({ message: `Failed to ${isEditMode ? 'update' : 'create'} listing` }));
+        throw new Error(errorData.message || `Error ${response.status}: Failed to ${isEditMode ? 'update' : 'create'} listing`);
       }
 
       return response.json();
@@ -80,9 +122,12 @@ export default function CreateProduct() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products/my-listings"] });
+      if (isEditMode) {
+        queryClient.invalidateQueries({ queryKey: ["/api/products", id] });
+      }
       toast({
         title: "Success",
-        description: "Product listed successfully!",
+        description: isEditMode ? "Product updated successfully!" : "Product listed successfully!",
       });
       setLocation("/seller/dashboard");
     },
@@ -100,7 +145,7 @@ export default function CreateProduct() {
       }
       toast({
         title: "Error",
-        description: error.message || "Failed to create listing",
+        description: error.message || `Failed to ${isEditMode ? 'update' : 'create'} listing`,
         variant: "destructive",
       });
     },
@@ -130,12 +175,26 @@ export default function CreateProduct() {
   };
 
   const removeImage = (index: number) => {
-    setImageFiles(imageFiles.filter((_, i) => i !== index));
+    const preview = imagePreviews[index];
+    
+    // Check if this is an existing image (URL) or a new file preview (base64)
+    if (existingImages.includes(preview)) {
+      // Remove from existing images
+      setExistingImages(prev => prev.filter(img => img !== preview));
+    } else {
+      // Find the corresponding file index (accounting for existing images)
+      const fileIndex = index - existingImages.length;
+      if (fileIndex >= 0) {
+        setImageFiles(imageFiles.filter((_, i) => i !== fileIndex));
+      }
+    }
+    
     setImagePreviews(imagePreviews.filter((_, i) => i !== index));
   };
 
   const onSubmit = (data: InsertProduct) => {
-    if (imageFiles.length === 0) {
+    const totalImages = existingImages.length + imageFiles.length;
+    if (totalImages === 0) {
       toast({
         title: "Images required",
         description: "Please upload at least one image",
@@ -143,14 +202,32 @@ export default function CreateProduct() {
       });
       return;
     }
-    createMutation.mutate(data);
+    saveMutation.mutate(data);
   };
+
+  if (isEditMode && isLoadingProduct) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-3xl">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-8 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <Card>
         <CardHeader>
-          <CardTitle>Create New Listing</CardTitle>
+          <CardTitle>{isEditMode ? "Edit Listing" : "Create New Listing"}</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -389,14 +466,14 @@ export default function CreateProduct() {
               <div className="flex gap-4">
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending}
+                  disabled={saveMutation.isPending}
                   className="flex-1"
                   data-testid="button-submit-product"
                 >
-                  {createMutation.isPending && (
+                  {saveMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Create Listing
+                  {isEditMode ? "Update Listing" : "Create Listing"}
                 </Button>
                 <Button
                   type="button"
