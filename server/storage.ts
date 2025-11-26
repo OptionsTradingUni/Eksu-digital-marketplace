@@ -37,6 +37,9 @@ import {
   passwordResetTokens,
   announcements,
   announcementReads,
+  socialPosts,
+  socialPostLikes,
+  socialPostComments,
   type User,
   type UpsertUser,
   type Product,
@@ -96,6 +99,11 @@ import {
   type CreateAnnouncementInput,
   type UpdateAnnouncementInput,
   type AnnouncementRead,
+  type SocialPost,
+  type InsertSocialPost,
+  type SocialPostLike,
+  type SocialPostComment,
+  type InsertSocialPostComment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -347,6 +355,17 @@ export interface IStorage {
   markAnnouncementAsRead(userId: string, announcementId: string): Promise<AnnouncementRead>;
   getUserAnnouncementReads(userId: string): Promise<AnnouncementRead[]>;
   isAnnouncementRead(userId: string, announcementId: string): Promise<boolean>;
+  
+  // Social post operations ("The Plug")
+  getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean })[]>;
+  createSocialPost(post: { authorId: string; content: string; images?: string[] }): Promise<SocialPost>;
+  getSocialPost(id: string): Promise<(SocialPost & { author: User }) | undefined>;
+  likeSocialPost(postId: string, userId: string): Promise<SocialPostLike>;
+  unlikeSocialPost(postId: string, userId: string): Promise<void>;
+  isPostLiked(postId: string, userId: string): Promise<boolean>;
+  getPostComments(postId: string): Promise<(SocialPostComment & { author: User })[]>;
+  createPostComment(comment: { postId: string; authorId: string; content: string }): Promise<SocialPostComment>;
+  deleteSocialPost(postId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2510,6 +2529,183 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return !!result;
+  }
+
+  // Social post operations ("The Plug")
+  async getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean })[]> {
+    let query = db
+      .select()
+      .from(socialPosts)
+      .leftJoin(users, eq(socialPosts.authorId, users.id))
+      .where(eq(socialPosts.isVisible, true))
+      .orderBy(desc(socialPosts.createdAt));
+
+    const results = await query;
+    let posts = results
+      .filter(r => r.social_posts && r.users)
+      .map(r => ({
+        ...r.social_posts!,
+        author: r.users!,
+      }));
+
+    // Filter by author if specified
+    if (options?.authorId) {
+      posts = posts.filter(p => p.authorId === options.authorId);
+    }
+
+    // Filter by following only if specified
+    if (options?.followingOnly && options?.userId) {
+      const followingResult = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(eq(follows.followerId, options.userId));
+      
+      const followingIds = new Set(followingResult.map(f => f.followingId));
+      posts = posts.filter(p => followingIds.has(p.authorId));
+    }
+
+    // Add isLiked status if userId is provided
+    if (options?.userId) {
+      const likedPosts = await db
+        .select({ postId: socialPostLikes.postId })
+        .from(socialPostLikes)
+        .where(eq(socialPostLikes.userId, options.userId));
+      
+      const likedPostIds = new Set(likedPosts.map(l => l.postId));
+      
+      return posts.map(p => ({
+        ...p,
+        isLiked: likedPostIds.has(p.id),
+      }));
+    }
+
+    return posts;
+  }
+
+  async createSocialPost(post: { authorId: string; content: string; images?: string[] }): Promise<SocialPost> {
+    const [created] = await db
+      .insert(socialPosts)
+      .values({
+        authorId: post.authorId,
+        content: post.content,
+        images: post.images || [],
+      })
+      .returning();
+    return created;
+  }
+
+  async getSocialPost(id: string): Promise<(SocialPost & { author: User }) | undefined> {
+    const [result] = await db
+      .select()
+      .from(socialPosts)
+      .leftJoin(users, eq(socialPosts.authorId, users.id))
+      .where(eq(socialPosts.id, id));
+    
+    if (!result || !result.social_posts || !result.users) return undefined;
+    
+    return {
+      ...result.social_posts,
+      author: result.users,
+    };
+  }
+
+  async likeSocialPost(postId: string, userId: string): Promise<SocialPostLike> {
+    // Check if already liked
+    const existing = await db
+      .select()
+      .from(socialPostLikes)
+      .where(
+        and(
+          eq(socialPostLikes.postId, postId),
+          eq(socialPostLikes.userId, userId)
+        )
+      );
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    // Create like
+    const [like] = await db
+      .insert(socialPostLikes)
+      .values({ postId, userId })
+      .returning();
+
+    // Increment likes count
+    await db
+      .update(socialPosts)
+      .set({ likesCount: sql`COALESCE(${socialPosts.likesCount}, 0) + 1` })
+      .where(eq(socialPosts.id, postId));
+
+    return like;
+  }
+
+  async unlikeSocialPost(postId: string, userId: string): Promise<void> {
+    const result = await db
+      .delete(socialPostLikes)
+      .where(
+        and(
+          eq(socialPostLikes.postId, postId),
+          eq(socialPostLikes.userId, userId)
+        )
+      )
+      .returning();
+
+    // Decrement likes count only if we actually deleted a like
+    if (result.length > 0) {
+      await db
+        .update(socialPosts)
+        .set({ likesCount: sql`GREATEST(COALESCE(${socialPosts.likesCount}, 0) - 1, 0)` })
+        .where(eq(socialPosts.id, postId));
+    }
+  }
+
+  async isPostLiked(postId: string, userId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(socialPostLikes)
+      .where(
+        and(
+          eq(socialPostLikes.postId, postId),
+          eq(socialPostLikes.userId, userId)
+        )
+      );
+    return !!result;
+  }
+
+  async getPostComments(postId: string): Promise<(SocialPostComment & { author: User })[]> {
+    const results = await db
+      .select()
+      .from(socialPostComments)
+      .leftJoin(users, eq(socialPostComments.authorId, users.id))
+      .where(eq(socialPostComments.postId, postId))
+      .orderBy(socialPostComments.createdAt);
+
+    return results
+      .filter(r => r.social_post_comments && r.users)
+      .map(r => ({
+        ...r.social_post_comments!,
+        author: r.users!,
+      }));
+  }
+
+  async createPostComment(comment: { postId: string; authorId: string; content: string }): Promise<SocialPostComment> {
+    const [created] = await db
+      .insert(socialPostComments)
+      .values(comment)
+      .returning();
+
+    // Increment comments count
+    await db
+      .update(socialPosts)
+      .set({ commentsCount: sql`COALESCE(${socialPosts.commentsCount}, 0) + 1` })
+      .where(eq(socialPosts.id, comment.postId));
+
+    return created;
+  }
+
+  async deleteSocialPost(postId: string): Promise<void> {
+    await db.delete(socialPosts).where(eq(socialPosts.id, postId));
   }
 }
 

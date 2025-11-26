@@ -1891,6 +1891,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== SOCIAL POSTS ROUTES ("The Plug") ====================
+
+  // Get all social posts (with optional following filter)
+  app.get("/api/social-posts", async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const followingOnly = req.query.following === "true";
+      const authorId = req.query.authorId as string | undefined;
+
+      const posts = await storage.getSocialPosts({
+        authorId,
+        followingOnly,
+        userId: userId || undefined,
+      });
+
+      res.json(posts);
+    } catch (error) {
+      console.error("Error fetching social posts:", error);
+      res.status(500).json({ message: "Failed to fetch social posts" });
+    }
+  });
+
+  // Create a new social post
+  app.post("/api/social-posts", isAuthenticated, upload.array("images", 5), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { content } = req.body;
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ message: "Content is required" });
+      }
+
+      // Handle uploaded images
+      const images: string[] = [];
+      if (req.files && Array.isArray(req.files)) {
+        for (const file of req.files) {
+          images.push(`/uploads/${file.filename}`);
+        }
+      }
+
+      const post = await storage.createSocialPost({
+        authorId: userId,
+        content: content.trim(),
+        images,
+      });
+
+      // Fetch the full post with author info
+      const fullPost = await storage.getSocialPost(post.id);
+      res.status(201).json(fullPost);
+    } catch (error) {
+      console.error("Error creating social post:", error);
+      res.status(500).json({ message: "Failed to create social post" });
+    }
+  });
+
+  // Toggle like on a post
+  app.post("/api/social-posts/:id/like", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const postId = req.params.id;
+
+      // Check if already liked
+      const isLiked = await storage.isPostLiked(postId, userId);
+
+      if (isLiked) {
+        // Unlike
+        await storage.unlikeSocialPost(postId, userId);
+        res.json({ liked: false });
+      } else {
+        // Like
+        await storage.likeSocialPost(postId, userId);
+        res.json({ liked: true });
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      res.status(500).json({ message: "Failed to toggle like" });
+    }
+  });
+
+  // Get comments for a post
+  app.get("/api/social-posts/:id/comments", async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const comments = await storage.getPostComments(postId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // Add a comment to a post
+  app.post("/api/social-posts/:id/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const postId = req.params.id;
+      const { content } = req.body;
+
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ message: "Comment content is required" });
+      }
+
+      const comment = await storage.createPostComment({
+        postId,
+        authorId: userId,
+        content: content.trim(),
+      });
+
+      // Fetch comment with author info
+      const comments = await storage.getPostComments(postId);
+      const fullComment = comments.find(c => c.id === comment.id);
+      
+      res.status(201).json(fullComment || comment);
+    } catch (error) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ message: "Failed to create comment" });
+    }
+  });
+
+  // Delete a social post (owner only)
+  app.delete("/api/social-posts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const postId = req.params.id;
+      const post = await storage.getSocialPost(postId);
+
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      // Check ownership (or admin)
+      const user = await storage.getUser(userId);
+      if (post.authorId !== userId && user?.role !== "admin") {
+        return res.status(403).json({ message: "You can only delete your own posts" });
+      }
+
+      await storage.deleteSocialPost(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting post:", error);
+      res.status(500).json({ message: "Failed to delete post" });
+    }
+  });
+
   // Admin Metrics Routes - Database & Memory Monitoring
   app.get("/api/admin/metrics/tables", isAuthenticated, async (req: any, res) => {
     try {

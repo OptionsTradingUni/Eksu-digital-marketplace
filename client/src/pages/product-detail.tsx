@@ -12,8 +12,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, X, Loader2 } from "lucide-react";
+import { Upload, X, Loader2, MapPin } from "lucide-react";
 import { isUnauthorizedError } from "@/lib/authUtils";
+
+const EKSU_LOCATIONS = [
+  { value: "school_gate", label: "School Gate" },
+  { value: "town", label: "Town" },
+  { value: "yemkem", label: "Yemkem" },
+  { value: "iworoko", label: "Iworoko" },
+  { value: "phase2", label: "Phase2" },
+  { value: "osekita", label: "Osekita" },
+];
 
 export default function CreateProduct() {
   const [, setLocation] = useLocation();
@@ -288,15 +297,24 @@ export default function CreateProduct() {
                   name="location"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Location</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g., Hostel A"
-                          {...field}
-                          value={field.value || ""}
-                          data-testid="input-product-location"
-                        />
-                      </FormControl>
+                      <FormLabel className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        Campus Location
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-product-location">
+                            <SelectValue placeholder="Select your location" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {EKSU_LOCATIONS.map((loc) => (
+                            <SelectItem key={loc.value} value={loc.value}>
+                              {loc.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

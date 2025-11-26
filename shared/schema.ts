@@ -1211,6 +1211,65 @@ export const completeGameSchema = z.object({
   winnerId: z.string(),
 });
 
+// Social feed posts ("The Plug")
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  images: text("images").array().default(sql`ARRAY[]::text[]`),
+  likesCount: integer("likes_count").default(0),
+  commentsCount: integer("comments_count").default(0),
+  isVisible: boolean("is_visible").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_social_posts_author").on(table.authorId),
+  index("idx_social_posts_created").on(table.createdAt),
+]);
+
+// Social post likes
+export const socialPostLikes = pgTable("social_post_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_post_likes_post").on(table.postId),
+  index("idx_post_likes_user").on(table.userId),
+]);
+
+// Social post comments
+export const socialPostComments = pgTable("social_post_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_post_comments_post").on(table.postId),
+]);
+
+// Insert schemas for social posts
+export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({
+  id: true,
+  likesCount: true,
+  commentsCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSocialPostCommentSchema = createInsertSchema(socialPostComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+// TypeScript types for social posts
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
+export type SocialPostLike = typeof socialPostLikes.$inferSelect;
+export type SocialPostComment = typeof socialPostComments.$inferSelect;
+export type InsertSocialPostComment = z.infer<typeof insertSocialPostCommentSchema>;
+
 // Password reset tokens table
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
