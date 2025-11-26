@@ -88,17 +88,22 @@ export default function WalletPage() {
 
   const depositMutation = useMutation({
     mutationFn: async (amount: string) => {
-      const response = await apiRequest("POST", "/api/wallet/deposit", { amount });
+      const response = await apiRequest("POST", "/api/monnify/initialize", { 
+        amount,
+        purpose: "wallet_deposit",
+        paymentDescription: `Wallet deposit of ₦${parseFloat(amount).toLocaleString()}`,
+      });
       return response.json();
     },
     onSuccess: (data) => {
-      if (data.authorizationUrl) {
-        window.location.href = data.authorizationUrl;
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({
+          title: "Deposit initiated",
+          description: "Redirecting to payment gateway...",
+        });
       }
-      toast({
-        title: "Deposit initiated",
-        description: "Redirecting to payment gateway...",
-      });
     },
     onError: (error: any) => {
       toast({
@@ -111,7 +116,7 @@ export default function WalletPage() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: { amount: string; bankName: string; accountNumber: string; accountName: string; bankCode: string }) => {
-      const response = await apiRequest("POST", "/api/wallet/withdraw", data);
+      const response = await apiRequest("POST", "/api/monnify/withdraw", data);
       return response.json();
     },
     onSuccess: () => {

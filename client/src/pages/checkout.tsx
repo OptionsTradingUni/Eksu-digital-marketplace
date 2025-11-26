@@ -163,7 +163,7 @@ export default function CheckoutPage() {
 
         const result = await initializeMonnifyMutation.mutateAsync({
           amount: total.toFixed(2),
-          purpose: "purchase",
+          purpose: "escrow_payment",
           paymentDescription: `Purchase of ${cartItems.length} item(s) from EKSU Marketplace`,
         });
 
