@@ -29,6 +29,10 @@ import {
   cartItems,
   games,
   gameMatches,
+  gameScores,
+  triviaQuestions,
+  typingTexts,
+  priceGuessProducts,
   passwordResetTokens,
   type User,
   type UpsertUser,
@@ -80,6 +84,10 @@ import {
   type InsertGame,
   type GameMatch,
   type InsertGameMatch,
+  type GameScore,
+  type TriviaQuestion,
+  type TypingText,
+  type PriceGuessProduct,
   type PasswordResetToken,
 } from "@shared/schema";
 import { db } from "./db";
@@ -279,7 +287,7 @@ export interface IStorage {
   clearCart(userId: string): Promise<void>;
   
   // Game operations
-  createGame(game: { gameType: "ludo" | "word_battle" | "trivia"; player1Id: string; stakeAmount: string }): Promise<Game>;
+  createGame(game: { gameType: string; player1Id: string; stakeAmount: string; mode?: string }): Promise<Game>;
   getGame(id: string): Promise<(Game & { player1: User; player2: User | null }) | undefined>;
   getAvailableGames(gameType?: string): Promise<(Game & { player1: User })[]>;
   getUserGames(userId: string): Promise<Game[]>;
@@ -289,6 +297,21 @@ export interface IStorage {
   cancelGame(gameId: string): Promise<Game>;
   createGameMatch(match: InsertGameMatch): Promise<GameMatch>;
   getGameMatches(gameId: string): Promise<GameMatch[]>;
+  
+  // Game score/leaderboard operations
+  getOrCreateGameScore(userId: string, gameType: string): Promise<GameScore>;
+  updateGameScore(userId: string, gameType: string, won: boolean, score: number, earnings?: string): Promise<GameScore>;
+  getLeaderboard(gameType: string, limit?: number): Promise<(GameScore & { user: User })[]>;
+  getGlobalLeaderboard(limit?: number): Promise<any[]>;
+  
+  // Game content operations
+  getTriviaQuestions(limit?: number, category?: string): Promise<TriviaQuestion[]>;
+  getRandomTriviaQuestion(): Promise<TriviaQuestion | undefined>;
+  getTypingTexts(limit?: number): Promise<TypingText[]>;
+  getRandomTypingText(): Promise<TypingText | undefined>;
+  getPriceGuessProducts(limit?: number): Promise<PriceGuessProduct[]>;
+  getRandomPriceGuessProduct(): Promise<PriceGuessProduct | undefined>;
+  seedGameContent(): Promise<void>;
   
   // Password reset token operations
   createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -1806,12 +1829,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Game operations
-  async createGame(game: { gameType: "ludo" | "word_battle" | "trivia"; player1Id: string; stakeAmount: string }): Promise<Game> {
+  async createGame(game: { gameType: string; player1Id: string; stakeAmount: string; mode?: string }): Promise<Game> {
     const [created] = await db.insert(games).values({
-      gameType: game.gameType,
+      gameType: game.gameType as any,
       player1Id: game.player1Id,
       stakeAmount: game.stakeAmount,
       status: "waiting",
+      gameData: game.mode ? { mode: game.mode } : null,
     }).returning();
     return created;
   }
@@ -1969,6 +1993,196 @@ export class DatabaseStorage implements IStorage {
       .orderBy(gameMatches.roundNumber);
   }
 
+  // Game score/leaderboard operations
+  async getOrCreateGameScore(userId: string, gameType: string): Promise<GameScore> {
+    const [existing] = await db
+      .select()
+      .from(gameScores)
+      .where(and(eq(gameScores.userId, userId), eq(gameScores.gameType, gameType as any)));
+    
+    if (existing) return existing;
+    
+    const [created] = await db
+      .insert(gameScores)
+      .values({
+        userId,
+        gameType: gameType as any,
+        totalScore: 0,
+        gamesPlayed: 0,
+        gamesWon: 0,
+        highScore: 0,
+        totalEarnings: "0.00",
+      })
+      .returning();
+    return created;
+  }
+
+  async updateGameScore(userId: string, gameType: string, won: boolean, score: number, earnings?: string): Promise<GameScore> {
+    const existing = await this.getOrCreateGameScore(userId, gameType);
+    
+    const newTotalScore = existing.totalScore + score;
+    const newGamesPlayed = existing.gamesPlayed + 1;
+    const newGamesWon = won ? existing.gamesWon + 1 : existing.gamesWon;
+    const newHighScore = score > (existing.highScore || 0) ? score : existing.highScore;
+    const newEarnings = earnings 
+      ? (parseFloat(existing.totalEarnings || "0") + parseFloat(earnings)).toFixed(2)
+      : existing.totalEarnings;
+    
+    const [updated] = await db
+      .update(gameScores)
+      .set({
+        totalScore: newTotalScore,
+        gamesPlayed: newGamesPlayed,
+        gamesWon: newGamesWon,
+        highScore: newHighScore,
+        totalEarnings: newEarnings,
+        updatedAt: new Date(),
+      })
+      .where(eq(gameScores.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  async getLeaderboard(gameType: string, limit: number = 10): Promise<(GameScore & { user: User })[]> {
+    const results = await db
+      .select()
+      .from(gameScores)
+      .leftJoin(users, eq(gameScores.userId, users.id))
+      .where(eq(gameScores.gameType, gameType as any))
+      .orderBy(desc(gameScores.totalScore))
+      .limit(limit);
+    
+    return results
+      .filter(r => r.game_scores && r.users)
+      .map(r => ({
+        ...r.game_scores!,
+        user: r.users!,
+      }));
+  }
+
+  async getGlobalLeaderboard(limit: number = 10): Promise<any[]> {
+    const results = await db
+      .select({
+        userId: gameScores.userId,
+        totalScore: sql<number>`SUM(${gameScores.totalScore})`.as('total'),
+        gamesPlayed: sql<number>`SUM(${gameScores.gamesPlayed})`.as('games'),
+        gamesWon: sql<number>`SUM(${gameScores.gamesWon})`.as('wins'),
+      })
+      .from(gameScores)
+      .groupBy(gameScores.userId)
+      .orderBy(desc(sql`SUM(${gameScores.totalScore})`))
+      .limit(limit);
+    
+    const userIds = results.map(r => r.userId);
+    const userResults = await db.select().from(users).where(sql`${users.id} IN (${sql.join(userIds.map(id => sql`${id}`), sql`, `)})`);
+    const userMap = new Map(userResults.map(u => [u.id, u]));
+    
+    return results.map(r => ({
+      ...r,
+      user: userMap.get(r.userId),
+      winRate: r.gamesPlayed > 0 ? Math.round((r.gamesWon / r.gamesPlayed) * 100) : 0,
+    }));
+  }
+
+  // Game content operations
+  async getTriviaQuestions(limit: number = 10, category?: string): Promise<TriviaQuestion[]> {
+    let query = db.select().from(triviaQuestions);
+    if (category) {
+      query = query.where(eq(triviaQuestions.category, category)) as any;
+    }
+    return await query.limit(limit);
+  }
+
+  async getRandomTriviaQuestion(): Promise<TriviaQuestion | undefined> {
+    const [question] = await db
+      .select()
+      .from(triviaQuestions)
+      .orderBy(sql`RANDOM()`)
+      .limit(1);
+    return question;
+  }
+
+  async getTypingTexts(limit: number = 10): Promise<TypingText[]> {
+    return await db.select().from(typingTexts).limit(limit);
+  }
+
+  async getRandomTypingText(): Promise<TypingText | undefined> {
+    const [text] = await db
+      .select()
+      .from(typingTexts)
+      .orderBy(sql`RANDOM()`)
+      .limit(1);
+    return text;
+  }
+
+  async getPriceGuessProducts(limit: number = 10): Promise<PriceGuessProduct[]> {
+    return await db.select().from(priceGuessProducts).limit(limit);
+  }
+
+  async getRandomPriceGuessProduct(): Promise<PriceGuessProduct | undefined> {
+    const [product] = await db
+      .select()
+      .from(priceGuessProducts)
+      .orderBy(sql`RANDOM()`)
+      .limit(1);
+    return product;
+  }
+
+  async seedGameContent(): Promise<void> {
+    // Seed trivia questions
+    const existingTrivia = await db.select().from(triviaQuestions).limit(1);
+    if (existingTrivia.length === 0) {
+      await db.insert(triviaQuestions).values([
+        { question: "What is the capital of Nigeria?", options: ["Lagos", "Abuja", "Kano", "Port Harcourt"], correctAnswer: 1, category: "Geography", difficulty: "easy" },
+        { question: "Which Nigerian artist released the song 'Essence'?", options: ["Davido", "Wizkid", "Burna Boy", "Olamide"], correctAnswer: 1, category: "Music", difficulty: "easy" },
+        { question: "What year did Nigeria gain independence?", options: ["1958", "1960", "1963", "1970"], correctAnswer: 1, category: "History", difficulty: "easy" },
+        { question: "What is the largest city in Nigeria by population?", options: ["Abuja", "Kano", "Lagos", "Ibadan"], correctAnswer: 2, category: "Geography", difficulty: "easy" },
+        { question: "Which Nigerian footballer won the African Player of the Year in 2013?", options: ["Jay-Jay Okocha", "Yobo", "Yaya Toure", "John Obi Mikel"], correctAnswer: 2, category: "Sports", difficulty: "medium" },
+        { question: "What is the official currency of Nigeria?", options: ["Dollar", "Naira", "Cedi", "Rand"], correctAnswer: 1, category: "General", difficulty: "easy" },
+        { question: "Which river is the longest in Nigeria?", options: ["Niger", "Benue", "Ogun", "Cross"], correctAnswer: 0, category: "Geography", difficulty: "medium" },
+        { question: "Who was the first President of Nigeria?", options: ["Nnamdi Azikiwe", "Tafawa Balewa", "Aguiyi Ironsi", "Yakubu Gowon"], correctAnswer: 0, category: "History", difficulty: "medium" },
+        { question: "What is the traditional dress of the Yoruba people called?", options: ["Agbada", "Kaftan", "Buba", "Dashiki"], correctAnswer: 0, category: "Culture", difficulty: "easy" },
+        { question: "Which Nigerian state is known as the 'Centre of Excellence'?", options: ["Abuja", "Lagos", "Rivers", "Kano"], correctAnswer: 1, category: "Geography", difficulty: "easy" },
+        { question: "What is Jollof rice?", options: ["A dessert", "A spicy rice dish", "A soup", "A drink"], correctAnswer: 1, category: "Food", difficulty: "easy" },
+        { question: "Which Nigerian author wrote 'Things Fall Apart'?", options: ["Wole Soyinka", "Chinua Achebe", "Chimamanda Adichie", "Ben Okri"], correctAnswer: 1, category: "Literature", difficulty: "easy" },
+      ]);
+    }
+
+    // Seed typing texts
+    const existingTexts = await db.select().from(typingTexts).limit(1);
+    if (existingTexts.length === 0) {
+      await db.insert(typingTexts).values([
+        { text: "The quick brown fox jumps over the lazy dog.", wordCount: 9, difficulty: "easy" },
+        { text: "Pack my box with five dozen liquor jugs.", wordCount: 8, difficulty: "easy" },
+        { text: "How vexingly quick daft zebras jump!", wordCount: 6, difficulty: "medium" },
+        { text: "The five boxing wizards jump quickly.", wordCount: 6, difficulty: "medium" },
+        { text: "Sphinx of black quartz, judge my vow.", wordCount: 7, difficulty: "medium" },
+        { text: "Two driven jocks help fax my big quiz.", wordCount: 8, difficulty: "medium" },
+        { text: "The early morning sun cast long shadows across the campus as students hurried to their classes.", wordCount: 16, difficulty: "hard" },
+        { text: "Success is not final, failure is not fatal: it is the courage to continue that counts.", wordCount: 16, difficulty: "hard" },
+        { text: "Education is the passport to the future, for tomorrow belongs to those who prepare for it today.", wordCount: 17, difficulty: "hard" },
+        { text: "The greatest glory in living lies not in never falling, but in rising every time we fall.", wordCount: 17, difficulty: "hard" },
+      ]);
+    }
+
+    // Seed price guess products
+    const existingProducts = await db.select().from(priceGuessProducts).limit(1);
+    if (existingProducts.length === 0) {
+      await db.insert(priceGuessProducts).values([
+        { name: "iPhone 15 Pro Max", actualPrice: "1850000.00", category: "Electronics", difficulty: "medium" },
+        { name: "Samsung Galaxy S24 Ultra", actualPrice: "1650000.00", category: "Electronics", difficulty: "medium" },
+        { name: "Nike Air Jordan 1", actualPrice: "85000.00", category: "Fashion", difficulty: "easy" },
+        { name: "MacBook Pro 14-inch", actualPrice: "2400000.00", category: "Electronics", difficulty: "hard" },
+        { name: "PlayStation 5", actualPrice: "550000.00", category: "Electronics", difficulty: "easy" },
+        { name: "Ray-Ban Aviator Sunglasses", actualPrice: "45000.00", category: "Fashion", difficulty: "easy" },
+        { name: "Louis Vuitton Neverfull Bag", actualPrice: "2100000.00", category: "Fashion", difficulty: "hard" },
+        { name: "Apple AirPods Pro", actualPrice: "175000.00", category: "Electronics", difficulty: "easy" },
+        { name: "Rolex Submariner", actualPrice: "12500000.00", category: "Fashion", difficulty: "hard" },
+        { name: "Nike Air Force 1", actualPrice: "55000.00", category: "Fashion", difficulty: "easy" },
+      ]);
+    }
+  }
+
   async processPaystackSuccess(reference: string, amount: string): Promise<void> {
     const [payment] = await db
       .select()
@@ -2035,7 +2249,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         or(
           eq(passwordResetTokens.used, true),
-          gt(new Date(), passwordResetTokens.expiresAt)
+          sql`${passwordResetTokens.expiresAt} < NOW()`
         )
       );
   }

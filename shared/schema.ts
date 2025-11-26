@@ -1016,8 +1016,67 @@ export const initiateWithdrawalSchema = insertWithdrawalSchema.extend({
 });
 
 // Game type and status enums
-export const gameTypeEnum = pgEnum("game_type", ["ludo", "word_battle", "trivia"]);
+export const gameTypeEnum = pgEnum("game_type", ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]);
 export const gameStatusEnum = pgEnum("game_status", ["waiting", "in_progress", "completed", "cancelled"]);
+export const gameModeEnum = pgEnum("game_mode", ["single_player", "multiplayer"]);
+
+// Game leaderboard/scores table
+export const gameScores = pgTable("game_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  gameType: gameTypeEnum("game_type").notNull(),
+  totalScore: integer("total_score").default(0).notNull(),
+  gamesPlayed: integer("games_played").default(0).notNull(),
+  gamesWon: integer("games_won").default(0).notNull(),
+  highScore: integer("high_score").default(0),
+  totalEarnings: decimal("total_earnings", { precision: 10, scale: 2 }).default("0.00"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_game_scores_user").on(table.userId),
+  index("idx_game_scores_type").on(table.gameType),
+  index("idx_game_scores_total").on(table.totalScore),
+]);
+
+// Trivia questions table
+export const triviaQuestions = pgTable("trivia_questions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  question: text("question").notNull(),
+  options: text("options").array().notNull(),
+  correctAnswer: integer("correct_answer").notNull(),
+  category: varchar("category", { length: 100 }),
+  difficulty: varchar("difficulty", { length: 20 }).default("medium"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Word lists for word battle
+export const wordLists = pgTable("word_lists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  word: varchar("word", { length: 50 }).notNull().unique(),
+  difficulty: varchar("difficulty", { length: 20 }).default("medium"),
+  category: varchar("category", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Speed typing texts
+export const typingTexts = pgTable("typing_texts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  text: text("text").notNull(),
+  difficulty: varchar("difficulty", { length: 20 }).default("medium"),
+  wordCount: integer("word_count").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Price guess products for Guess the Price game
+export const priceGuessProducts = pgTable("price_guess_products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 200 }).notNull(),
+  imageUrl: text("image_url"),
+  actualPrice: decimal("actual_price", { precision: 10, scale: 2 }).notNull(),
+  category: varchar("category", { length: 100 }),
+  difficulty: varchar("difficulty", { length: 20 }).default("medium"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // Games/Lobbies table
 export const games = pgTable("games", {
@@ -1064,10 +1123,43 @@ export type InsertGame = z.infer<typeof insertGameSchema>;
 export type GameMatch = typeof gameMatches.$inferSelect;
 export type InsertGameMatch = z.infer<typeof insertGameMatchSchema>;
 
+// Insert schemas for game content tables
+export const insertGameScoreSchema = createInsertSchema(gameScores).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTriviaQuestionSchema = createInsertSchema(triviaQuestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTypingTextSchema = createInsertSchema(typingTexts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPriceGuessProductSchema = createInsertSchema(priceGuessProducts).omit({
+  id: true,
+  createdAt: true,
+});
+
+// TypeScript types for game content tables
+export type GameScore = typeof gameScores.$inferSelect;
+export type InsertGameScore = z.infer<typeof insertGameScoreSchema>;
+export type TriviaQuestion = typeof triviaQuestions.$inferSelect;
+export type InsertTriviaQuestion = z.infer<typeof insertTriviaQuestionSchema>;
+export type TypingText = typeof typingTexts.$inferSelect;
+export type InsertTypingText = z.infer<typeof insertTypingTextSchema>;
+export type PriceGuessProduct = typeof priceGuessProducts.$inferSelect;
+export type InsertPriceGuessProduct = z.infer<typeof insertPriceGuessProductSchema>;
+
 // API schemas for games
 export const createGameSchema = z.object({
-  gameType: z.enum(["ludo", "word_battle", "trivia"]),
+  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]),
   stakeAmount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid stake amount"),
+  mode: z.enum(["single_player", "multiplayer"]).optional().default("multiplayer"),
 });
 
 export const joinGameSchema = z.object({

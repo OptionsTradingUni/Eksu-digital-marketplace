@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { setupAuth as setupPassportAuth, isAuthenticated } from "./auth";
 import passport from "passport";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -2160,6 +2161,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error cancelling game:", error);
       res.status(500).json({ message: "Failed to cancel game" });
+    }
+  });
+
+  // Get leaderboard for a specific game type
+  app.get("/api/games/leaderboard/:gameType", async (req: any, res) => {
+    try {
+      const { gameType } = req.params;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const leaderboard = await storage.getLeaderboard(gameType, limit);
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  // Get global leaderboard (all games combined)
+  app.get("/api/games/leaderboard", async (req: any, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const leaderboard = await storage.getGlobalLeaderboard(limit);
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching global leaderboard:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  // Get random trivia question
+  app.get("/api/games/trivia/question", isAuthenticated, async (req: any, res) => {
+    try {
+      const question = await storage.getRandomTriviaQuestion();
+      if (!question) {
+        return res.status(404).json({ message: "No trivia questions available" });
+      }
+      res.json(question);
+    } catch (error) {
+      console.error("Error fetching trivia question:", error);
+      res.status(500).json({ message: "Failed to fetch trivia question" });
+    }
+  });
+
+  // Get random typing text
+  app.get("/api/games/typing/text", isAuthenticated, async (req: any, res) => {
+    try {
+      const text = await storage.getRandomTypingText();
+      if (!text) {
+        return res.status(404).json({ message: "No typing texts available" });
+      }
+      res.json(text);
+    } catch (error) {
+      console.error("Error fetching typing text:", error);
+      res.status(500).json({ message: "Failed to fetch typing text" });
+    }
+  });
+
+  // Get random price guess product
+  app.get("/api/games/price-guess/product", isAuthenticated, async (req: any, res) => {
+    try {
+      const product = await storage.getRandomPriceGuessProduct();
+      if (!product) {
+        return res.status(404).json({ message: "No products available" });
+      }
+      res.json(product);
+    } catch (error) {
+      console.error("Error fetching price guess product:", error);
+      res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
+
+  // Update game score (single player game completion)
+  app.post("/api/games/score", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { gameType, won, score, earnings } = req.body;
+      const updated = await storage.updateGameScore(userId, gameType, won, score, earnings);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating game score:", error);
+      res.status(500).json({ message: "Failed to update score" });
+    }
+  });
+
+  // Seed game content
+  app.post("/api/games/seed", async (req: any, res) => {
+    try {
+      await storage.seedGameContent();
+      res.json({ message: "Game content seeded successfully" });
+    } catch (error) {
+      console.error("Error seeding game content:", error);
+      res.status(500).json({ message: "Failed to seed game content" });
     }
   });
 
