@@ -562,7 +562,7 @@ export default function Messages() {
               {/* Online indicator */}
               <span
                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                  selectedThread?.user.id.charCodeAt(0) % 3 === 0 ? "bg-green-500" : "bg-muted-foreground/50"
+                  (selectedThread?.user.id?.charCodeAt(0) ?? 0) % 3 === 0 ? "bg-green-500" : "bg-muted-foreground/50"
                 }`}
                 data-testid="status-chat-online"
               />
@@ -578,7 +578,7 @@ export default function Messages() {
                   </Badge>
                 )}
                 <span className="text-xs text-muted-foreground" data-testid="text-chat-status">
-                  {selectedThread?.user.id.charCodeAt(0) % 3 === 0 ? "Online" : "Offline"}
+                  {(selectedThread?.user.id?.charCodeAt(0) ?? 0) % 3 === 0 ? "Online" : "Offline"}
                 </span>
               </div>
             </div>
