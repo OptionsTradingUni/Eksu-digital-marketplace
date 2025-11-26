@@ -283,11 +283,64 @@ See `RAILWAY_DEPLOYMENT.md` for complete Railway setup guide.
 4. Run `npm run db:push` to create database tables
 5. Run `npm run dev` - app runs on port 5000
 
+## Monnify Payment Integration (November 26, 2025)
+
+### Payment Gateway
+- **Full Monnify Integration** - Sandbox/Live support with automatic token caching
+- **Multiple Payment Methods**: Card, Bank Transfer, USSD
+- **Fee Calculation**: 1.5% for cards, 1.0% for bank transfers (capped at ₦2,000)
+
+### Payment Features
+- `POST /api/monnify/initialize` - Start a payment transaction
+- `GET /api/monnify/verify/:reference` - Verify payment status
+- `POST /api/monnify/webhook` - Receive payment notifications (signature verified)
+- `POST /api/monnify/withdraw` - Initiate seller payout via disbursement API
+- `POST /api/monnify/verify-bank` - Validate bank account before withdrawal
+- `GET /api/monnify/banks` - List all supported Nigerian banks
+
+### Pricing System
+- Platform commission: 10% (configurable via WEBSITE_COMMISSION_RATE)
+- Automatic fee calculation for buyers
+- Seller earnings = Product Price - Platform Commission
+- Security deposit locking for first-time sellers
+
+### Environment Variables Required
+```bash
+MONNIFY_API_KEY=MK_TEST_xxx        # Your Monnify API key
+MONNIFY_SECRET_KEY=xxx             # Your Monnify secret key
+MONNIFY_CONTRACT_CODE=xxxxxxxx    # Your Monnify contract code
+MONNIFY_ENVIRONMENT=SANDBOX        # or LIVE for production
+```
+
+## Order Management System (November 26, 2025)
+
+### Order Tracking
+- **11 Delivery Statuses**: pending → paid → seller_confirmed → preparing → ready_for_pickup → shipped → out_for_delivery → delivered → buyer_confirmed → completed → cancelled
+- **Status History**: Full audit trail of all status changes
+- **Role-based Permissions**: Buyers and sellers can only update statuses they're allowed to
+
+### Order API Endpoints
+- `POST /api/orders` - Create a new order
+- `GET /api/orders/buyer` - Get buyer's orders
+- `GET /api/orders/seller` - Get seller's orders
+- `GET /api/orders/:id` - Get order details
+- `PUT /api/orders/:id/status` - Update order status
+- `GET /api/orders/:id/history` - Get order status history
+
+### Order Features
+- Unique order numbers (EKSU-xxxx-xxxx format)
+- Delivery method selection (campus meetup, hostel, courier)
+- Delivery address and notes tracking
+- Timeline tracking for each status change
+- Escrow transaction integration
+- Negotiation support for agreed prices
+
 ## Future Enhancements (Phase 2)
 
 - ✅ AI Chatbot with Nigerian language support (COMPLETED)
 - ✅ Payment scam detection and warnings (COMPLETED)
-- Stripe/Paystack payment integration
+- ✅ Monnify Payment Integration (COMPLETED)
+- ✅ Order Management System (COMPLETED)
 - Student ID & NIN verification (YouVerify/Dojah)
 - Advanced AI scam detection (listing analysis)
 - Video uploads for products
