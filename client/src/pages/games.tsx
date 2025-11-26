@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -53,15 +54,23 @@ import {
   Grid3X3,
   Heart,
   Tag,
-  Radio,
-  Zap
+  User,
+  Bot,
+  Sparkles,
+  Medal,
+  Crown,
+  Target
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Game, User, Wallet } from "@shared/schema";
+import type { Game, User as UserType, Wallet } from "@shared/schema";
 
-type GameWithPlayer = Game & { player1: User };
+type GameWithPlayer = Game & { player1: UserType };
 
 type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price";
+
+type GameMode = "single_player" | "multiplayer";
+
+type SinglePlayerMode = "practice" | "challenge";
 
 interface GameInfoType {
   name: string;
@@ -71,7 +80,11 @@ interface GameInfoType {
   stakeAmounts: string[];
   platformFee: number;
   playerType: string;
+  supportsSinglePlayer: boolean;
+  supportsMultiplayer: boolean;
 }
+
+const EXPANDED_STAKES = ["100", "200", "500", "1000", "2000", "5000", "10000", "20000", "50000", "100000"];
 
 const GAME_INFO: Record<GameType, GameInfoType> = {
   ludo: {
@@ -79,94 +92,138 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
     description: "Classic board game. First to get all tokens home wins!",
     icon: Dice1,
     color: "bg-red-500/10 text-red-600 dark:text-red-400",
-    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    stakeAmounts: EXPANDED_STAKES,
     platformFee: 5,
     playerType: "2-4 Players",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
   },
   word_battle: {
     name: "Word Battle",
     description: "Form words from letters. Highest score wins!",
     icon: BookOpen,
     color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    stakeAmounts: EXPANDED_STAKES,
     platformFee: 5,
     playerType: "2 Players",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
   },
   trivia: {
     name: "Trivia",
     description: "Answer questions correctly. Most correct answers wins!",
     icon: HelpCircle,
     color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    stakeAmounts: EXPANDED_STAKES,
     platformFee: 5,
     playerType: "2+ Players",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
   },
   whot: {
     name: "Whot",
     description: "Nigerian card game classic. Be the first to empty your hand!",
     icon: Spade,
     color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
-    stakeAmounts: ["50", "100", "150"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000"],
     platformFee: 15,
     playerType: "2 Players",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
   },
   quick_draw: {
     name: "Quick Draw",
     description: "Draw and guess! Like Pictionary but faster and funnier.",
     icon: Pencil,
     color: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
-    stakeAmounts: ["50", "100", "150", "200"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000", "10000"],
     platformFee: 15,
     playerType: "2-4 Players",
+    supportsSinglePlayer: false,
+    supportsMultiplayer: true,
   },
   speed_typing: {
     name: "Speed Typing",
     description: "Type the fastest! Compete on the leaderboard for glory.",
     icon: Keyboard,
     color: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
-    stakeAmounts: ["50"],
+    stakeAmounts: ["100", "200", "500", "1000"],
     platformFee: 10,
     playerType: "Leaderboard",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: false,
   },
   campus_bingo: {
     name: "Campus Bingo",
     description: "Live bingo experience! Mark your numbers and shout BINGO!",
     icon: Grid3X3,
     color: "bg-green-500/10 text-green-600 dark:text-green-400",
-    stakeAmounts: ["100"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000"],
     platformFee: 15,
     playerType: "Live",
+    supportsSinglePlayer: false,
+    supportsMultiplayer: true,
   },
   truth_or_dare: {
     name: "Truth or Dare",
     description: "The classic party game! Reveal truths or complete dares.",
     icon: Heart,
     color: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    stakeAmounts: ["50"],
+    stakeAmounts: ["100", "200", "500"],
     platformFee: 10,
     playerType: "Multiplayer",
+    supportsSinglePlayer: false,
+    supportsMultiplayer: true,
   },
   guess_the_price: {
     name: "Guess the Price",
     description: "How well do you know prices? Closest guess wins!",
     icon: Tag,
     color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    stakeAmounts: ["50", "100", "150", "200"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000", "10000"],
     platformFee: 15,
     playerType: "Multiplayer Quiz",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
   },
 };
 
 const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"];
 
+interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  score: number;
+  gamesPlayed: number;
+  winRate: number;
+}
+
+const MOCK_LEADERBOARD: LeaderboardEntry[] = [
+  { rank: 1, username: "ChampionPlayer", score: 15420, gamesPlayed: 89, winRate: 78 },
+  { rank: 2, username: "GameMaster99", score: 12850, gamesPlayed: 76, winRate: 72 },
+  { rank: 3, username: "ProGamer_NG", score: 11200, gamesPlayed: 65, winRate: 68 },
+  { rank: 4, username: "CampusKing", score: 9800, gamesPlayed: 54, winRate: 64 },
+  { rank: 5, username: "QuickFingers", score: 8540, gamesPlayed: 48, winRate: 61 },
+  { rank: 6, username: "NaijaChamp", score: 7200, gamesPlayed: 42, winRate: 58 },
+  { rank: 7, username: "GameWizard", score: 6150, gamesPlayed: 38, winRate: 55 },
+  { rank: 8, username: "SkillMaster", score: 5400, gamesPlayed: 35, winRate: 52 },
+  { rank: 9, username: "LuckyPlayer", score: 4800, gamesPlayed: 31, winRate: 49 },
+  { rank: 10, username: "RisingStar", score: 4200, gamesPlayed: 28, winRate: 46 },
+];
+
 export default function GamesPage() {
   const { toast } = useToast();
+  const [gameMode, setGameMode] = useState<GameMode>("multiplayer");
+  const [singlePlayerMode, setSinglePlayerMode] = useState<SinglePlayerMode>("practice");
   const [selectedGameType, setSelectedGameType] = useState<GameType>("ludo");
   const currentGameInfo = GAME_INFO[selectedGameType];
   const [selectedStake, setSelectedStake] = useState(currentGameInfo.stakeAmounts[0]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [practiceDialogOpen, setPracticeDialogOpen] = useState(false);
+  const [challengeDialogOpen, setChallengeDialogOpen] = useState(false);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<GameWithPlayer | null>(null);
   const [gameInProgress, setGameInProgress] = useState(false);
+  const [singlePlayerGameInProgress, setSinglePlayerGameInProgress] = useState(false);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -181,7 +238,7 @@ export default function GamesPage() {
     queryKey: ["/api/games/history"],
   });
 
-  const { data: user } = useQuery<User>({
+  const { data: user } = useQuery<UserType>({
     queryKey: ["/api/user"],
   });
 
@@ -326,14 +383,83 @@ export default function GamesPage() {
     joinGameMutation.mutate(game.id);
   };
 
-  const simulateGame = (game: GameWithPlayer) => {
+  const handleStartPractice = () => {
+    setPracticeDialogOpen(false);
+    setSinglePlayerGameInProgress(true);
     setTimeout(() => {
-      const winnerId = Math.random() > 0.5 ? user?.id : game.player1.id;
-      if (winnerId) {
-        completeGameMutation.mutate({ gameId: game.id, winnerId });
-      }
+      const won = Math.random() > 0.4;
+      setSinglePlayerGameInProgress(false);
+      toast({
+        title: won ? "Practice Complete - You Won!" : "Practice Complete",
+        description: won 
+          ? "Great job! You beat the AI. No stakes in practice mode." 
+          : "Keep practicing! The AI won this round.",
+      });
     }, 3000);
   };
+
+  const handleStartChallenge = () => {
+    const stakeNum = parseFloat(selectedStake);
+    const walletBalance = parseFloat(wallet?.balance || "0");
+
+    if (walletBalance < stakeNum) {
+      toast({
+        title: "Insufficient Balance",
+        description: `You need ${selectedStake} NGN but have ${wallet?.balance || 0} NGN`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setChallengeDialogOpen(false);
+    setSinglePlayerGameInProgress(true);
+    
+    setTimeout(() => {
+      const won = Math.random() > 0.5;
+      const winMultiplier = (100 - currentGameInfo.platformFee) / 100;
+      setSinglePlayerGameInProgress(false);
+      
+      if (won) {
+        const winnings = stakeNum * 2 * winMultiplier;
+        toast({
+          title: "Challenge Won!",
+          description: `You beat the AI and earned ${winnings.toLocaleString()} NGN!`,
+        });
+      } else {
+        toast({
+          title: "Challenge Lost",
+          description: `The AI won this round. You lost ${stakeNum.toLocaleString()} NGN.`,
+          variant: "destructive",
+        });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/games/history"] });
+    }, 4000);
+  };
+
+  const handleModeChange = (mode: GameMode) => {
+    setGameMode(mode);
+    const currentGame = GAME_INFO[selectedGameType];
+    if (mode === "single_player" && !currentGame.supportsSinglePlayer) {
+      const singlePlayerGame = ALL_GAME_TYPES.find(g => GAME_INFO[g].supportsSinglePlayer);
+      if (singlePlayerGame) {
+        setSelectedGameType(singlePlayerGame);
+        setSelectedStake(GAME_INFO[singlePlayerGame].stakeAmounts[0]);
+      }
+    } else if (mode === "multiplayer" && !currentGame.supportsMultiplayer) {
+      const multiplayerGame = ALL_GAME_TYPES.find(g => GAME_INFO[g].supportsMultiplayer);
+      if (multiplayerGame) {
+        setSelectedGameType(multiplayerGame);
+        setSelectedStake(GAME_INFO[multiplayerGame].stakeAmounts[0]);
+      }
+    }
+  };
+
+  const filteredGameTypes = ALL_GAME_TYPES.filter(gameType => {
+    const info = GAME_INFO[gameType];
+    return gameMode === "single_player" ? info.supportsSinglePlayer : info.supportsMultiplayer;
+  });
 
   const filteredGames = availableGames?.filter(g => g.gameType === selectedGameType) || [];
   const userWaitingGames = filteredGames.filter(g => g.player1Id === user?.id);
@@ -341,6 +467,19 @@ export default function GamesPage() {
 
   const GameIcon = currentGameInfo.icon;
   const winMultiplier = (100 - currentGameInfo.platformFee) / 100;
+
+  const getRankIcon = (rank: number) => {
+    switch (rank) {
+      case 1:
+        return <Crown className="h-4 w-4 text-yellow-500" />;
+      case 2:
+        return <Medal className="h-4 w-4 text-gray-400" />;
+      case 3:
+        return <Medal className="h-4 w-4 text-amber-600" />;
+      default:
+        return <span className="text-xs font-medium text-muted-foreground">#{rank}</span>;
+    }
+  };
 
   return (
     <div className="container max-w-4xl mx-auto p-4 pb-20 space-y-6">
@@ -370,11 +509,65 @@ export default function GamesPage() {
         </Card>
       </div>
 
+      <Tabs value={gameMode} onValueChange={(v) => handleModeChange(v as GameMode)} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="single_player" className="flex items-center gap-2" data-testid="tab-single-player">
+            <User className="h-4 w-4" />
+            Single Player
+          </TabsTrigger>
+          <TabsTrigger value="multiplayer" className="flex items-center gap-2" data-testid="tab-multiplayer">
+            <Users className="h-4 w-4" />
+            Multiplayer
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {gameMode === "single_player" && (
+        <div className="flex gap-2">
+          <Button
+            variant={singlePlayerMode === "practice" ? "default" : "outline"}
+            onClick={() => setSinglePlayerMode("practice")}
+            className="flex-1"
+            data-testid="button-practice-mode"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Practice Mode
+            <Badge variant="secondary" className="ml-2 text-[10px]">Free</Badge>
+          </Button>
+          <Button
+            variant={singlePlayerMode === "challenge" ? "default" : "outline"}
+            onClick={() => setSinglePlayerMode("challenge")}
+            className="flex-1"
+            data-testid="button-challenge-mode"
+          >
+            <Target className="h-4 w-4 mr-2" />
+            Challenge AI
+            <Badge variant="secondary" className="ml-2 text-[10px]">Stakes</Badge>
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-muted-foreground">Select Game</h3>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h3 className="text-sm font-medium text-muted-foreground">Select Game</h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            {gameMode === "single_player" && (
+              <Badge variant="outline" className="text-xs">
+                <Bot className="h-3 w-3 mr-1" />
+                vs AI
+              </Badge>
+            )}
+            {gameMode === "multiplayer" && (
+              <Badge variant="outline" className="text-xs">
+                <Users className="h-3 w-3 mr-1" />
+                vs Players
+              </Badge>
+            )}
+          </div>
+        </div>
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex gap-3 pb-4">
-            {ALL_GAME_TYPES.map((gameType) => {
+            {filteredGameTypes.map((gameType) => {
               const info = GAME_INFO[gameType];
               const Icon = info.icon;
               const isSelected = selectedGameType === gameType;
@@ -395,9 +588,15 @@ export default function GamesPage() {
                   <span className="text-xs font-medium text-center whitespace-normal leading-tight">
                     {info.name}
                   </span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {info.playerType}
-                  </Badge>
+                  <div className="flex gap-1 flex-wrap justify-center">
+                    {info.supportsSinglePlayer && info.supportsMultiplayer ? (
+                      <Badge variant="secondary" className="text-[10px]">Both</Badge>
+                    ) : info.supportsSinglePlayer ? (
+                      <Badge variant="secondary" className="text-[10px]">Single</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">Multi</Badge>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -407,7 +606,7 @@ export default function GamesPage() {
       </div>
 
       <div className="space-y-6">
-        <Card className={currentGameInfo.color}>
+        <Card className={`${currentGameInfo.color} ${gameMode === "single_player" ? "border-2 border-dashed" : ""}`}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <CardTitle className="flex items-center gap-2">
@@ -415,12 +614,35 @@ export default function GamesPage() {
                 {currentGameInfo.name}
               </CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-xs">
-                  {currentGameInfo.playerType}
-                </Badge>
-                <Badge variant="secondary" className="text-xs">
-                  {currentGameInfo.platformFee}% Fee
-                </Badge>
+                {gameMode === "single_player" ? (
+                  <>
+                    <Badge variant="outline" className="text-xs">
+                      <Bot className="h-3 w-3 mr-1" />
+                      AI Opponent
+                    </Badge>
+                    {singlePlayerMode === "practice" ? (
+                      <Badge className="text-xs bg-green-500/20 text-green-600 dark:text-green-400">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Practice
+                      </Badge>
+                    ) : (
+                      <Badge className="text-xs bg-orange-500/20 text-orange-600 dark:text-orange-400">
+                        <Target className="h-3 w-3 mr-1" />
+                        Challenge
+                      </Badge>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="outline" className="text-xs">
+                      <Users className="h-3 w-3 mr-1" />
+                      {currentGameInfo.playerType}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {currentGameInfo.platformFee}% Fee
+                    </Badge>
+                  </>
+                )}
               </div>
             </div>
             <CardDescription className="text-inherit opacity-80">
@@ -428,70 +650,227 @@ export default function GamesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-3 flex-wrap">
-            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-create-game">
-                  <Play className="h-4 w-4 mr-2" />
-                  Create Game
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create {currentGameInfo.name} Game</DialogTitle>
-                  <DialogDescription>
-                    Select your stake amount. Winner takes {100 - currentGameInfo.platformFee}% of the total pot.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Stake Amount (NGN)</label>
-                    <Select value={selectedStake} onValueChange={setSelectedStake}>
-                      <SelectTrigger data-testid="select-stake">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currentGameInfo.stakeAmounts.map((amount) => (
-                          <SelectItem key={amount} value={amount}>
-                            {parseInt(amount).toLocaleString()} NGN
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex justify-between gap-4 text-sm">
-                    <span className="text-muted-foreground">Potential Win:</span>
-                    <span className="font-bold text-green-600">
-                      {(parseFloat(selectedStake) * 2 * winMultiplier).toLocaleString()} NGN
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 text-sm">
-                    <span className="text-muted-foreground">Platform Fee:</span>
-                    <span>{currentGameInfo.platformFee}%</span>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button 
-                    onClick={handleCreateGame} 
-                    disabled={createGameMutation.isPending}
-                    data-testid="button-confirm-create"
-                  >
-                    {createGameMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Coins className="h-4 w-4 mr-2" />
-                    )}
-                    Stake {parseInt(selectedStake).toLocaleString()} NGN
+            {gameMode === "single_player" ? (
+              singlePlayerMode === "practice" ? (
+                <Dialog open={practiceDialogOpen} onOpenChange={setPracticeDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-start-practice">
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Start Practice
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-green-500" />
+                        Practice Mode - {currentGameInfo.name}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Play against AI for free. No stakes, no pressure - just practice and improve your skills!
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                      <div className="flex items-center gap-3 p-3 rounded-md bg-green-500/10">
+                        <Bot className="h-8 w-8 text-green-500" />
+                        <div>
+                          <p className="font-medium">AI Opponent</p>
+                          <p className="text-sm text-muted-foreground">Adaptive difficulty based on your skill</p>
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <p>Practice mode benefits:</p>
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                          <li>No stake required</li>
+                          <li>Learn game mechanics</li>
+                          <li>Build your strategy</li>
+                          <li>Track your progress</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleStartPractice} data-testid="button-confirm-practice">
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Practice Game
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              ) : (
+                <Dialog open={challengeDialogOpen} onOpenChange={setChallengeDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-start-challenge">
+                      <Target className="h-4 w-4 mr-2" />
+                      Challenge AI
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-orange-500" />
+                        Challenge Mode - {currentGameInfo.name}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Play against AI for real stakes. Win and earn {100 - currentGameInfo.platformFee}% of the pot!
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="flex items-center gap-3 p-3 rounded-md bg-orange-500/10">
+                        <Bot className="h-8 w-8 text-orange-500" />
+                        <div>
+                          <p className="font-medium">AI Challenger</p>
+                          <p className="text-sm text-muted-foreground">Compete for real stakes</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Stake Amount (NGN)</label>
+                        <Select value={selectedStake} onValueChange={setSelectedStake}>
+                          <SelectTrigger data-testid="select-challenge-stake">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {currentGameInfo.stakeAmounts.map((amount) => (
+                              <SelectItem key={amount} value={amount}>
+                                {parseInt(amount).toLocaleString()} NGN
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-between gap-4 text-sm">
+                        <span className="text-muted-foreground">Potential Win:</span>
+                        <span className="font-bold text-green-600">
+                          {(parseFloat(selectedStake) * 2 * winMultiplier).toLocaleString()} NGN
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-4 text-sm">
+                        <span className="text-muted-foreground">Platform Fee:</span>
+                        <span>{currentGameInfo.platformFee}%</span>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        onClick={handleStartChallenge}
+                        data-testid="button-confirm-challenge"
+                      >
+                        <Coins className="h-4 w-4 mr-2" />
+                        Stake {parseInt(selectedStake).toLocaleString()} NGN
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )
+            ) : (
+              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-create-game">
+                    <Play className="h-4 w-4 mr-2" />
+                    Create Game
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create {currentGameInfo.name} Game</DialogTitle>
+                    <DialogDescription>
+                      Select your stake amount. Winner takes {100 - currentGameInfo.platformFee}% of the total pot.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Stake Amount (NGN)</label>
+                      <Select value={selectedStake} onValueChange={setSelectedStake}>
+                        <SelectTrigger data-testid="select-stake">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currentGameInfo.stakeAmounts.map((amount) => (
+                            <SelectItem key={amount} value={amount}>
+                              {parseInt(amount).toLocaleString()} NGN
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-muted-foreground">Potential Win:</span>
+                      <span className="font-bold text-green-600">
+                        {(parseFloat(selectedStake) * 2 * winMultiplier).toLocaleString()} NGN
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-muted-foreground">Platform Fee:</span>
+                      <span>{currentGameInfo.platformFee}%</span>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      onClick={handleCreateGame} 
+                      disabled={createGameMutation.isPending}
+                      data-testid="button-confirm-create"
+                    >
+                      {createGameMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Coins className="h-4 w-4 mr-2" />
+                      )}
+                      Stake {parseInt(selectedStake).toLocaleString()} NGN
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
             <span className="text-sm text-muted-foreground">
-              Stakes: {currentGameInfo.stakeAmounts.map(s => `${parseInt(s).toLocaleString()}`).join(', ')} NGN
+              {gameMode === "single_player" && singlePlayerMode === "practice" 
+                ? "Free to play - no stakes" 
+                : `Stakes: ${currentGameInfo.stakeAmounts.slice(0, 5).map(s => `${parseInt(s).toLocaleString()}`).join(', ')}${currentGameInfo.stakeAmounts.length > 5 ? '...' : ''} NGN`
+              }
             </span>
           </CardContent>
         </Card>
 
-        {userWaitingGames.length > 0 && (
+        {gameMode === "single_player" && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Trophy className="h-4 w-4" />
+              {currentGameInfo.name} Leaderboard
+            </h3>
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {MOCK_LEADERBOARD.slice(0, 5).map((entry) => (
+                    <div 
+                      key={entry.rank} 
+                      className={`flex items-center justify-between gap-4 p-3 ${
+                        entry.rank <= 3 ? 'bg-yellow-500/5' : ''
+                      }`}
+                      data-testid={`leaderboard-entry-${entry.rank}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          {getRankIcon(entry.rank)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{entry.username}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {entry.gamesPlayed} games | {entry.winRate}% win rate
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-sm">{entry.score.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">points</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            <Button variant="outline" size="sm" className="w-full" data-testid="button-view-full-leaderboard">
+              View Full Leaderboard
+            </Button>
+          </div>
+        )}
+
+        {gameMode === "multiplayer" && userWaitingGames.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Clock className="h-4 w-4" />
@@ -512,6 +891,10 @@ export default function GamesPage() {
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
                           {parseInt(game.stakeAmount).toLocaleString()} NGN
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          <Users className="h-3 w-3 mr-1" />
+                          Multi
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           {format(new Date(game.createdAt || new Date()), "MMM d, h:mm a")}
@@ -549,83 +932,89 @@ export default function GamesPage() {
           </div>
         )}
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Available Lobbies
-          </h3>
-          
-          {gamesLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <Card key={i}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-10 w-10 rounded-full" />
-                      <div className="space-y-2 flex-1">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-24" />
+        {gameMode === "multiplayer" && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Available Lobbies
+            </h3>
+            
+            {gamesLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="space-y-2 flex-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                        <Skeleton className="h-9 w-20" />
                       </div>
-                      <Skeleton className="h-9 w-20" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : otherGames.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <GameIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground">No games available</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Be the first to create a {currentGameInfo.name} game!
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {otherGames.map((game) => (
-                <Card key={game.id} data-testid={`card-game-${game.id}`}>
-                  <CardContent className="p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={game.player1.profileImageUrl || undefined} />
-                        <AvatarFallback>
-                          {game.player1.firstName?.[0] || "?"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">
-                          {game.player1.firstName} {game.player1.lastName?.[0]}.
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">
-                            <Coins className="h-3 w-3 mr-1" />
-                            {parseInt(game.stakeAmount).toLocaleString()} NGN
-                          </Badge>
-                          <span className="text-xs text-green-600 font-medium">
-                            Win: {(parseFloat(game.stakeAmount) * 2 * winMultiplier).toLocaleString()} NGN
-                          </span>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : otherGames.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <GameIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <p className="text-muted-foreground">No games available</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Be the first to create a {currentGameInfo.name} game!
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {otherGames.map((game) => (
+                  <Card key={game.id} data-testid={`card-game-${game.id}`}>
+                    <CardContent className="p-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={game.player1.profileImageUrl || undefined} />
+                          <AvatarFallback>
+                            {game.player1.firstName?.[0] || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">
+                            {game.player1.firstName} {game.player1.lastName?.[0]}.
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">
+                              <Coins className="h-3 w-3 mr-1" />
+                              {parseInt(game.stakeAmount).toLocaleString()} NGN
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              <Users className="h-3 w-3 mr-1" />
+                              Multi
+                            </Badge>
+                            <span className="text-xs text-green-600 font-medium">
+                              Win: {(parseFloat(game.stakeAmount) * 2 * winMultiplier).toLocaleString()} NGN
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <Button
-                      onClick={() => handleJoinGame(game)}
-                      disabled={joinGameMutation.isPending}
-                      data-testid={`button-join-game-${game.id}`}
-                    >
-                      {joinGameMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "Join"
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                      <Button
+                        onClick={() => handleJoinGame(game)}
+                        disabled={joinGameMutation.isPending}
+                        data-testid={`button-join-game-${game.id}`}
+                      >
+                        {joinGameMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Join"
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -740,6 +1129,39 @@ export default function GamesPage() {
                 Simulate Result
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={singlePlayerGameInProgress} onOpenChange={setSinglePlayerGameInProgress}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5" />
+              {singlePlayerMode === "practice" ? "Practice" : "Challenge"} - {currentGameInfo.name}
+            </DialogTitle>
+            <DialogDescription>
+              {singlePlayerMode === "practice" 
+                ? "Practice game in progress..." 
+                : "Challenge game in progress..."
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="h-24 w-24 rounded-full border-4 border-primary/20 flex items-center justify-center">
+                <Loader2 className="h-12 w-12 text-primary animate-spin" />
+              </div>
+            </div>
+            <p className="text-center text-muted-foreground">
+              Playing against AI...<br />
+              <span className="text-sm">
+                {singlePlayerMode === "practice" 
+                  ? "This is just practice - no stakes!" 
+                  : `Stakes: ${parseInt(selectedStake).toLocaleString()} NGN`
+                }
+              </span>
+            </p>
           </div>
         </DialogContent>
       </Dialog>
