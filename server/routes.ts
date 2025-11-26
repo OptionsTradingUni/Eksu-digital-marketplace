@@ -11,7 +11,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { uploadToObjectStorage, uploadMultipleToObjectStorage, objectStorageClient } from "./object-storage";
+import { uploadToObjectStorage, uploadMultipleToObjectStorage, getClient } from "./object-storage";
 import { z } from "zod";
 import Groq from "groq-sdk";
 import { 
@@ -209,7 +209,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/storage/:objectName(*)", async (req, res) => {
     try {
       const objectName = req.params.objectName;
-      const { ok, value, error } = await objectStorageClient.downloadAsBytes(objectName);
+      const client = getClient();
+      if (!client) {
+        return res.status(503).json({ message: "Object storage not available" });
+      }
+      const { ok, value, error } = await client.downloadAsBytes(objectName);
       
       if (!ok) {
         console.error("Object storage download error:", error);
