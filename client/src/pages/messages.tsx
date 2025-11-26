@@ -440,7 +440,7 @@ export default function Messages() {
   });
 
   // Helper function to append a message to the messages cache
-  const appendMessageToCache = useCallback((newMessage: Message) => {
+  const appendMessageToCache = useCallback((newMessage: Message, isOwnMessage: boolean = false) => {
     const conversationUserId = newMessage.senderId === currentUser?.id 
       ? newMessage.receiverId 
       : newMessage.senderId;
@@ -449,8 +449,25 @@ export default function Messages() {
       ["/api/messages", conversationUserId],
       (oldMessages) => {
         if (!oldMessages) return [newMessage];
-        const exists = oldMessages.some(m => m.id === newMessage.id);
-        if (exists) return oldMessages;
+        
+        // Check if this exact message already exists
+        const existingIndex = oldMessages.findIndex(m => m.id === newMessage.id);
+        if (existingIndex >= 0) return oldMessages;
+        
+        // If this is our own sent message, replace any temp messages with matching content
+        if (isOwnMessage) {
+          const tempIndex = oldMessages.findIndex(
+            m => m.id.startsWith('temp-') && 
+                 m.content === newMessage.content && 
+                 m.senderId === newMessage.senderId
+          );
+          if (tempIndex >= 0) {
+            const updated = [...oldMessages];
+            updated[tempIndex] = newMessage;
+            return updated;
+          }
+        }
+        
         return [...oldMessages, newMessage];
       }
     );
@@ -511,12 +528,12 @@ export default function Messages() {
 
             if (data.type === "new_message" && data.message) {
               console.log("Received new message via WebSocket:", data.message.id);
-              appendMessageToCache(data.message);
+              appendMessageToCache(data.message, false);
             }
 
             if (data.type === "message_sent" && data.message) {
               console.log("Message sent confirmation:", data.message.id);
-              appendMessageToCache(data.message);
+              appendMessageToCache(data.message, true);
             }
 
             if (data.type === "typing" && data.userId === selectedUser) {

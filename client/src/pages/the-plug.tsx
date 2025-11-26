@@ -124,12 +124,15 @@ export default function ThePlugPage() {
 
   const followMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const response = await apiRequest("POST", `/api/follow/${userId}`);
+      const response = await apiRequest("POST", `/api/users/${userId}/follow`);
       return response.json();
     },
     onSuccess: () => {
       toast({ title: "Following!" });
       queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to follow", variant: "destructive" });
     },
   });
 
