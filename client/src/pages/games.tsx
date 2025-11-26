@@ -59,10 +59,14 @@ import {
   Sparkles,
   Medal,
   Crown,
-  Target
+  Target,
+  ArrowLeft
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Game, User as UserType, Wallet } from "@shared/schema";
+import LudoGame from "@/components/games/LudoGame";
+import WordBattleGame from "@/components/games/WordBattleGame";
+import TriviaGame from "@/components/games/TriviaGame";
 
 type GameWithPlayer = Game & { player1: UserType };
 
@@ -224,6 +228,7 @@ export default function GamesPage() {
   const [currentPlayingGame, setCurrentPlayingGame] = useState<GameWithPlayer | null>(null);
   const [gameInProgress, setGameInProgress] = useState(false);
   const [singlePlayerGameInProgress, setSinglePlayerGameInProgress] = useState(false);
+  const [activeGame, setActiveGame] = useState<{ type: GameType; stake: number; isPractice: boolean } | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -385,17 +390,11 @@ export default function GamesPage() {
 
   const handleStartPractice = () => {
     setPracticeDialogOpen(false);
-    setSinglePlayerGameInProgress(true);
-    setTimeout(() => {
-      const won = Math.random() > 0.4;
-      setSinglePlayerGameInProgress(false);
-      toast({
-        title: won ? "Practice Complete - You Won!" : "Practice Complete",
-        description: won 
-          ? "Great job! You beat the AI. No stakes in practice mode." 
-          : "Keep practicing! The AI won this round.",
-      });
-    }, 3000);
+    setActiveGame({
+      type: selectedGameType,
+      stake: 0,
+      isPractice: true,
+    });
   };
 
   const handleStartChallenge = () => {
@@ -412,13 +411,29 @@ export default function GamesPage() {
     }
 
     setChallengeDialogOpen(false);
-    setSinglePlayerGameInProgress(true);
+    setActiveGame({
+      type: selectedGameType,
+      stake: stakeNum,
+      isPractice: false,
+    });
+  };
+
+  const handleGameEnd = (won: boolean, score?: number) => {
+    const stakeNum = activeGame?.stake || 0;
+    const isPractice = activeGame?.isPractice || true;
+    const gameInfo = activeGame ? GAME_INFO[activeGame.type] : currentGameInfo;
+    const winMultiplier = (100 - gameInfo.platformFee) / 100;
     
-    setTimeout(() => {
-      const won = Math.random() > 0.5;
-      const winMultiplier = (100 - currentGameInfo.platformFee) / 100;
-      setSinglePlayerGameInProgress(false);
-      
+    setActiveGame(null);
+    
+    if (isPractice) {
+      toast({
+        title: won ? "Practice Complete - You Won!" : "Practice Complete",
+        description: won 
+          ? `Great job! You beat the AI${score ? ` with a score of ${score}` : ""}. No stakes in practice mode.`
+          : "Keep practicing! The AI won this round.",
+      });
+    } else {
       if (won) {
         const winnings = stakeNum * 2 * winMultiplier;
         toast({
@@ -432,10 +447,42 @@ export default function GamesPage() {
           variant: "destructive",
         });
       }
-      
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/games/history"] });
-    }, 4000);
+    }
+  };
+
+  const renderActiveGame = () => {
+    if (!activeGame) return null;
+    
+    const commonProps = {
+      stake: activeGame.stake,
+      onGameEnd: handleGameEnd,
+      isPractice: activeGame.isPractice,
+    };
+    
+    switch (activeGame.type) {
+      case "ludo":
+        return <LudoGame {...commonProps} />;
+      case "word_battle":
+        return <WordBattleGame {...commonProps} />;
+      case "trivia":
+        return <TriviaGame {...commonProps} />;
+      default:
+        return (
+          <Card className="p-8 text-center">
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                {GAME_INFO[activeGame.type].name} is coming soon!
+              </p>
+              <Button onClick={() => setActiveGame(null)}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Games
+              </Button>
+            </CardContent>
+          </Card>
+        );
+    }
   };
 
   const handleModeChange = (mode: GameMode) => {
@@ -480,6 +527,31 @@ export default function GamesPage() {
         return <span className="text-xs font-medium text-muted-foreground">#{rank}</span>;
     }
   };
+
+  if (activeGame) {
+    return (
+      <div className="container max-w-4xl mx-auto p-4 pb-20">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <Button variant="ghost" onClick={() => setActiveGame(null)} data-testid="button-back-to-games">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Games
+          </Button>
+          <div className="flex items-center gap-2">
+            {!activeGame.isPractice && (
+              <Badge variant="secondary" className="text-sm">
+                <Coins className="h-3 w-3 mr-1" />
+                Stake: {activeGame.stake.toLocaleString()} NGN
+              </Badge>
+            )}
+            <Badge variant={activeGame.isPractice ? "outline" : "default"} className="text-sm">
+              {activeGame.isPractice ? "Practice Mode" : "Challenge Mode"}
+            </Badge>
+          </div>
+        </div>
+        {renderActiveGame()}
+      </div>
+    );
+  }
 
   return (
     <div className="container max-w-4xl mx-auto p-4 pb-20 space-y-6">

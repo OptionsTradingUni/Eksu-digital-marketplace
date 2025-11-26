@@ -28,6 +28,15 @@ import {
 import { format } from "date-fns";
 import type { Referral } from "@shared/schema";
 
+interface ReferralWithUser extends Referral {
+  referredUser?: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    profileImageUrl: string | null;
+  };
+}
+
 interface TierInfo {
   name: string;
   icon: typeof Trophy;
@@ -128,14 +137,14 @@ export default function ReferralsPage() {
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  const { data: referrals, isLoading, isError, error, refetch } = useQuery<Referral[]>({
+  const { data: referrals, isLoading, isError, error, refetch } = useQuery<ReferralWithUser[]>({
     queryKey: ["/api/referrals"],
     enabled: !!user,
     retry: 2,
   });
 
-  const referralLink = `${window.location.origin}/auth/signup?ref=${user?.id}`;
-  const referralCode = user?.id?.slice(0, 8).toUpperCase() || "--------";
+  const referralCode = (user as any)?.referralCode || "--------";
+  const referralLink = `${window.location.origin}/auth/signup?ref=${referralCode}`;
 
   const copyToClipboard = async (text: string, type: "link" | "code") => {
     try {
@@ -498,11 +507,11 @@ export default function ReferralsPage() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all">
+            <TabsContent value="all" className="mt-4">
               {referrals && referrals.length > 0 ? (
-                <div className="space-y-3 mt-4">
-                  {referrals.map((ref, index) => (
-                    <ReferralItem key={ref.id} referral={ref} index={index} />
+                <div className="space-y-3">
+                  {referrals.map((ref) => (
+                    <ReferralItem key={ref.id} referral={ref} />
                   ))}
                 </div>
               ) : (
@@ -514,11 +523,11 @@ export default function ReferralsPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="pending">
+            <TabsContent value="pending" className="mt-4">
               {pendingReferrals.length > 0 ? (
-                <div className="space-y-3 mt-4">
-                  {pendingReferrals.map((ref, index) => (
-                    <ReferralItem key={ref.id} referral={ref} index={index} />
+                <div className="space-y-3">
+                  {pendingReferrals.map((ref) => (
+                    <ReferralItem key={ref.id} referral={ref} />
                   ))}
                 </div>
               ) : (
@@ -530,11 +539,11 @@ export default function ReferralsPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="completed">
+            <TabsContent value="completed" className="mt-4">
               {completedReferrals.length > 0 ? (
-                <div className="space-y-3 mt-4">
-                  {completedReferrals.map((ref, index) => (
-                    <ReferralItem key={ref.id} referral={ref} index={index} />
+                <div className="space-y-3">
+                  {completedReferrals.map((ref) => (
+                    <ReferralItem key={ref.id} referral={ref} />
                   ))}
                 </div>
               ) : (
@@ -546,11 +555,11 @@ export default function ReferralsPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="purchased">
+            <TabsContent value="purchased" className="mt-4">
               {referralsWithPurchases.length > 0 ? (
-                <div className="space-y-3 mt-4">
-                  {referralsWithPurchases.map((ref, index) => (
-                    <ReferralItem key={ref.id} referral={ref} index={index} />
+                <div className="space-y-3">
+                  {referralsWithPurchases.map((ref) => (
+                    <ReferralItem key={ref.id} referral={ref} />
                   ))}
                 </div>
               ) : (
@@ -605,7 +614,7 @@ export default function ReferralsPage() {
   );
 }
 
-function ReferralItem({ referral, index }: { referral: Referral; index: number }) {
+function ReferralItem({ referral }: { referral: ReferralWithUser }) {
   const statusConfig = {
     completed: {
       icon: CheckCircle,
@@ -621,30 +630,57 @@ function ReferralItem({ referral, index }: { referral: Referral; index: number }
 
   const status = referral.bonusPaid ? "completed" : "pending";
   const config = statusConfig[status];
-  const StatusIcon = config.icon;
+  
+  const getUserDisplayName = () => {
+    if (referral.referredUser?.firstName && referral.referredUser?.lastName) {
+      return `${referral.referredUser.firstName} ${referral.referredUser.lastName}`;
+    }
+    if (referral.referredUser?.firstName) {
+      return referral.referredUser.firstName;
+    }
+    if (referral.referredUser?.email) {
+      return referral.referredUser.email.split('@')[0];
+    }
+    return "Unknown User";
+  };
+
+  const getAvatarInitials = () => {
+    if (referral.referredUser?.firstName && referral.referredUser?.lastName) {
+      return `${referral.referredUser.firstName[0]}${referral.referredUser.lastName[0]}`.toUpperCase();
+    }
+    if (referral.referredUser?.firstName) {
+      return referral.referredUser.firstName.slice(0, 2).toUpperCase();
+    }
+    if (referral.referredUser?.email) {
+      return referral.referredUser.email.slice(0, 2).toUpperCase();
+    }
+    return "??";
+  };
 
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-3 p-4 border rounded-lg"
+      className="flex items-center justify-between gap-4 p-4 border rounded-lg"
       data-testid={`referral-item-${referral.id}`}
     >
-      <div className="flex items-center gap-3">
-        <Avatar className="h-10 w-10">
-          <AvatarFallback className="text-sm">
-            {referral.referredUserId.slice(0, 2).toUpperCase()}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <Avatar className="h-10 w-10 shrink-0">
+          <AvatarFallback className="text-sm font-medium">
+            {getAvatarInitials()}
           </AvatarFallback>
         </Avatar>
-        <div>
-          <p className="font-medium">User #{index + 1}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium truncate" data-testid={`text-referral-name-${referral.id}`}>
+            {getUserDisplayName()}
+          </p>
           <p className="text-sm text-muted-foreground">
             {referral.createdAt 
-              ? format(new Date(referral.createdAt), "MMM d, yyyy 'at' h:mm a")
+              ? format(new Date(referral.createdAt), "MMM d, yyyy")
               : "Date unknown"
             }
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-2 shrink-0">
         {referral.referredUserMadePurchase && (
           <Badge variant="outline" className="gap-1">
             <ShoppingCart className="h-3 w-3" />
@@ -652,7 +688,7 @@ function ReferralItem({ referral, index }: { referral: Referral; index: number }
           </Badge>
         )}
         {referral.bonusPaid && referral.bonusAmount && (
-          <span className="font-semibold text-green-600 dark:text-green-400">
+          <span className="font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
             +{parseFloat(referral.bonusAmount).toLocaleString()}
           </span>
         )}

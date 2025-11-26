@@ -34,6 +34,8 @@ import {
   typingTexts,
   priceGuessProducts,
   passwordResetTokens,
+  announcements,
+  announcementReads,
   type User,
   type UpsertUser,
   type Product,
@@ -89,14 +91,28 @@ import {
   type TypingText,
   type PriceGuessProduct,
   type PasswordResetToken,
+  type Announcement,
+  type CreateAnnouncementInput,
+  type UpdateAnnouncementInput,
+  type AnnouncementRead,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
+
+function generateReferralCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
 
 export interface IStorage {
   // User operations (authentication & profiles)
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByReferralCode(referralCode: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   createUser(user: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User>;
   updateUserProfile(id: string, data: Partial<User>): Promise<User>;
@@ -154,7 +170,7 @@ export interface IStorage {
   
   // Referral operations
   createReferral(referrerId: string, referredUserId: string): Promise<Referral>;
-  getUserReferrals(userId: string): Promise<Referral[]>;
+  getUserReferrals(userId: string): Promise<(Referral & { referredUser?: { firstName: string | null; lastName: string | null; email: string; profileImageUrl: string | null } })[]>;
   markReferralPaid(referralId: string): Promise<Referral>;
   
   // Saved search operations
@@ -319,6 +335,17 @@ export interface IStorage {
   markPasswordResetTokenUsed(token: string): Promise<void>;
   deleteExpiredPasswordResetTokens(): Promise<void>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<User>;
+  
+  // Announcement operations
+  createAnnouncement(data: CreateAnnouncementInput & { authorId: string }): Promise<Announcement>;
+  getAnnouncement(id: string): Promise<(Announcement & { author: User }) | undefined>;
+  getAnnouncements(includeUnpublished?: boolean): Promise<(Announcement & { author: User })[]>;
+  updateAnnouncement(id: string, data: UpdateAnnouncementInput): Promise<Announcement>;
+  deleteAnnouncement(id: string): Promise<void>;
+  incrementAnnouncementViews(id: string): Promise<void>;
+  markAnnouncementAsRead(userId: string, announcementId: string): Promise<AnnouncementRead>;
+  getUserAnnouncementReads(userId: string): Promise<AnnouncementRead[]>;
+  isAnnouncementRead(userId: string, announcementId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -333,8 +360,34 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.referralCode, referralCode.toUpperCase()));
+    return user;
+  }
+
+  private async generateUniqueReferralCode(): Promise<string> {
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    while (attempts < maxAttempts) {
+      const code = generateReferralCode();
+      const existing = await this.getUserByReferralCode(code);
+      if (!existing) {
+        return code;
+      }
+      attempts++;
+    }
+    
+    throw new Error('Failed to generate unique referral code after max attempts');
+  }
+
   async createUser(userData: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User> {
-    const [user] = await db.insert(users).values(userData).returning();
+    const referralCode = await this.generateUniqueReferralCode();
+    
+    const [user] = await db.insert(users).values({
+      ...userData,
+      referralCode,
+    }).returning();
     
     // Create wallet and give welcome bonus for new users
     const bonusAmount = (Math.random() * 48 + 2).toFixed(2); // Random ₦2-₦50
@@ -356,9 +409,15 @@ export class DatabaseStorage implements IStorage {
     const existing = userData.id ? await this.getUser(userData.id) : undefined;
     const isNewUser = !existing;
 
+    // Generate referral code for new users
+    const referralCode = isNewUser ? await this.generateUniqueReferralCode() : undefined;
+
     const [user] = await db
       .insert(users)
-      .values(userData)
+      .values({
+        ...userData,
+        ...(referralCode && { referralCode }),
+      })
       .onConflictDoUpdate({
         target: users.id,
         set: {
@@ -858,12 +917,26 @@ export class DatabaseStorage implements IStorage {
     return referral;
   }
 
-  async getUserReferrals(userId: string): Promise<Referral[]> {
-    return await db
-      .select()
+  async getUserReferrals(userId: string): Promise<(Referral & { referredUser?: { firstName: string | null; lastName: string | null; email: string; profileImageUrl: string | null } })[]> {
+    const results = await db
+      .select({
+        referral: referrals,
+        referredUser: {
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
       .from(referrals)
+      .leftJoin(users, eq(referrals.referredUserId, users.id))
       .where(eq(referrals.referrerId, userId))
       .orderBy(desc(referrals.createdAt));
+    
+    return results.map(r => ({
+      ...r.referral,
+      referredUser: r.referredUser || undefined,
+    }));
   }
 
   async markReferralPaid(referralId: string): Promise<Referral> {
@@ -2266,6 +2339,129 @@ export class DatabaseStorage implements IStorage {
     }
     
     return user;
+  }
+
+  // Announcement operations
+  async createAnnouncement(data: CreateAnnouncementInput & { authorId: string }): Promise<Announcement> {
+    const [announcement] = await db
+      .insert(announcements)
+      .values({
+        authorId: data.authorId,
+        title: data.title,
+        content: data.content,
+        category: data.category,
+        priority: data.priority || "normal",
+        isPinned: data.isPinned || false,
+        isPublished: data.isPublished !== false,
+      })
+      .returning();
+    return announcement;
+  }
+
+  async getAnnouncement(id: string): Promise<(Announcement & { author: User }) | undefined> {
+    const [result] = await db
+      .select()
+      .from(announcements)
+      .innerJoin(users, eq(announcements.authorId, users.id))
+      .where(eq(announcements.id, id));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.announcements,
+      author: result.users,
+    };
+  }
+
+  async getAnnouncements(includeUnpublished: boolean = false): Promise<(Announcement & { author: User })[]> {
+    let query = db
+      .select()
+      .from(announcements)
+      .innerJoin(users, eq(announcements.authorId, users.id));
+    
+    const conditions = includeUnpublished 
+      ? [] 
+      : [eq(announcements.isPublished, true)];
+    
+    const results = conditions.length > 0
+      ? await query.where(and(...conditions)).orderBy(desc(announcements.isPinned), desc(announcements.createdAt))
+      : await query.orderBy(desc(announcements.isPinned), desc(announcements.createdAt));
+    
+    return results.map(r => ({
+      ...r.announcements,
+      author: r.users,
+    }));
+  }
+
+  async updateAnnouncement(id: string, data: UpdateAnnouncementInput): Promise<Announcement> {
+    const [announcement] = await db
+      .update(announcements)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(announcements.id, id))
+      .returning();
+    
+    if (!announcement) {
+      throw new Error("Announcement not found");
+    }
+    
+    return announcement;
+  }
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await db.delete(announcements).where(eq(announcements.id, id));
+  }
+
+  async incrementAnnouncementViews(id: string): Promise<void> {
+    await db
+      .update(announcements)
+      .set({ views: sql`COALESCE(${announcements.views}, 0) + 1` })
+      .where(eq(announcements.id, id));
+  }
+
+  async markAnnouncementAsRead(userId: string, announcementId: string): Promise<AnnouncementRead> {
+    const existing = await db
+      .select()
+      .from(announcementReads)
+      .where(
+        and(
+          eq(announcementReads.userId, userId),
+          eq(announcementReads.announcementId, announcementId)
+        )
+      );
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [read] = await db
+      .insert(announcementReads)
+      .values({ userId, announcementId })
+      .returning();
+    
+    return read;
+  }
+
+  async getUserAnnouncementReads(userId: string): Promise<AnnouncementRead[]> {
+    return await db
+      .select()
+      .from(announcementReads)
+      .where(eq(announcementReads.userId, userId));
+  }
+
+  async isAnnouncementRead(userId: string, announcementId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(announcementReads)
+      .where(
+        and(
+          eq(announcementReads.userId, userId),
+          eq(announcementReads.announcementId, announcementId)
+        )
+      );
+    return !!result;
   }
 }
 

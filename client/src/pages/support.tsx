@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { HelpCircle, MessageCircle, LifeBuoy, Clock, Send, Ticket, CreditCard, User, AlertTriangle, Wrench, ChevronRight } from "lucide-react";
+import { useLocation, useSearch } from "wouter";
+import { HelpCircle, MessageCircle, LifeBuoy, Clock, Send, Ticket, CreditCard, User, AlertTriangle, Wrench, ChevronRight, Image, X, Upload, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -34,11 +35,11 @@ const faqData = [
     questions: [
       {
         question: "How do I verify my account?",
-        answer: "To verify your account, go to Profile > Settings and click on 'Verify Account'. You'll need to provide your student ID, phone number, and complete NIN verification for full verification status."
+        answer: "To verify your account, go to your Profile page. You can update your personal information including phone number and location to build trust with other users. A verified profile helps establish credibility in the marketplace."
       },
       {
         question: "Can I change my role from buyer to seller?",
-        answer: "Yes! Go to Profile > Settings and select 'Both' as your role. This allows you to buy and sell items on the marketplace."
+        answer: "Yes! You can update your role in your profile settings. Choose 'Both' to buy and sell items on the marketplace, or switch between buyer and seller as needed."
       },
       {
         question: "How do I reset my password?",
@@ -46,7 +47,11 @@ const faqData = [
       },
       {
         question: "What is the Verified Student badge?",
-        answer: "The Verified Student badge appears on profiles that have completed identity verification. This builds trust with other users and helps prevent scams."
+        answer: "The Verified Student badge appears on profiles that have completed identity verification. This builds trust with other users and helps prevent scams on the platform."
+      },
+      {
+        question: "How do I update my profile picture?",
+        answer: "Go to your Profile page and click the camera icon on your avatar. You can upload any image (up to 5MB). The new photo will be visible to other users immediately."
       }
     ]
   },
@@ -56,19 +61,23 @@ const faqData = [
     questions: [
       {
         question: "How do I add money to my wallet?",
-        answer: "Go to Wallet > Deposit, enter the amount you want to add (minimum 100 NGN), and complete the payment via bank transfer, card, or USSD."
+        answer: "Go to the Wallet page, enter the amount you want to deposit (minimum 100 NGN), and complete the payment via bank transfer, card, or USSD. The funds will be credited once the payment is confirmed."
       },
       {
         question: "How do I withdraw money from my wallet?",
-        answer: "Navigate to Wallet > Withdraw, enter your bank details and the amount (minimum 500 NGN). Withdrawals are usually processed within 24 hours."
+        answer: "Navigate to the Wallet page, click on the Withdraw tab, enter your bank details (bank name, account number, account name) and the amount you wish to withdraw. Minimum withdrawal is 500 NGN. Withdrawals are usually processed within 24 hours."
       },
       {
         question: "What is escrow and how does it work?",
-        answer: "Escrow holds payment securely until the buyer confirms receipt of the item. This protects both buyers and sellers - buyers know their money is safe, and sellers are guaranteed payment."
+        answer: "Escrow holds payment securely until the buyer confirms receipt of the item. When you make a purchase, the money is held safely. Once you confirm you've received the item, the payment is released to the seller. This protects both parties."
       },
       {
         question: "What are the platform fees?",
         answer: "We charge a small fee (3-6%) on successful transactions to maintain the platform and provide security features. The exact fee is shown before you confirm any transaction."
+      },
+      {
+        question: "How do I track my transactions?",
+        answer: "All your transactions (deposits, withdrawals, purchases, sales, and rewards) are displayed in your Wallet page under the transaction history section. You can see the amount, type, and date of each transaction."
       }
     ]
   },
@@ -78,19 +87,23 @@ const faqData = [
     questions: [
       {
         question: "How do I post an item for sale?",
-        answer: "Click the '+' button or go to My Ads > Create New. Add photos, title, description, price, and select a category. Your listing will be live immediately after posting."
+        answer: "If you're a seller, go to My Ads page and click 'Post New Ad'. Add photos (up to 5), title, description, price, and select a category. Your listing will be live immediately after posting."
       },
       {
         question: "How do I boost my listing?",
-        answer: "Go to My Ads, find your listing, and click 'Boost'. Choose a duration and pay with your wallet balance. Boosted items appear at the top of search results."
+        answer: "Go to My Ads, find your listing, and click 'Boost'. Choose a duration (1-168 hours) and pay with your wallet balance. Boosted items appear at the top of search results and get more visibility."
       },
       {
         question: "What should I do if I receive a defective item?",
-        answer: "If you're using escrow, don't confirm receipt yet. Contact the seller first to resolve. If no resolution, open a dispute from the transaction details page within 48 hours."
+        answer: "If you're using escrow, don't confirm receipt yet. Contact the seller first through the messaging feature to try to resolve the issue. If no resolution is reached, you can open a dispute from your transaction details."
       },
       {
         question: "Can I negotiate prices?",
-        answer: "Yes! Use the messaging feature to chat with sellers and negotiate prices. Many sellers are open to reasonable offers."
+        answer: "Yes! Use the messaging feature to chat with sellers and negotiate prices. Many sellers are open to reasonable offers. Click the 'Message' button on any listing to start a conversation."
+      },
+      {
+        question: "How do I save items to buy later?",
+        answer: "Click the heart icon on any product to add it to your watchlist. You can view all your saved items in the Watchlist section accessible from the home page."
       }
     ]
   },
@@ -100,29 +113,43 @@ const faqData = [
     questions: [
       {
         question: "How do I report a scammer?",
-        answer: "Click the 'Report' button on their profile or listing. Provide as much detail as possible including screenshots. Our team reviews all reports within 24 hours."
+        answer: "Click the 'Report' button on their profile or listing. Provide as much detail as possible including screenshots. You can attach images when submitting a support ticket. Our team reviews all reports within 24 hours."
       },
       {
         question: "What happens when I report someone?",
-        answer: "We investigate all reports thoroughly. If a violation is confirmed, the user may receive a warning, suspension, or permanent ban depending on the severity."
+        answer: "We investigate all reports thoroughly. If a violation is confirmed, the user may receive a warning, suspension, or permanent ban depending on the severity. You'll be notified of the outcome."
       },
       {
         question: "How can I stay safe when meeting sellers?",
-        answer: "Always meet in public campus areas during daytime. Bring a friend if possible. Use escrow for valuable items. Never share personal financial information."
+        answer: "Always meet in public campus areas during daytime. Bring a friend if possible. Use escrow for valuable items to ensure secure payment. Never share personal financial information like bank passwords."
       },
       {
         question: "What should I do if someone asks me to pay outside the platform?",
-        answer: "Never pay outside the platform! This is a common scam tactic. Always use our secure payment system for your protection."
+        answer: "Never pay outside the platform! This is a common scam tactic. Always use our secure payment system for your protection. Report any user who asks you to pay outside the platform."
+      },
+      {
+        question: "How do I block a user?",
+        answer: "If someone is harassing you, report them using the support ticket system. Select 'Report User/Scam' as the category and provide details about the harassment. Our team will take appropriate action."
       }
     ]
   }
 ];
 
-const quickLinks = [
-  { title: "Verify Your Account", description: "Get verified for trust badges", href: "/profile", icon: User },
-  { title: "Wallet & Payments", description: "Add funds or withdraw money", href: "/wallet", icon: CreditCard },
-  { title: "Report an Issue", description: "Report scams or violations", href: "#report", icon: AlertTriangle },
-  { title: "Technical Help", description: "Fix app or account issues", href: "#contact", icon: Wrench },
+interface QuickLink {
+  title: string;
+  description: string;
+  action: "navigate" | "tab";
+  href?: string;
+  tab?: string;
+  category?: string;
+  icon: typeof User;
+}
+
+const quickLinks: QuickLink[] = [
+  { title: "Verify Your Account", description: "Get verified for trust badges", action: "navigate", href: "/profile", icon: User },
+  { title: "Wallet & Payments", description: "Add funds or withdraw money", action: "navigate", href: "/wallet", icon: CreditCard },
+  { title: "Report an Issue", description: "Report scams or violations", action: "tab", tab: "contact", category: "report", icon: AlertTriangle },
+  { title: "Technical Help", description: "Fix app or account issues", action: "tab", tab: "contact", category: "technical", icon: Wrench },
 ];
 
 function getStatusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -168,7 +195,26 @@ function getCategoryIcon(category: string) {
 
 export default function SupportPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const [activeTab, setActiveTab] = useState("faq");
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const contactFormRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const tab = params.get("tab");
+    const category = params.get("category");
+    
+    if (tab === "contact") {
+      setActiveTab("contact");
+      if (category) {
+        form.setValue("category", category);
+      }
+    }
+  }, [search]);
 
   const { data: tickets = [], isLoading: ticketsLoading } = useQuery<SupportTicket[]>({
     queryKey: ["/api/support"],
@@ -186,7 +232,10 @@ export default function SupportPage() {
 
   const createTicketMutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
-      const response = await apiRequest("POST", "/api/support", data);
+      const response = await apiRequest("POST", "/api/support", {
+        ...data,
+        attachments: attachments,
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -195,6 +244,7 @@ export default function SupportPage() {
         description: "We've received your support request and will respond soon.",
       });
       form.reset();
+      setAttachments([]);
       queryClient.invalidateQueries({ queryKey: ["/api/support"] });
       setActiveTab("tickets");
     },
@@ -206,6 +256,91 @@ export default function SupportPage() {
       });
     },
   });
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (attachments.length >= 5) {
+      toast({
+        title: "Maximum attachments reached",
+        description: "You can only attach up to 5 images per ticket.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const file = files[0];
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file (JPG, PNG, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upload image");
+      }
+
+      const { url } = await response.json();
+      setAttachments((prev) => [...prev, url]);
+      toast({
+        title: "Image uploaded",
+        description: "Your image has been attached to the ticket.",
+      });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload image. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleQuickLinkClick = (link: QuickLink) => {
+    if (link.action === "navigate" && link.href) {
+      setLocation(link.href);
+    } else if (link.action === "tab" && link.tab) {
+      setActiveTab(link.tab);
+      if (link.category) {
+        form.setValue("category", link.category);
+      }
+      setTimeout(() => {
+        contactFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    }
+  };
 
   const onSubmit = (data: TicketFormData) => {
     createTicketMutation.mutate(data);
@@ -230,18 +365,7 @@ export default function SupportPage() {
             <Card
               key={index}
               className="hover-elevate cursor-pointer"
-              onClick={() => {
-                if (link.href.startsWith("#")) {
-                  if (link.href === "#contact" || link.href === "#report") {
-                    setActiveTab("contact");
-                    if (link.href === "#report") {
-                      form.setValue("category", "report");
-                    }
-                  }
-                } else {
-                  window.location.href = link.href;
-                }
-              }}
+              onClick={() => handleQuickLinkClick(link)}
               data-testid={`card-quick-link-${index}`}
             >
               <CardContent className="flex items-center gap-3 p-4">
@@ -315,7 +439,7 @@ export default function SupportPage() {
         </TabsContent>
 
         <TabsContent value="contact">
-          <Card data-testid="card-contact-form">
+          <Card data-testid="card-contact-form" ref={contactFormRef}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Send className="h-5 w-5 text-primary" />
@@ -402,7 +526,7 @@ export default function SupportPage() {
                         <FormLabel>Message</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Please describe your issue in detail. Include any relevant information such as transaction IDs, usernames, or screenshots."
+                            placeholder="Please describe your issue in detail. Include any relevant information such as transaction IDs, usernames, or other details that might help us assist you."
                             className="min-h-[150px]"
                             {...field}
                             data-testid="textarea-message"
@@ -412,6 +536,75 @@ export default function SupportPage() {
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Attachments (Optional)</FormLabel>
+                      <span className="text-xs text-muted-foreground">{attachments.length}/5 images</span>
+                    </div>
+                    
+                    {attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {attachments.map((url, index) => (
+                          <div
+                            key={index}
+                            className="relative group rounded-md overflow-visible"
+                            data-testid={`attachment-preview-${index}`}
+                          >
+                            <img
+                              src={url}
+                              alt={`Attachment ${index + 1}`}
+                              className="h-20 w-20 object-cover rounded-md border"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => removeAttachment(index)}
+                              data-testid={`button-remove-attachment-${index}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        data-testid="input-attachment"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage || attachments.length >= 5}
+                        data-testid="button-add-attachment"
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Image className="mr-2 h-4 w-4" />
+                            Add Image
+                          </>
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        Max 5MB per image. JPG, PNG, GIF supported.
+                      </span>
+                    </div>
+                  </div>
 
                   <Button
                     type="submit"
@@ -472,6 +665,7 @@ export default function SupportPage() {
                 <div className="space-y-4">
                   {tickets.map((ticket) => {
                     const CategoryIcon = getCategoryIcon(ticket.category || "");
+                    const ticketAttachments = (ticket as any).attachments as string[] | undefined;
                     return (
                       <Card
                         key={ticket.id}
@@ -499,6 +693,27 @@ export default function SupportPage() {
                             <p className="text-sm text-muted-foreground line-clamp-2">
                               {ticket.message}
                             </p>
+
+                            {ticketAttachments && ticketAttachments.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {ticketAttachments.map((url, index) => (
+                                  <a
+                                    key={index}
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block"
+                                    data-testid={`ticket-attachment-${ticket.id}-${index}`}
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`Attachment ${index + 1}`}
+                                      className="h-16 w-16 object-cover rounded-md border hover:opacity-80 transition-opacity"
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                             
                             {ticket.response && (
                               <div className="bg-muted/50 rounded-md p-3 mt-2">
@@ -516,6 +731,15 @@ export default function SupportPage() {
                                 <>
                                   <span className="text-muted-foreground/50">|</span>
                                   <span className="capitalize">{ticket.category}</span>
+                                </>
+                              )}
+                              {ticketAttachments && ticketAttachments.length > 0 && (
+                                <>
+                                  <span className="text-muted-foreground/50">|</span>
+                                  <span className="flex items-center gap-1">
+                                    <Image className="h-3 w-3" />
+                                    {ticketAttachments.length} attachment{ticketAttachments.length > 1 ? 's' : ''}
+                                  </span>
                                 </>
                               )}
                             </div>

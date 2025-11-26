@@ -141,6 +141,12 @@ export function Header() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
+                      <Link href="/announcements" data-testid="link-announcements">
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        Campus Updates
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link href="/support" data-testid="link-support">
                         <LifeBuoy className="mr-2 h-4 w-4" />
                         Support
@@ -289,6 +295,12 @@ export function Header() {
                         <Button variant="ghost" className="w-full justify-start">
                           <User className="mr-2 h-4 w-4" />
                           Profile
+                        </Button>
+                      </Link>
+                      <Link href="/announcements">
+                        <Button variant="ghost" className="w-full justify-start" data-testid="link-announcements-mobile">
+                          <Megaphone className="mr-2 h-4 w-4" />
+                          Campus Updates
                         </Button>
                       </Link>
                       <Link href="/support">

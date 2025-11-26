@@ -38,6 +38,8 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   role: userRoleEnum("role").notNull().default("buyer"),
+  // Referral code - unique 8-character alphanumeric code for sharing
+  referralCode: varchar("referral_code", { length: 8 }).unique(),
   // Campus-specific fields
   phoneNumber: varchar("phone_number").unique(), // UNIQUE - one account per phone
   location: varchar("location"), // Campus area/hostel
@@ -309,8 +311,9 @@ export const supportTickets = pgTable("support_tickets", {
   subject: varchar("subject", { length: 200 }).notNull(),
   message: text("message").notNull(),
   category: varchar("category", { length: 50 }), // account, payment, technical, report
-  status: varchar("status", { length: 20 }).default("open"), // open, in_progress, resolved, closed
   priority: varchar("priority", { length: 20 }).default("medium"), // low, medium, high, urgent
+  attachments: text("attachments").array().default(sql`ARRAY[]::text[]`), // Array of image URLs
+  status: varchar("status", { length: 20 }).default("open"), // open, in_progress, resolved, closed
   assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
   response: text("response"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -473,20 +476,38 @@ export const notifications = pgTable("notifications", {
   index("idx_user_notifications").on(table.userId, table.isRead),
 ]);
 
-// Marketplace announcements (only verified accounts can post)
+// Announcement category enum
+export const announcementCategoryEnum = pgEnum("announcement_category", ["update", "feature", "alert"]);
+
+// Announcement priority enum
+export const announcementPriorityEnum = pgEnum("announcement_priority", ["low", "normal", "high"]);
+
+// Marketplace announcements (admin-only for Campus Updates)
 export const announcements = pgTable("announcements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 200 }).notNull(),
   content: text("content").notNull(),
-  type: varchar("type", { length: 50 }).default("general"), // general, update, event, promotion, safety
-  isApproved: boolean("is_approved").default(false),
-  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+  category: announcementCategoryEnum("category").notNull().default("update"),
+  priority: announcementPriorityEnum("priority").notNull().default("normal"),
   isPinned: boolean("is_pinned").default(false),
+  isPublished: boolean("is_published").default(true),
   views: integer("views").default(0),
   createdAt: timestamp("created_at").defaultNow(),
-  approvedAt: timestamp("approved_at"),
-});
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_announcements_published").on(table.isPublished, table.createdAt),
+]);
+
+// Track which users have read which announcements
+export const announcementReads = pgTable("announcement_reads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  announcementId: varchar("announcement_id").notNull().references(() => announcements.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").defaultNow(),
+}, (table) => [
+  index("idx_announcement_reads_user").on(table.userId, table.announcementId),
+]);
 
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -972,11 +993,25 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
   id: true,
   createdAt: true,
-  approvedAt: true,
+  updatedAt: true,
   views: true,
-  isApproved: true,
-  approvedBy: true,
 });
+
+export const insertAnnouncementReadSchema = createInsertSchema(announcementReads).omit({
+  id: true,
+  readAt: true,
+});
+
+export const createAnnouncementSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").max(200),
+  content: z.string().min(10, "Content must be at least 10 characters"),
+  category: z.enum(["update", "feature", "alert"]),
+  priority: z.enum(["low", "normal", "high"]).optional().default("normal"),
+  isPinned: z.boolean().optional().default(false),
+  isPublished: z.boolean().optional().default(true),
+});
+
+export const updateAnnouncementSchema = createAnnouncementSchema.partial();
 
 // API-specific schemas for new features
 export const createHostelSchema = insertHostelSchema.extend({
@@ -1198,6 +1233,7 @@ export const registerSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
   role: z.enum(["buyer", "seller", "both"]).optional().default("buyer"),
+  referralCode: z.string().optional(),
 });
 
 export const loginSchema = z.object({
@@ -1246,3 +1282,7 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Announcement = typeof announcements.$inferSelect;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type AnnouncementRead = typeof announcementReads.$inferSelect;
+export type InsertAnnouncementRead = z.infer<typeof insertAnnouncementReadSchema>;
+export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;
+export type UpdateAnnouncementInput = z.infer<typeof updateAnnouncementSchema>;

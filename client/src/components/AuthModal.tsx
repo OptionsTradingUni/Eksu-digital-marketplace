@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Users } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Users, Gift, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -41,6 +41,7 @@ const signUpSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
   role: z.enum(["buyer", "seller", "both"]).default("buyer"),
+  referralCode: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -58,9 +59,10 @@ interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultTab?: "signin" | "signup";
+  defaultRole?: "buyer" | "seller" | "both";
 }
 
-export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthModalProps) {
+export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "both" }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { toast } = useToast();
@@ -89,9 +91,16 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
       firstName: "",
       lastName: "",
       phoneNumber: "",
-      role: "both",
+      role: defaultRole,
+      referralCode: "",
     },
   });
+  
+  useEffect(() => {
+    if (open && defaultRole) {
+      signUpForm.setValue("role", defaultRole);
+    }
+  }, [open, defaultRole]);
 
   const forgotPasswordForm = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -448,25 +457,38 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
                     name="role"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>What do you want to do?</FormLabel>
+                        <FormLabel className="text-base font-semibold">Choose Your Role</FormLabel>
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            defaultValue={field.value}
-                            className="grid grid-cols-3 gap-2"
+                            value={field.value}
+                            className="grid gap-3"
                           >
                             <div>
                               <RadioGroupItem
                                 value="buyer"
                                 id="role-buyer"
                                 className="peer sr-only"
+                                data-testid="radio-role-buyer"
                               />
                               <label
                                 htmlFor="role-buyer"
-                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <ShoppingCart className="h-5 w-5 mb-1" />
-                                <span className="text-xs font-medium">Buy</span>
+                                <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2 shrink-0">
+                                  <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold">Buyer</span>
+                                    {field.value === "buyer" && (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mt-0.5">
+                                    Browse and purchase items from other students
+                                  </p>
+                                </div>
                               </label>
                             </div>
                             <div>
@@ -474,13 +496,26 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
                                 value="seller"
                                 id="role-seller"
                                 className="peer sr-only"
+                                data-testid="radio-role-seller"
                               />
                               <label
                                 htmlFor="role-seller"
-                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <Store className="h-5 w-5 mb-1" />
-                                <span className="text-xs font-medium">Sell</span>
+                                <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-2 shrink-0">
+                                  <Store className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold">Seller / Merchant</span>
+                                    {field.value === "seller" && (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mt-0.5">
+                                    List and sell your products to campus buyers
+                                  </p>
+                                </div>
                               </label>
                             </div>
                             <div>
@@ -488,13 +523,26 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
                                 value="both"
                                 id="role-both"
                                 className="peer sr-only"
+                                data-testid="radio-role-both"
                               />
                               <label
                                 htmlFor="role-both"
-                                className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <Users className="h-5 w-5 mb-1" />
-                                <span className="text-xs font-medium">Both</span>
+                                <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-2 shrink-0">
+                                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold">Both</span>
+                                    {field.value === "both" && (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mt-0.5">
+                                    Full access to buy and sell on the marketplace
+                                  </p>
+                                </div>
                               </label>
                             </div>
                           </RadioGroup>
@@ -545,6 +593,34 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin" }: AuthMod
                             />
                           </div>
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={signUpForm.control}
+                    name="referralCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <span>Referral Code</span>
+                          <span className="text-xs text-muted-foreground font-normal">(Optional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Gift className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="Enter a friend's referral code"
+                              className="pl-10"
+                              data-testid="input-signup-referral-code"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Have a referral code? Enter it to earn bonus rewards!
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}

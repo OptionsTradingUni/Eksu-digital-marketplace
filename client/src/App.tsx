@@ -24,6 +24,7 @@ import NotificationsPage from "@/pages/notifications";
 import MyAdsPage from "@/pages/my-ads";
 import GamesPage from "@/pages/games";
 import SupportPage from "@/pages/support";
+import AnnouncementsPage from "@/pages/announcements";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { useEffect } from "react";
 
@@ -125,6 +126,11 @@ function Router() {
           <Route path="/support" component={() => (
             <ErrorBoundary>
               <SupportPage />
+            </ErrorBoundary>
+          )} />
+          <Route path="/announcements" component={() => (
+            <ErrorBoundary>
+              <AnnouncementsPage />
             </ErrorBoundary>
           )} />
           <Route component={() => (

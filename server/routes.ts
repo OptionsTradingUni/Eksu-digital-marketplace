@@ -32,6 +32,8 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  createAnnouncementSchema,
+  updateAnnouncementSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 
@@ -92,7 +94,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { email, password, firstName, lastName, phoneNumber, role } = validationResult.data;
+      const { email, password, firstName, lastName, phoneNumber, role, referralCode } = validationResult.data;
 
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
@@ -127,6 +129,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Creating user with data:", { ...userData, password: "[HIDDEN]" });
 
       const user = await storage.createUser(userData);
+
+      // Handle referral code if provided
+      if (referralCode && referralCode.trim().length > 0) {
+        try {
+          const trimmedCode = referralCode.trim().toUpperCase();
+          // Look up the referrer by their unique referral code
+          const referrer = await storage.getUserByReferralCode(trimmedCode);
+          
+          if (referrer && referrer.id !== user.id) {
+            // Create the referral record
+            await storage.createReferral(referrer.id, user.id);
+            console.log(`Referral created: ${referrer.email} referred ${user.email}`);
+          } else if (!referrer) {
+            console.log(`Invalid referral code: ${trimmedCode} (user not found)`);
+          }
+        } catch (referralError: any) {
+          // Log but don't fail registration if referral creation fails
+          console.error("Error processing referral code:", referralError.message);
+        }
+      }
 
       // Remove password from user object before storing in session/sending to client
       const { password: _, ...safeUser } = user;
@@ -1341,6 +1363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Zod schema for chatbot request validation
   const chatbotRequestSchema = z.object({
     message: z.string().min(1).max(2000),
+    currentPage: z.string().optional(),
   });
   
   app.post("/api/chatbot", async (req: any, res) => {
@@ -1351,6 +1374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // SECURITY: Only accept the current user message, not full history
       // We'll maintain conversation history server-side in the future
       const userMessage = validated.message;
+      const currentPage = validated.currentPage;
 
       // Get user context if authenticated
       let userContext;
@@ -1362,8 +1386,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             role: user.role,
             isVerified: user.isVerified ?? undefined,
             trustScore: user.trustScore ?? undefined,
+            currentPage: currentPage,
           };
         }
+      } else if (currentPage) {
+        userContext = { currentPage };
       }
 
       // Check for payment scam patterns in the user message
@@ -1610,6 +1637,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error approving product:", error);
       res.status(500).json({ message: "Failed to approve product" });
+    }
+  });
+
+  // ==================== CAMPUS UPDATES / ANNOUNCEMENTS ROUTES ====================
+  
+  // Get all published announcements (public route with optional auth for read status)
+  app.get("/api/announcements", async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const announcements = await storage.getAnnouncements(false);
+      
+      // If user is authenticated, include their read status
+      if (userId) {
+        const reads = await storage.getUserAnnouncementReads(userId);
+        const readIds = new Set(reads.map(r => r.announcementId));
+        
+        const announcementsWithReadStatus = announcements.map(a => ({
+          ...a,
+          isRead: readIds.has(a.id),
+        }));
+        
+        return res.json(announcementsWithReadStatus);
+      }
+      
+      res.json(announcements.map(a => ({ ...a, isRead: false })));
+    } catch (error) {
+      console.error("Error fetching announcements:", error);
+      res.status(500).json({ message: "Failed to fetch announcements" });
+    }
+  });
+
+  // Get a specific announcement
+  app.get("/api/announcements/:id", async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const announcement = await storage.getAnnouncement(req.params.id);
+      
+      if (!announcement) {
+        return res.status(404).json({ message: "Announcement not found" });
+      }
+      
+      // Only show unpublished announcements to admins
+      if (!announcement.isPublished) {
+        if (!userId) {
+          return res.status(404).json({ message: "Announcement not found" });
+        }
+        const user = await storage.getUser(userId);
+        if (user?.role !== "admin") {
+          return res.status(404).json({ message: "Announcement not found" });
+        }
+      }
+      
+      // Increment views
+      await storage.incrementAnnouncementViews(req.params.id);
+      
+      // Include read status if authenticated
+      let isRead = false;
+      if (userId) {
+        isRead = await storage.isAnnouncementRead(userId, req.params.id);
+      }
+      
+      res.json({ ...announcement, isRead });
+    } catch (error) {
+      console.error("Error fetching announcement:", error);
+      res.status(500).json({ message: "Failed to fetch announcement" });
+    }
+  });
+
+  // Create announcement (admin only)
+  app.post("/api/announcements", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can create announcements" });
+      }
+
+      const validationResult = createAnnouncementSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const announcement = await storage.createAnnouncement({
+        ...validationResult.data,
+        authorId: userId,
+      });
+
+      res.status(201).json(announcement);
+    } catch (error) {
+      console.error("Error creating announcement:", error);
+      res.status(500).json({ message: "Failed to create announcement" });
+    }
+  });
+
+  // Update announcement (admin only)
+  app.patch("/api/announcements/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can update announcements" });
+      }
+
+      const validationResult = updateAnnouncementSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const announcement = await storage.updateAnnouncement(req.params.id, validationResult.data);
+      res.json(announcement);
+    } catch (error: any) {
+      console.error("Error updating announcement:", error);
+      if (error.message?.includes("not found")) {
+        return res.status(404).json({ message: "Announcement not found" });
+      }
+      res.status(500).json({ message: "Failed to update announcement" });
+    }
+  });
+
+  // Delete announcement (admin only)
+  app.delete("/api/announcements/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can delete announcements" });
+      }
+
+      await storage.deleteAnnouncement(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting announcement:", error);
+      res.status(500).json({ message: "Failed to delete announcement" });
+    }
+  });
+
+  // Mark announcement as read (authenticated users)
+  app.post("/api/announcements/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const read = await storage.markAnnouncementAsRead(userId, req.params.id);
+      res.json(read);
+    } catch (error) {
+      console.error("Error marking announcement as read:", error);
+      res.status(500).json({ message: "Failed to mark announcement as read" });
+    }
+  });
+
+  // Get all announcements for admin (including unpublished)
+  app.get("/api/admin/announcements", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const announcements = await storage.getAnnouncements(true);
+      res.json(announcements);
+    } catch (error) {
+      console.error("Error fetching announcements for admin:", error);
+      res.status(500).json({ message: "Failed to fetch announcements" });
     }
   });
 

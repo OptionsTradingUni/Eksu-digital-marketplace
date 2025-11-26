@@ -24,6 +24,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"signin" | "signup">("signup");
+  const [authModalDefaultRole, setAuthModalDefaultRole] = useState<"buyer" | "seller" | "both">("both");
   const [showSplash, setShowSplash] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -42,6 +43,7 @@ export default function Landing() {
 
   const handleGetStarted = () => {
     setAuthModalTab("signup");
+    setAuthModalDefaultRole("both");
     setAuthModalOpen(true);
   };
 
@@ -52,6 +54,7 @@ export default function Landing() {
 
   const handleBecomeMerchant = () => {
     setAuthModalTab("signup");
+    setAuthModalDefaultRole("seller");
     setAuthModalOpen(true);
   };
 
@@ -180,8 +183,8 @@ export default function Landing() {
               EKSU Campus Marketplace
             </h1>
             <p className="mt-6 text-lg text-muted-foreground sm:text-xl">
-              Buy and sell with trusted students. From textbooks to electronics,
-              fashion to furniture - your campus marketplace for everything.
+              Buy and sell anything - Fashion, Wigs, Perfumes, Clothes, Electronics, Accounts, and more!
+              Your trusted campus marketplace for students.
             </p>
             <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
               <Button size="lg" onClick={handleGetStarted} data-testid="button-get-started">
@@ -499,6 +502,7 @@ export default function Landing() {
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
         defaultTab={authModalTab}
+        defaultRole={authModalDefaultRole}
       />
     </div>
   );

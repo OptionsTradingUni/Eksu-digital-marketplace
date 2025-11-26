@@ -16,8 +16,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban, Database, Activity, HardDrive } from "lucide-react";
-import type { User, Product } from "@shared/schema";
+import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban, Database, Activity, HardDrive, Megaphone, Pin, Trash2, Edit, Plus, Sparkles, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import type { User, Product, Announcement } from "@shared/schema";
+import { formatDistanceToNow } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export default function AdminPanel() {
@@ -42,6 +49,21 @@ export default function AdminPanel() {
 
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ["/api/admin/products"],
+  });
+
+  const { data: announcements, isLoading: announcementsLoading } = useQuery<Announcement[]>({
+    queryKey: ["/api/admin/announcements"],
+  });
+
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: "",
+    content: "",
+    category: "update" as const,
+    priority: "normal" as const,
+    isPinned: false,
+    isPublished: true,
   });
 
   const verifyUserMutation = useMutation({
@@ -82,6 +104,92 @@ export default function AdminPanel() {
       });
     },
   });
+
+  const createAnnouncementMutation = useMutation({
+    mutationFn: async (data: typeof newAnnouncement) => {
+      return await apiRequest("POST", "/api/announcements", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      setAnnouncementDialogOpen(false);
+      setNewAnnouncement({
+        title: "",
+        content: "",
+        category: "update",
+        priority: "normal",
+        isPinned: false,
+        isPublished: true,
+      });
+      toast({
+        title: "Success",
+        description: "Announcement created successfully",
+      });
+    },
+  });
+
+  const updateAnnouncementMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof newAnnouncement> }) => {
+      return await apiRequest("PATCH", `/api/announcements/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      setAnnouncementDialogOpen(false);
+      setEditingAnnouncement(null);
+      toast({
+        title: "Success",
+        description: "Announcement updated successfully",
+      });
+    },
+  });
+
+  const deleteAnnouncementMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/announcements/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      toast({
+        title: "Success",
+        description: "Announcement deleted successfully",
+      });
+    },
+  });
+
+  const handleOpenAnnouncementDialog = (announcement?: Announcement) => {
+    if (announcement) {
+      setEditingAnnouncement(announcement);
+      setNewAnnouncement({
+        title: announcement.title,
+        content: announcement.content,
+        category: announcement.category as "update" | "feature" | "alert",
+        priority: announcement.priority as "low" | "normal" | "high",
+        isPinned: announcement.isPinned || false,
+        isPublished: announcement.isPublished || true,
+      });
+    } else {
+      setEditingAnnouncement(null);
+      setNewAnnouncement({
+        title: "",
+        content: "",
+        category: "update",
+        priority: "normal",
+        isPinned: false,
+        isPublished: true,
+      });
+    }
+    setAnnouncementDialogOpen(true);
+  };
+
+  const handleSubmitAnnouncement = () => {
+    if (editingAnnouncement) {
+      updateAnnouncementMutation.mutate({ id: editingAnnouncement.id, data: newAnnouncement });
+    } else {
+      createAnnouncementMutation.mutate(newAnnouncement);
+    }
+  };
 
   if (authLoading || !user) {
     return (
@@ -159,9 +267,10 @@ export default function AdminPanel() {
 
       {/* Tabs for User and Product Management */}
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="products" data-testid="tab-products">Products</TabsTrigger>
+          <TabsTrigger value="announcements" data-testid="tab-announcements">Campus Updates</TabsTrigger>
           <TabsTrigger value="metrics" data-testid="tab-metrics">Database Metrics</TabsTrigger>
         </TabsList>
 
@@ -333,6 +442,239 @@ export default function AdminPanel() {
                 </div>
               ) : (
                 <p className="text-center py-8 text-muted-foreground">No products found</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="announcements">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5" />
+                  Campus Updates Management
+                </CardTitle>
+              </div>
+              <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => handleOpenAnnouncementDialog()} data-testid="button-new-announcement">
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Announcement
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{editingAnnouncement ? "Edit Announcement" : "Create New Announcement"}</DialogTitle>
+                    <DialogDescription>
+                      {editingAnnouncement 
+                        ? "Update the announcement details below." 
+                        : "Create a new announcement to share with all users."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Title</Label>
+                      <Input
+                        id="title"
+                        value={newAnnouncement.title}
+                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                        placeholder="Announcement title"
+                        data-testid="input-announcement-title"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="content">Content</Label>
+                      <Textarea
+                        id="content"
+                        value={newAnnouncement.content}
+                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                        placeholder="Write the announcement content..."
+                        className="min-h-32"
+                        data-testid="input-announcement-content"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="category">Category</Label>
+                        <Select
+                          value={newAnnouncement.category}
+                          onValueChange={(value: "update" | "feature" | "alert") => 
+                            setNewAnnouncement({ ...newAnnouncement, category: value })
+                          }
+                        >
+                          <SelectTrigger data-testid="select-announcement-category">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="update">
+                              <span className="flex items-center gap-2">
+                                <Megaphone className="h-4 w-4" />
+                                Update
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="feature">
+                              <span className="flex items-center gap-2">
+                                <Sparkles className="h-4 w-4" />
+                                New Feature
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="alert">
+                              <span className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4" />
+                                Alert
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="priority">Priority</Label>
+                        <Select
+                          value={newAnnouncement.priority}
+                          onValueChange={(value: "low" | "normal" | "high") => 
+                            setNewAnnouncement({ ...newAnnouncement, priority: value })
+                          }
+                        >
+                          <SelectTrigger data-testid="select-announcement-priority">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="isPinned"
+                            checked={newAnnouncement.isPinned}
+                            onCheckedChange={(checked) => 
+                              setNewAnnouncement({ ...newAnnouncement, isPinned: checked })
+                            }
+                          />
+                          <Label htmlFor="isPinned" className="flex items-center gap-1">
+                            <Pin className="h-4 w-4" />
+                            Pin to top
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="isPublished"
+                            checked={newAnnouncement.isPublished}
+                            onCheckedChange={(checked) => 
+                              setNewAnnouncement({ ...newAnnouncement, isPublished: checked })
+                            }
+                          />
+                          <Label htmlFor="isPublished">Publish immediately</Label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setAnnouncementDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleSubmitAnnouncement}
+                      disabled={!newAnnouncement.title || !newAnnouncement.content || createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending}
+                      data-testid="button-submit-announcement"
+                    >
+                      {createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending ? "Saving..." : editingAnnouncement ? "Update" : "Create"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {announcementsLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-24" />
+                  ))}
+                </div>
+              ) : announcements && announcements.length > 0 ? (
+                <div className="space-y-4">
+                  {announcements.map((announcement) => {
+                    const categoryConfig = {
+                      update: { icon: Megaphone, className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" },
+                      feature: { icon: Sparkles, className: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30" },
+                      alert: { icon: AlertTriangle, className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" },
+                    };
+                    const config = categoryConfig[announcement.category as keyof typeof categoryConfig] || categoryConfig.update;
+                    const CategoryIcon = config.icon;
+                    
+                    return (
+                      <div 
+                        key={announcement.id} 
+                        className={`border rounded-lg p-4 ${!announcement.isPublished ? 'opacity-60' : ''}`}
+                        data-testid={`card-admin-announcement-${announcement.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <Badge className={config.className} variant="outline">
+                                <CategoryIcon className="h-3 w-3 mr-1" />
+                                {announcement.category}
+                              </Badge>
+                              {announcement.isPinned && (
+                                <Badge variant="secondary" className="gap-1">
+                                  <Pin className="h-3 w-3" />
+                                  Pinned
+                                </Badge>
+                              )}
+                              {!announcement.isPublished && (
+                                <Badge variant="outline">Draft</Badge>
+                              )}
+                              {announcement.priority === "high" && (
+                                <Badge variant="destructive" className="text-xs">High Priority</Badge>
+                              )}
+                            </div>
+                            <h3 className="font-semibold text-lg mb-1">{announcement.title}</h3>
+                            <p className="text-muted-foreground text-sm line-clamp-2">{announcement.content}</p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {announcement.createdAt && formatDistanceToNow(new Date(announcement.createdAt), { addSuffix: true })}
+                              {announcement.views !== null && ` · ${announcement.views} views`}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleOpenAnnouncementDialog(announcement)}
+                              data-testid={`button-edit-announcement-${announcement.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => deleteAnnouncementMutation.mutate(announcement.id)}
+                              disabled={deleteAnnouncementMutation.isPending}
+                              data-testid={`button-delete-announcement-${announcement.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Megaphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="font-semibold mb-2">No Announcements Yet</h3>
+                  <p className="text-muted-foreground mb-4">Create your first announcement to inform users about updates.</p>
+                  <Button onClick={() => handleOpenAnnouncementDialog()} data-testid="button-create-first-announcement">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Announcement
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
