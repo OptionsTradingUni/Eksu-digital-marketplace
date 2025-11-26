@@ -1,0 +1,77 @@
+Core Environment Variables & Configuration
+This section defines the crucial variables required for the application's financial model.
+# .env file example
+
+# The percentage of the item price charged as a website fee (10% = 0.10)
+WEBSITE_COMMISSION_RATE=0.10
+
+# The fixed amount (in Naira) required for the seller security deposit.
+# This amount is locked in the seller's wallet until they stop selling.
+# Start at 0, but set to a real value (e.g., 2000) when ready to implement charges.
+SECURITY_DEPOSIT_AMOUNT=0
+
+B. Seller Verification (Cost-Saving Manual Process)
+The expensive, real-time identity check is replaced by an Admin-controlled manual process.
+1. Onboarding Requirement: Seller profile requires upload of a Student ID photo and a recent selfie.
+2. Admin Action: A flag is set (is_verified: false on the Seller document).
+3. Withdrawal/Pre-Order Check: Before any significant financial action (first withdrawal > ₦5000 or Pre-Order Badge request), the system checks the is_verified flag.
+4. Admin Review: An Admin contacts the seller (e.g., via WhatsApp) to conduct a liveness check/video call comparison against the uploaded ID/Selfie.
+5. Status Update: Admin manually updates is_verified: true
+
+Seller Pricing & Financial Logic
+A. Paystack Fee Formula (Local Nigeria)
+The system must use the following standard Paystack formula for calculations:
+• Fee: 1.5% of Price + ₦100 fixed fee.
+• Waiver: The ₦100 fee is waived for transactions below ₦2,500.
+• Cap: Fees are capped at ₦2,000 maximum.
+B. Real-Time Pricing Calculator (Mandatory UI)
+When a seller is listing a product, the UI must show the cost breakdown based on the Seller's desired final profit:
+
+This live calculation helps the seller determine the best price to set for their goods.
+5. Wallet & Financial Structure
+A. Wallet Structure (Firestore Document)
+Each user (buyer/seller) will have a single wallet document containing two core fields:
+1. balance (number): Available funds for withdrawal or purchase.
+2. security_deposit_locked (number): Funds reserved according to the SECURITY_DEPOSIT_AMOUNT ENV variable.
+B. Security Deposit Enforcement
+1. Initial State: When a seller signs up, security_deposit_locked is ₦0.
+2. First Sale Trigger: Upon the successful completion of a seller's first transaction, the system must check the SECURITY_DEPOSIT_AMOUNT.
+• If security_deposit_locked < SECURITY_DEPOSIT_AMOUNT, the difference is immediately debited from the balance and moved to security_deposit_locked.
+• Locking Rule: Funds in security_deposit_locked are non-withdrawable unless the seller requests permanent account closure/deactivation.
+6. Negotiation Feature Flow (New)
+The system must implement a transparent negotiation process that automatically recalculates fees.
+1. Buyer Action: Buyer clicks a "Negotiate Price" button on a product page.
+2. Offer Submission: Buyer submits a proposed price (N_offer) lower than the current price.
+3. Seller Notification: Seller receives the offer notification.
+4. Seller Decision (Acceptance): If the seller clicks "Accept Offer":
+• The system immediately runs the calculation logic (Section 4.B) using the new N_offer price.
+• The UI confirms the new breakdown: "If you accept ₦[N_offer], your new commission is ₦[Commission] and your net profit is ₦[Net Profit]".
+• Upon confirmation, the product price is instantly updated to N_offer in the Firestore document.
+
+Core Transaction Flow (Buy Now)
+1. Purchase: Buyer initiates transaction, funds are deducted from the buyer's balance and held in escrow (requires a server function/Paystack mechanism to hold the fund).
+2. Delivery: The seller is notified to arrange delivery.
+3. Confirmation: The buyer clicks "Confirm Receipt" upon receiving the item.
+4. Payout: The held funds are released:
+• WEBSITE_COMMISSION_RATE + Paystack Fee is transferred to the platform's account.
+• Net Profit is transferred to the seller's balance.
+• Security Deposit Check: If this is the first sale, the security deposit lock-up is enforced (Section 5.B).
+8. Firestore Data Paths
+All data must adhere to the public/private structure for security:
+• Public (Global Product Listings):
+• /artifacts/{appId}/public/data/products/{productId}
+• Private (User Wallets & Profiles):
+• /artifacts/{appId}/users/{userId}/wallet/main
+• /artifacts/{appId}/users/{userId}/profile/details
+• /artifacts/{appId}/users/{userId}/transactions/{transactionId}
+Note that I don’t use firestore or firebase so you find the best applicable free way for me
+ 
+5. Transaction: The buyer is then prompted to purchase the item at the new, negotiated price.
+
+Note this : remove any paystack or flutterwave code I want to use monnify for everything 
+Code monnify into it all 
+Paystack doesn’t offer instant disbursement , use monnify and make research on it and use all their available payment methods I’ll get api later  
+
+
+
+
