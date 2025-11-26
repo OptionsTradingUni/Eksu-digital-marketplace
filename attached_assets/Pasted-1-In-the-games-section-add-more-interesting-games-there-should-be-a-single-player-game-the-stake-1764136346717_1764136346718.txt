@@ -1,0 +1,94 @@
+1. In the games section, add more interesting games, there should be a single player game, the stake can be from 100-100k depends on what the person want to input that's if he wants to bet or stake if not doesntbned to stake it depends on the person and there should be a single user game 
+User and computer 
+And multiplayers
+2. Signing up, if you sign up as a buyer or a seller or both how does the interface looks like would it work 
+3. If you click become a merchant, it should be in sell when you want to sign up 
+4. Welcome or daily login rewards should be very low too, make sure nothing can be hacked or no loop holes or chabging dates etc or hacking with fake payment receipts or verification 
+5. Not only fashion or furniture, wigs perfume clothes etc can be sold too edit it the motto , even accounts details and categories too  
+6. Help Center
+Find answers to common questions or contact our support team for assistance.
+Verify Your Account
+Get verified for trust badges
+Wallet & Payments
+Add funds or withdraw money
+Report an Issue
+Report scams or violations
+Technical Help
+Fix app or account issues Work on this they're not working 
+7. Can I change my role from buyer to seller?
+Yes! Go to Profile > Settings and select 'Both' as your role. This allows you to buy and sell items on the marketplace. It's not exactly as it is here 
+8.Submit a Support Ticket
+Can't find your answer in the FAQ? Submit a ticket and we'll get back to you within 24 hours.
+Category no option to add image in messages
+9.Referral History
+Track all your referred users and their status
+All (0)
+Pending (0)
+Completed (0)
+doesnt look properly arranged 
+10. How the profile page looks like is somehow 
+11
+12. Let there be a blog posts somehow or post to outside and the admin should have a page that looks verified it posts when there's an update it sends it out or when there's changes and every new people is susvribed or follow it automatically tho they could unfollow later . But everyone follows it, it posts and it has the marketplace picture too, just like a celebrity unit, give it a normal name not blog posts something great 
+13. ⁠in the bottom navigation and top navigation there’s too much reputation maybe you need to edit and change and add that one in no12 
+14. ⁠Does the seller option works 
+15. ⁠does the admin side works
+16. ⁠make the chatbot more smart, it should know about every sections of the app and when it wants to reply let it stop replying with ** 
+17. ⁠Advanced AI scam detection (listing analysis)
+Video uploads for products
+Push notifications
+Instant search (<300ms with Nigerian slang support)
+Voice-to-text posting UI
+Multi-language support UI
+USSD payment fallback
+AI listing generation from photos + voice
+Server-side conversation history for chatbot
+Revenue Model
+
+The platform is designed to support multiple revenue streams:
+
+Featured listings and boosts
+Transaction fees via escrow
+Premium seller subscriptions
+Banner advertisements
+Promoted notifications
+Security Features
+
+Role-based access control
+User verification system
+Trust scores and ratings
+Report and flagging system
+Admin moderation tools
+Session management with PostgreSQL
+Prepared for NIN/BVN verification
+Notes
+
+All images uploaded to /uploads directory
+WebSocket server on /ws path
+Maximum 10 images per product listing
+5MB file size limit per image
+Database automatically created via Replit integration
+18. 
+Save searches with price alerts
+Get notified when prices drop
+Search history tracking
+Seller Tools
+
+Draft product listings (save for later)
+Scheduled posting (post at specific time)
+Boost/featured listings with payment
+Seller analytics dashboard
+Best posting time suggestions
+Voice Posting (Ready for Integration)
+
+Database support for voice transcriptions
+Multi-language support (Pidgin, Yoruba, Igbo, Hausa, English)
+Audio file storage
+Support & Disputes
+
+Support ticket system with priority levels
+Dispute resolution center
+Photo evidence upload
+Admin resolution tracking
+19. Referral code and link is the same for everyone solve it 
+20. ⁠referral code optional in sign ups
+21. ⁠Build an algorithm machine 
