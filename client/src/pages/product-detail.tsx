@@ -10,9 +10,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, X, Loader2, MapPin } from "lucide-react";
+import { Upload, X, Loader2, MapPin, Tag } from "lucide-react";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 const EKSU_LOCATIONS = [
@@ -41,6 +42,8 @@ export default function CreateProduct() {
       title: "",
       description: "",
       price: "0",
+      originalPrice: "",
+      isOnSale: false,
       categoryId: "",
       condition: "good",
       location: "",
@@ -50,6 +53,8 @@ export default function CreateProduct() {
       isBoosted: false,
     },
   });
+  
+  const isOnSale = form.watch("isOnSale");
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertProduct) => {
@@ -225,13 +230,66 @@ export default function CreateProduct() {
                 )}
               />
 
+              {/* Sale Price Section */}
+              <div className="border rounded-md p-4 space-y-4 bg-muted/30">
+                <FormField
+                  control={form.control}
+                  name="isOnSale"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between">
+                      <div className="space-y-0.5">
+                        <FormLabel className="flex items-center gap-2">
+                          <Tag className="h-4 w-4" />
+                          Put on Sale
+                        </FormLabel>
+                        <p className="text-sm text-muted-foreground">
+                          Show a discount badge and strikethrough original price
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-on-sale"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {isOnSale && (
+                  <FormField
+                    control={form.control}
+                    name="originalPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Original Price (₦) - Before Discount</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="Enter original price before discount"
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-original-price"
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          This will be shown with a strikethrough next to the sale price
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+
               <div className="grid gap-6 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Price (₦)</FormLabel>
+                      <FormLabel>{isOnSale ? "Sale Price (₦)" : "Price (₦)"}</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -240,6 +298,11 @@ export default function CreateProduct() {
                           data-testid="input-product-price"
                         />
                       </FormControl>
+                      {isOnSale && (
+                        <p className="text-xs text-muted-foreground">
+                          This is the discounted price customers will pay
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

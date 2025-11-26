@@ -100,6 +100,8 @@ export const products = pgTable("products", {
   title: varchar("title", { length: 200 }).notNull(),
   description: text("description").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  originalPrice: decimal("original_price", { precision: 10, scale: 2 }), // Original price before discount
+  isOnSale: boolean("is_on_sale").default(false), // Whether the product is on sale
   images: text("images").array().notNull().default(sql`ARRAY[]::text[]`), // Array of image URLs
   condition: productConditionEnum("condition").notNull().default("good"),
   location: varchar("location"), // Campus area
@@ -939,6 +941,11 @@ export const insertProductSchema = createInsertSchema(products, {
     (val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0,
     "Please enter a valid price"
   ),
+  originalPrice: z.string().optional().nullable().refine(
+    (val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0),
+    "Please enter a valid original price"
+  ),
+  isOnSale: z.boolean().optional().default(false),
   condition: z.enum(["new", "like_new", "good", "fair"]).default("good"),
   location: z.string().optional().nullable(),
   images: z.array(z.string()).optional().default([]),

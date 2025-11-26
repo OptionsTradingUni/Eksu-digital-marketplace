@@ -104,6 +104,10 @@ export function ProductCard({ product }: ProductCardProps) {
   const imageUrl = images[0] || "/placeholder-product.png";
   const priceValue = product.price;
   const price = typeof priceValue === 'number' ? priceValue : parseFloat(priceValue as string) || 0;
+  const originalPriceValue = product.originalPrice;
+  const originalPrice = originalPriceValue ? (typeof originalPriceValue === 'number' ? originalPriceValue : parseFloat(originalPriceValue as string) || 0) : null;
+  const isOnSale = product.isOnSale && originalPrice && originalPrice > price;
+  const discountPercent = isOnSale ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -168,12 +172,17 @@ export function ProductCard({ product }: ProductCardProps) {
               />
             )}
           </Button>
-          {product.isBoosted && (
+          {isOnSale && (
+            <Badge className="absolute top-2 left-2 bg-red-500 text-white">
+              -{discountPercent}% OFF
+            </Badge>
+          )}
+          {product.isBoosted && !isOnSale && (
             <Badge className="absolute top-2 left-2 bg-yellow-500 text-white">
               Featured
             </Badge>
           )}
-          {product.condition && !product.isBoosted && (
+          {product.condition && !product.isBoosted && !isOnSale && (
             <Badge variant="secondary" className="absolute top-2 left-2">
               {product.condition}
             </Badge>
@@ -184,9 +193,16 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.title}
           </h3>
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-2xl font-bold text-primary" data-testid={`text-product-price-${product.id}`}>
-              ₦{price.toLocaleString()}
-            </p>
+            <div className="flex flex-col">
+              <p className="text-2xl font-bold text-primary" data-testid={`text-product-price-${product.id}`}>
+                ₦{price.toLocaleString()}
+              </p>
+              {isOnSale && originalPrice && (
+                <p className="text-sm text-muted-foreground line-through" data-testid={`text-product-original-price-${product.id}`}>
+                  ₦{originalPrice.toLocaleString()}
+                </p>
+              )}
+            </div>
             <Button
               variant="outline"
               size="icon"
