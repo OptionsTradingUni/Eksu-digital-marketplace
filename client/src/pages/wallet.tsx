@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,19 +7,34 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle, XCircle, Wallet as WalletIcon } from "lucide-react";
+import { Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle, XCircle, Wallet as WalletIcon, Loader2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import type { Wallet, Transaction } from "@shared/schema";
+
+interface Bank {
+  name: string;
+  code: string;
+}
+
+interface VerifiedAccount {
+  accountNumber: string;
+  accountName: string;
+  bankCode: string;
+}
 
 export default function WalletPage() {
   const { toast } = useToast();
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [bankName, setBankName] = useState("");
+  const [selectedBankCode, setSelectedBankCode] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [accountName, setAccountName] = useState("");
+  const [verifiedAccount, setVerifiedAccount] = useState<VerifiedAccount | null>(null);
+  const [accountConfirmed, setAccountConfirmed] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -28,6 +43,48 @@ export default function WalletPage() {
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/wallet/transactions"],
   });
+
+  const { data: banks, isLoading: banksLoading } = useQuery<Bank[]>({
+    queryKey: ["/api/monnify/banks"],
+  });
+
+  const verifyAccountMutation = useMutation({
+    mutationFn: async ({ accountNumber, bankCode }: { accountNumber: string; bankCode: string }) => {
+      const response = await fetch(`/api/monnify/verify-account?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to verify account");
+      }
+      return response.json() as Promise<VerifiedAccount>;
+    },
+    onSuccess: (data) => {
+      setVerifiedAccount(data);
+      setVerificationError(null);
+      setAccountConfirmed(false);
+    },
+    onError: (error: Error) => {
+      setVerifiedAccount(null);
+      setVerificationError(error.message);
+      setAccountConfirmed(false);
+    },
+  });
+
+  useEffect(() => {
+    if (accountNumber.length === 10 && selectedBankCode) {
+      setVerifiedAccount(null);
+      setAccountConfirmed(false);
+      setVerificationError(null);
+      verifyAccountMutation.mutate({ accountNumber, bankCode: selectedBankCode });
+    } else {
+      setVerifiedAccount(null);
+      setAccountConfirmed(false);
+      setVerificationError(null);
+    }
+  }, [accountNumber, selectedBankCode]);
+
+  const selectedBank = banks?.find(b => b.code === selectedBankCode);
 
   const depositMutation = useMutation({
     mutationFn: async (amount: string) => {
@@ -53,7 +110,7 @@ export default function WalletPage() {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: async (data: { amount: string; bankName: string; accountNumber: string; accountName: string }) => {
+    mutationFn: async (data: { amount: string; bankName: string; accountNumber: string; accountName: string; bankCode: string }) => {
       const response = await apiRequest("POST", "/api/wallet/withdraw", data);
       return response.json();
     },
@@ -65,9 +122,11 @@ export default function WalletPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
       setWithdrawAmount("");
-      setBankName("");
+      setSelectedBankCode("");
       setAccountNumber("");
-      setAccountName("");
+      setVerifiedAccount(null);
+      setAccountConfirmed(false);
+      setVerificationError(null);
     },
     onError: (error: any) => {
       toast({
@@ -101,15 +160,37 @@ export default function WalletPage() {
       });
       return;
     }
-    if (!bankName || !accountNumber || !accountName) {
+    if (!selectedBankCode || !selectedBank) {
       toast({
         title: "Missing information",
-        description: "Please fill in all bank details",
+        description: "Please select a bank",
         variant: "destructive",
       });
       return;
     }
-    withdrawMutation.mutate({ amount: withdrawAmount, bankName, accountNumber, accountName });
+    if (!verifiedAccount) {
+      toast({
+        title: "Account not verified",
+        description: "Please wait for account verification to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!accountConfirmed) {
+      toast({
+        title: "Account not confirmed",
+        description: "Please confirm the account name before proceeding",
+        variant: "destructive",
+      });
+      return;
+    }
+    withdrawMutation.mutate({ 
+      amount: withdrawAmount, 
+      bankName: selectedBank.name, 
+      accountNumber: verifiedAccount.accountNumber, 
+      accountName: verifiedAccount.accountName,
+      bankCode: selectedBankCode,
+    });
   };
 
   const getTransactionIcon = (type: string) => {
@@ -150,6 +231,11 @@ export default function WalletPage() {
         {isCredit ? "+" : "-"}{parseFloat(amount).toLocaleString()}
       </span>
     );
+  };
+
+  const handleAccountNumberChange = (value: string) => {
+    const numericValue = value.replace(/\D/g, '').slice(0, 10);
+    setAccountNumber(numericValue);
   };
 
   if (walletLoading) {
@@ -268,40 +354,97 @@ export default function WalletPage() {
                   data-testid="input-withdraw-amount"
                 />
               </div>
+              
               <div>
-                <Label htmlFor="bank-name">Bank Name</Label>
-                <Input
-                  id="bank-name"
-                  placeholder="e.g., Access Bank"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  data-testid="input-bank-name"
-                />
+                <Label htmlFor="bank-select">Select Bank</Label>
+                {banksLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : (
+                  <Select
+                    value={selectedBankCode}
+                    onValueChange={(value) => {
+                      setSelectedBankCode(value);
+                      setVerifiedAccount(null);
+                      setAccountConfirmed(false);
+                    }}
+                  >
+                    <SelectTrigger id="bank-select" data-testid="select-bank">
+                      <SelectValue placeholder="Choose your bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks?.map((bank) => (
+                        <SelectItem key={bank.code} value={bank.code} data-testid={`bank-option-${bank.code}`}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="account-number">Account Number</Label>
                 <Input
                   id="account-number"
                   placeholder="10 digit account number"
                   value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value)}
+                  onChange={(e) => handleAccountNumberChange(e.target.value)}
                   maxLength={10}
                   data-testid="input-account-number"
                 />
+                {accountNumber.length > 0 && accountNumber.length < 10 && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {10 - accountNumber.length} more digit{10 - accountNumber.length !== 1 ? 's' : ''} needed
+                  </p>
+                )}
               </div>
-              <div>
-                <Label htmlFor="account-name">Account Name</Label>
-                <Input
-                  id="account-name"
-                  placeholder="Name on account"
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  data-testid="input-account-name"
-                />
-              </div>
+
+              {verifyAccountMutation.isPending && (
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg" data-testid="verification-loading">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Verifying account...</span>
+                </div>
+              )}
+
+              {verificationError && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg" data-testid="verification-error">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">{verificationError}</span>
+                </div>
+              )}
+
+              {verifiedAccount && (
+                <div className="space-y-3">
+                  <div className="p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg" data-testid="verified-account">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="font-medium text-green-700 dark:text-green-300">Account Verified</span>
+                    </div>
+                    <p className="text-lg font-semibold" data-testid="text-account-name">
+                      {verifiedAccount.accountName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedBank?.name} - {verifiedAccount.accountNumber}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      id="confirm-account"
+                      checked={accountConfirmed}
+                      onCheckedChange={(checked) => setAccountConfirmed(checked === true)}
+                      data-testid="checkbox-confirm-account"
+                    />
+                    <Label htmlFor="confirm-account" className="text-sm cursor-pointer">
+                      I confirm this is the correct account for withdrawal
+                    </Label>
+                  </div>
+                </div>
+              )}
+
               <Button
                 onClick={handleWithdraw}
-                disabled={withdrawMutation.isPending}
+                disabled={withdrawMutation.isPending || !verifiedAccount || !accountConfirmed}
                 className="w-full"
                 data-testid="button-withdraw"
               >

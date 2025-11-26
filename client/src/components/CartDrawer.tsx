@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useCart, CartItemWithProduct } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -130,6 +131,7 @@ interface CartDrawerProps {
 export function CartDrawer({ children }: CartDrawerProps) {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const {
     cartItems,
@@ -192,10 +194,8 @@ export function CartDrawer({ children }: CartDrawerProps) {
   };
 
   const handleCheckout = () => {
-    toast({
-      title: "Checkout",
-      description: "Checkout functionality coming soon!",
-    });
+    setIsOpen(false);
+    setLocation("/checkout");
   };
 
   if (!isAuthenticated) {

@@ -25,6 +25,8 @@ import MyAdsPage from "@/pages/my-ads";
 import GamesPage from "@/pages/games";
 import SupportPage from "@/pages/support";
 import AnnouncementsPage from "@/pages/announcements";
+import CheckoutPage from "@/pages/checkout";
+import PaymentCallbackPage from "@/pages/payment-callback";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { useEffect } from "react";
 
@@ -131,6 +133,16 @@ function Router() {
           <Route path="/announcements" component={() => (
             <ErrorBoundary>
               <AnnouncementsPage />
+            </ErrorBoundary>
+          )} />
+          <Route path="/checkout" component={() => (
+            <ErrorBoundary>
+              <CheckoutPage />
+            </ErrorBoundary>
+          )} />
+          <Route path="/payment/callback" component={() => (
+            <ErrorBoundary>
+              <PaymentCallbackPage />
             </ErrorBoundary>
           )} />
           <Route component={() => (

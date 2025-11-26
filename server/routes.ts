@@ -701,7 +701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Verify bank account
+  // Verify bank account (POST - legacy)
   app.post('/api/monnify/verify-bank', isAuthenticated, async (req: any, res) => {
     try {
       if (!isMonnifyConfigured()) {
@@ -712,6 +712,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!accountNumber || !bankCode) {
         return res.status(400).json({ message: "Account number and bank code are required" });
+      }
+
+      const accountDetails = await monnify.verifyBankAccount(accountNumber, bankCode);
+      res.json(accountDetails);
+    } catch (error) {
+      console.error("Error verifying bank account:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to verify bank account" });
+    }
+  });
+
+  // Verify bank account (GET with query params)
+  app.get('/api/monnify/verify-account', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const { accountNumber, bankCode } = req.query;
+
+      if (!accountNumber || !bankCode) {
+        return res.status(400).json({ message: "Account number and bank code are required" });
+      }
+
+      if (typeof accountNumber !== 'string' || accountNumber.length !== 10) {
+        return res.status(400).json({ message: "Account number must be 10 digits" });
+      }
+
+      if (typeof bankCode !== 'string') {
+        return res.status(400).json({ message: "Bank code is required" });
       }
 
       const accountDetails = await monnify.verifyBankAccount(accountNumber, bankCode);
