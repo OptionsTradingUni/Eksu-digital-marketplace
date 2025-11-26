@@ -190,6 +190,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Auto-follow system user and send welcome DM
+      const systemUserId = process.env.SYSTEM_USER_ID;
+      if (systemUserId) {
+        try {
+          // Check if system user exists
+          const systemUser = await storage.getUser(systemUserId);
+          if (systemUser) {
+            // Create follow relationship (new user follows system user)
+            await storage.followUser(user.id, systemUserId);
+            console.log(`New user ${user.email} now follows system user @${systemUser.firstName || 'CampusPlugOfficial'}`);
+            
+            // Send welcome DM from system user
+            const welcomeMessage = `Welcome to EKSU Marketplace! We're excited to have you join our campus trading community.
+
+Here are some quick tips to get started:
+1. Complete your profile to build trust with other users
+2. Always use our in-app payment system for safe transactions
+3. Meet in public places on campus for item exchanges
+4. Report any suspicious activity to keep our community safe
+
+Need help? Just reply to this message or use the Help button in the app.
+
+Happy trading!`;
+
+            await storage.createMessage({
+              senderId: systemUserId,
+              receiverId: user.id,
+              content: welcomeMessage,
+            });
+            console.log(`Welcome DM sent to ${user.email} from system user`);
+          } else {
+            console.log(`System user with ID ${systemUserId} not found`);
+          }
+        } catch (autoFollowError: any) {
+          // Log but don't fail registration if auto-follow fails
+          console.error("Error processing auto-follow/welcome DM:", autoFollowError.message);
+        }
+      }
+
       // Remove password from user object before storing in session/sending to client
       const { password: _, ...safeUser } = user;
 

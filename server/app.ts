@@ -22,6 +22,47 @@ export function log(message: string, source = "express") {
 
 export const app = express();
 
+// Trust proxy for proper HTTPS detection behind load balancers
+app.set('trust proxy', 1);
+
+// Security middleware - HTTPS redirect and security headers
+app.use((req, res, next) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Skip security redirect for WebSocket upgrades and internal health checks
+  const isWebSocketUpgrade = req.headers.upgrade?.toLowerCase() === 'websocket';
+  const isHealthCheck = req.path === '/health' || req.path === '/healthz';
+  
+  // HTTPS redirect in production - only if explicitly coming from HTTP
+  // Platforms like Render/Replit terminate TLS at the edge and forward HTTP
+  // We only redirect if x-forwarded-proto explicitly says 'http', not when it's undefined
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (isProduction && !isWebSocketUpgrade && !isHealthCheck && forwardedProto === 'http') {
+    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  }
+  
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Content Security Policy (relaxed for development)
+  if (isProduction) {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'self';"
+    );
+  }
+  
+  // Strict Transport Security (HSTS) - only in production over HTTPS
+  if (isProduction && (req.secure || forwardedProto === 'https')) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  
+  next();
+});
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown

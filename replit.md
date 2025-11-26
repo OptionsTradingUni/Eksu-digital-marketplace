@@ -370,6 +370,34 @@ The platform is designed to support multiple revenue streams:
 - Admin moderation tools
 - Session management with PostgreSQL
 - Prepared for NIN/BVN verification
+- HTTPS enforcement and security headers
+- Safety Shield Modal for first-time buyer-seller interactions
+- Admin/Support role system via environment variables
+
+## Safety Features (November 26, 2025)
+
+### Safety Shield Modal
+- Displays payment safety warnings before first chat with any seller
+- Per-seller acknowledgment stored in localStorage (`safety_acknowledged_${sellerId}`)
+- Provides clear guidelines to prevent payment scams
+
+### Enhanced Seller Card
+- Trust score display on product view
+- User ratings and review count
+- Joined date and online status
+- Response time indicator
+- Verification badge display
+
+### Auto-Follow System
+- New users automatically follow @CampusPlugOfficial system account
+- Welcome DM sent with marketplace tips and safety guidelines
+- System user configured via `SYSTEM_USER_ID` environment variable
+
+### Admin/Support Role System
+- Dual check system: environment variables AND database role
+- Environment variables: `SUPER_ADMIN_IDS`, `SUPPORT_IDS` (comma-separated user IDs)
+- `/api/auth/user` returns `isAdmin` and `isSupport` flags for frontend
+- Support staff can access moderation features without full admin access
 
 ## Notes
 
