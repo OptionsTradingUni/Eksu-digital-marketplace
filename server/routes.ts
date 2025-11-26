@@ -1225,6 +1225,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User self-verification route
+  app.post("/api/users/verify-account", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber, location, ninNumber } = req.body;
+
+      // Validate that at least one verification method is provided
+      if (!phoneNumber && !location && !ninNumber) {
+        return res.status(400).json({ 
+          message: "Please provide at least one verification field (phone number, location, or NIN)" 
+        });
+      }
+
+      // Build update data
+      const updateData: Record<string, any> = {
+        isVerified: true,
+      };
+
+      // Build verification badges array
+      const existingUser = await storage.getUser(userId);
+      const existingBadges = existingUser?.verificationBadges || [];
+      const newBadges = [...existingBadges];
+
+      if (phoneNumber && phoneNumber.trim()) {
+        updateData.phoneNumber = phoneNumber.trim();
+        if (!newBadges.includes("phone")) {
+          newBadges.push("phone");
+        }
+      }
+
+      if (location && location.trim()) {
+        updateData.location = location.trim();
+        if (!newBadges.includes("location")) {
+          newBadges.push("location");
+        }
+      }
+
+      if (ninNumber && ninNumber.trim()) {
+        // Store NIN hash for security (don't store actual NIN)
+        const crypto = await import("crypto");
+        const ninHash = crypto.createHash("sha256").update(ninNumber.trim()).digest("hex");
+        updateData.ninHash = ninHash;
+        updateData.ninVerified = true;
+        updateData.ninVerificationDate = new Date();
+        if (!newBadges.includes("nin")) {
+          newBadges.push("nin");
+        }
+      }
+
+      updateData.verificationBadges = newBadges;
+
+      const updated = await storage.updateUserProfile(userId, updateData);
+      const { password: _, ...safeUser } = updated;
+      
+      console.log(`User ${userId} verified with badges: ${newBadges.join(", ")}`);
+      res.json(safeUser);
+    } catch (error: any) {
+      console.error("Error verifying user account:", error);
+      res.status(500).json({ message: error.message || "Failed to verify account" });
+    }
+  });
+
   // Follow routes
   app.post("/api/users/:id/follow", isAuthenticated, async (req: any, res) => {
     try {
@@ -2404,6 +2470,270 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== WORD BATTLE AI ENDPOINTS (PUBLIC) ====================
+
+  // Validate a word using Groq AI
+  app.post("/api/games/validate-word", async (req: any, res) => {
+    try {
+      const { word } = req.body;
+      
+      if (!word || typeof word !== "string" || word.length < 2) {
+        return res.status(400).json({ 
+          valid: false, 
+          message: "Word must be at least 2 characters",
+          feedback: "Too short! Words need at least 2 letters."
+        });
+      }
+
+      const cleanWord = word.trim().toLowerCase();
+      
+      // Check for non-alphabetic characters
+      if (!/^[a-z]+$/.test(cleanWord)) {
+        return res.status(400).json({ 
+          valid: false, 
+          message: "Word must contain only letters",
+          feedback: "Letters only please! No numbers or symbols."
+        });
+      }
+
+      const apiKey = process.env.GROQ_API_KEY;
+      
+      if (!apiKey) {
+        // Fallback to basic validation without AI
+        return res.json({ 
+          valid: true, 
+          usedFallback: true,
+          feedback: "Word accepted (offline mode)",
+          funFact: null
+        });
+      }
+
+      const groq = new Groq({ apiKey });
+      
+      const prompt = `You are a word validation assistant for a word game. Determine if "${cleanWord}" is a valid English word.
+
+IMPORTANT RULES:
+1. The word must be a real English word found in a standard dictionary
+2. Proper nouns (names of people, places, brands) are NOT valid
+3. Abbreviations and acronyms are NOT valid
+4. Slang that isn't in standard dictionaries is NOT valid
+5. The word must be commonly recognized
+
+Respond in this exact JSON format:
+{
+  "isValid": true or false,
+  "feedback": "A fun, encouraging message about the word (1 sentence max)",
+  "funFact": "An interesting fact about the word if valid, or null if invalid"
+}
+
+Examples:
+- "cat" -> {"isValid": true, "feedback": "Nice! A classic word choice.", "funFact": "Cats have been domesticated for about 10,000 years!"}
+- "xyz" -> {"isValid": false, "feedback": "That's not a real word - try again!", "funFact": null}
+- "london" -> {"isValid": false, "feedback": "That's a proper noun (place name) - regular words only!", "funFact": null}`;
+
+      const completion = await groq.chat.completions.create({
+        messages: [
+          { role: "system", content: "You are a helpful word game assistant. Always respond with valid JSON only." },
+          { role: "user", content: prompt }
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.3,
+        max_tokens: 200,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || "";
+      
+      try {
+        // Extract JSON from response (handle potential markdown wrapping)
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("No JSON found in response");
+        }
+        
+        const result = JSON.parse(jsonMatch[0]);
+        
+        res.json({
+          valid: result.isValid === true,
+          feedback: result.feedback || (result.isValid ? "Valid word!" : "Not a valid word."),
+          funFact: result.funFact || null,
+          word: cleanWord
+        });
+      } catch (parseError) {
+        console.error("Failed to parse word validation response:", parseError);
+        // Fallback - assume valid if we can't parse
+        res.json({ 
+          valid: true, 
+          usedFallback: true,
+          feedback: "Word accepted!",
+          funFact: null,
+          word: cleanWord
+        });
+      }
+    } catch (error: any) {
+      console.error("Error validating word with Groq:", error);
+      
+      if (error.status === 401) {
+        return res.json({ 
+          valid: true, 
+          usedFallback: true,
+          feedback: "Word accepted (API unavailable)",
+          funFact: null
+        });
+      }
+      
+      if (error.status === 429) {
+        return res.json({ 
+          valid: true, 
+          usedFallback: true,
+          feedback: "Word accepted (rate limited)",
+          funFact: null
+        });
+      }
+
+      // Default fallback - accept the word
+      res.json({ 
+        valid: true, 
+        usedFallback: true,
+        feedback: "Word accepted!",
+        funFact: null
+      });
+    }
+  });
+
+  // Generate a good set of letters for Word Battle using Groq AI
+  app.get("/api/games/generate-letters", async (req: any, res) => {
+    try {
+      const apiKey = process.env.GROQ_API_KEY;
+      
+      // Fallback letter generation (same as client-side)
+      const generateFallbackLetters = () => {
+        const VOWELS = "AEIOU";
+        const CONSONANTS = "BCDFGHJKLMNPQRSTVWXYZ";
+        const letters: string[] = [];
+        
+        const vowelCount = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < vowelCount; i++) {
+          letters.push(VOWELS[Math.floor(Math.random() * VOWELS.length)]);
+        }
+        
+        while (letters.length < 7) {
+          letters.push(CONSONANTS[Math.floor(Math.random() * CONSONANTS.length)]);
+        }
+        
+        // Shuffle
+        for (let i = letters.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [letters[i], letters[j]] = [letters[j], letters[i]];
+        }
+        
+        return letters;
+      };
+      
+      if (!apiKey) {
+        return res.json({ 
+          letters: generateFallbackLetters(),
+          hint: null,
+          usedFallback: true
+        });
+      }
+
+      const groq = new Groq({ apiKey });
+      
+      const prompt = `Generate a set of 7 letters for a word game that allows players to form multiple English words.
+
+REQUIREMENTS:
+1. Include exactly 7 letters (can have duplicates)
+2. Include 2-3 vowels (A, E, I, O, U) and 4-5 consonants
+3. The letters should allow forming at least 5 different valid English words
+4. Avoid rare letters like Q, X, Z unless paired with helpful letters
+5. Make it challenging but fair - not too easy, not impossible
+
+Respond in this exact JSON format:
+{
+  "letters": ["A", "R", "T", "S", "E", "N", "O"],
+  "possibleWords": ["star", "rate", "arts", "rest", "torn"],
+  "hint": "A fun hint about one possible word (optional, 1 sentence)"
+}`;
+
+      const completion = await groq.chat.completions.create({
+        messages: [
+          { role: "system", content: "You are a word game designer. Generate letter sets that are fun and challenging. Always respond with valid JSON only." },
+          { role: "user", content: prompt }
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.8,
+        max_tokens: 200,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || "";
+      
+      try {
+        // Extract JSON from response
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("No JSON found in response");
+        }
+        
+        const result = JSON.parse(jsonMatch[0]);
+        
+        // Validate the letters array
+        if (!Array.isArray(result.letters) || result.letters.length !== 7) {
+          throw new Error("Invalid letters array");
+        }
+        
+        const letters = result.letters.map((l: string) => String(l).toUpperCase().charAt(0));
+        
+        // Verify all are valid letters
+        const validLetters = letters.every((l: string) => /^[A-Z]$/.test(l));
+        if (!validLetters) {
+          throw new Error("Invalid letter characters");
+        }
+        
+        res.json({
+          letters,
+          hint: result.hint || null,
+          possibleWordCount: result.possibleWords?.length || 5,
+          usedFallback: false
+        });
+      } catch (parseError) {
+        console.error("Failed to parse letter generation response:", parseError);
+        res.json({ 
+          letters: generateFallbackLetters(),
+          hint: null,
+          usedFallback: true
+        });
+      }
+    } catch (error: any) {
+      console.error("Error generating letters with Groq:", error);
+      
+      // Fallback to random generation
+      const VOWELS = "AEIOU";
+      const CONSONANTS = "BCDFGHJKLMNPQRSTVWXYZ";
+      const letters: string[] = [];
+      
+      const vowelCount = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < vowelCount; i++) {
+        letters.push(VOWELS[Math.floor(Math.random() * VOWELS.length)]);
+      }
+      
+      while (letters.length < 7) {
+        letters.push(CONSONANTS[Math.floor(Math.random() * CONSONANTS.length)]);
+      }
+      
+      // Shuffle
+      for (let i = letters.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [letters[i], letters[j]] = [letters[j], letters[i]];
+      }
+      
+      res.json({ 
+        letters,
+        hint: null,
+        usedFallback: true
+      });
+    }
+  });
+
   // Get single game with players
   app.get("/api/games/:id", isAuthenticated, async (req: any, res) => {
     try {
@@ -2802,7 +3132,7 @@ Generate exactly 10 unique questions with varied topics across all categories.`;
       }
 
       console.log(`Generated ${finalQuestions.length} trivia questions using Groq AI`);
-      res.json({ questions: finalQuestions });
+      res.json({ questions: finalQuestions, isAIGenerated: true });
     } catch (error: any) {
       console.error("Error generating trivia questions with Groq:", error);
       
@@ -2824,6 +3154,191 @@ Generate exactly 10 unique questions with varied topics across all categories.`;
       res.status(500).json({ 
         message: "Failed to generate questions",
         useFallback: true
+      });
+    }
+  });
+
+  // Generate trivia questions with category filtering using Groq AI
+  app.post("/api/games/generate-trivia-questions", isAuthenticated, async (req: any, res) => {
+    try {
+      const apiKey = process.env.GROQ_API_KEY;
+      const { category, difficulty, count = 10 } = req.body;
+      
+      if (!apiKey || apiKey === "not-set") {
+        console.warn("GROQ_API_KEY not configured, returning fallback signal");
+        return res.status(503).json({ 
+          message: "AI question generation not available. Please configure GROQ_API_KEY.",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+
+      const groq = new Groq({ apiKey });
+
+      const allCategories = ["General Knowledge", "Nigerian Culture", "Campus Life", "Sports", "Entertainment"];
+      const validCategory = category && allCategories.includes(category) ? category : null;
+      const difficulties = ["easy", "medium", "hard"];
+      const validDifficulty = difficulty && difficulties.includes(difficulty) ? difficulty : null;
+      const questionCount = Math.min(Math.max(parseInt(count) || 10, 5), 20);
+
+      let categoryInstruction = "";
+      if (validCategory) {
+        categoryInstruction = `Focus ONLY on the category: ${validCategory}. All questions must be from this category.`;
+      } else {
+        categoryInstruction = `Mix questions from these categories: ${allCategories.join(", ")}.`;
+      }
+
+      let difficultyInstruction = "";
+      if (validDifficulty) {
+        difficultyInstruction = `All questions should be ${validDifficulty} difficulty.`;
+      } else {
+        difficultyInstruction = `Mix of difficulty levels: roughly 40% easy, 40% medium, 20% hard questions.`;
+      }
+
+      const prompt = `Generate exactly ${questionCount} unique trivia questions for Nigerian university students.
+      
+Requirements:
+${categoryInstruction}
+${difficultyInstruction}
+- Questions should be relevant to Nigerian culture, campus life, current affairs, sports, and entertainment
+- Each question must have exactly 4 answer options
+- Questions should be educational, fun, and appropriate for university students
+- Include variety: Nigerian music artists, Nollywood, Nigerian football, campus slang, Nigerian history, food, festivals, pop culture, tech, social media trends
+- Make questions engaging and current - include recent events and trending topics from 2023-2024
+- Avoid repeating similar questions - each should test different knowledge
+
+Return ONLY a valid JSON array with this exact structure (no markdown, no explanation):
+[
+  {
+    "id": 1,
+    "category": "${validCategory || 'General Knowledge'}",
+    "question": "What is the capital of Nigeria?",
+    "options": ["Lagos", "Abuja", "Kano", "Ibadan"],
+    "correctAnswer": 1,
+    "difficulty": "easy"
+  }
+]
+
+The correctAnswer is the 0-based index of the correct option in the options array.
+Generate exactly ${questionCount} unique questions with varied topics.`;
+
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: "You are a trivia question generator specializing in Nigerian culture, university life, and current events. You create engaging, accurate, and educational questions. You always respond with valid JSON arrays only, no markdown formatting or explanations. Your questions are fresh, relevant, and test real knowledge."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.85,
+        max_tokens: 4000,
+      });
+
+      const responseContent = completion.choices[0]?.message?.content;
+      
+      if (!responseContent) {
+        console.error("Empty response from Groq API");
+        return res.status(500).json({ 
+          message: "Failed to generate questions - empty response",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+
+      // Parse and validate the response
+      let questions;
+      try {
+        // Clean the response - remove any markdown formatting
+        let cleanedResponse = responseContent.trim();
+        if (cleanedResponse.startsWith("```json")) {
+          cleanedResponse = cleanedResponse.slice(7);
+        }
+        if (cleanedResponse.startsWith("```")) {
+          cleanedResponse = cleanedResponse.slice(3);
+        }
+        if (cleanedResponse.endsWith("```")) {
+          cleanedResponse = cleanedResponse.slice(0, -3);
+        }
+        cleanedResponse = cleanedResponse.trim();
+
+        questions = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error("Failed to parse Groq response:", parseError);
+        console.error("Raw response:", responseContent);
+        return res.status(500).json({ 
+          message: "Failed to parse AI response",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+
+      // Validate the questions structure
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.error("Invalid questions array from Groq");
+        return res.status(500).json({ 
+          message: "Invalid questions format from AI",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+
+      // Validate and sanitize each question
+      const validatedQuestions = questions.map((q: any, index: number) => ({
+        id: index + 1,
+        category: allCategories.includes(q.category) ? q.category : (validCategory || "General Knowledge"),
+        question: String(q.question || ""),
+        options: Array.isArray(q.options) && q.options.length === 4 
+          ? q.options.map((opt: any) => String(opt))
+          : ["Option A", "Option B", "Option C", "Option D"],
+        correctAnswer: typeof q.correctAnswer === "number" && q.correctAnswer >= 0 && q.correctAnswer <= 3 
+          ? q.correctAnswer 
+          : 0,
+        difficulty: difficulties.includes(q.difficulty) ? q.difficulty : "medium"
+      }));
+
+      // Filter out any questions with empty question text
+      const finalQuestions = validatedQuestions.filter((q: any) => q.question && q.question.length > 0).slice(0, questionCount);
+      
+      if (finalQuestions.length < questionCount) {
+        console.warn(`Only got ${finalQuestions.length} valid questions from AI (requested ${questionCount})`);
+      }
+
+      console.log(`Generated ${finalQuestions.length} trivia questions using Groq AI${validCategory ? ` for category: ${validCategory}` : ""}`);
+      res.json({ 
+        questions: finalQuestions, 
+        isAIGenerated: true,
+        category: validCategory,
+        difficulty: validDifficulty,
+        count: finalQuestions.length
+      });
+    } catch (error: any) {
+      console.error("Error generating trivia questions with Groq:", error);
+      
+      // Check for specific API errors
+      if (error.status === 401) {
+        return res.status(503).json({ 
+          message: "Invalid Groq API key",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+      
+      if (error.status === 429) {
+        return res.status(503).json({ 
+          message: "Rate limit exceeded. Please try again later.",
+          useFallback: true,
+          isAIGenerated: false
+        });
+      }
+
+      res.status(500).json({ 
+        message: "Failed to generate questions",
+        useFallback: true,
+        isAIGenerated: false
       });
     }
   });

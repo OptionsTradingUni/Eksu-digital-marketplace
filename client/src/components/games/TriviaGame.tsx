@@ -5,7 +5,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, Trophy, Bot, User, Check, X, RotateCcw, HelpCircle, Sparkles, Loader2, AlertCircle, Zap } from "lucide-react";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { 
+  Clock, 
+  Trophy, 
+  Bot, 
+  User, 
+  Check, 
+  X, 
+  RotateCcw, 
+  HelpCircle, 
+  Sparkles, 
+  Loader2, 
+  AlertCircle, 
+  Zap,
+  Brain,
+  BookOpen,
+  Gamepad2,
+  Music,
+  GraduationCap,
+  Globe,
+  Star,
+  Crown,
+  Flame,
+  Target
+} from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface TriviaGameProps {
@@ -22,6 +52,15 @@ interface Question {
   correctAnswer: number;
   difficulty: "easy" | "medium" | "hard";
 }
+
+const CATEGORIES = [
+  { value: "all", label: "All Categories", icon: Globe },
+  { value: "General Knowledge", label: "General Knowledge", icon: BookOpen },
+  { value: "Nigerian Culture", label: "Nigerian Culture", icon: Crown },
+  { value: "Campus Life", label: "Campus Life", icon: GraduationCap },
+  { value: "Sports", label: "Sports", icon: Gamepad2 },
+  { value: "Entertainment", label: "Entertainment", icon: Music },
+];
 
 const QUESTIONS: Question[] = [
   {
@@ -355,9 +394,13 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const getRandomQuestions = (count: number): Question[] => {
-  const shuffled = shuffleArray(QUESTIONS);
-  return shuffled.slice(0, count);
+const getRandomQuestions = (count: number, category?: string): Question[] => {
+  let filtered = [...QUESTIONS];
+  if (category && category !== "all") {
+    filtered = QUESTIONS.filter(q => q.category === category);
+  }
+  const shuffled = shuffleArray(filtered);
+  return shuffled.slice(0, Math.min(count, shuffled.length));
 };
 
 const generateAIAnswers = (gameQuestions: Question[]): number[] => {
@@ -388,16 +431,23 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [aiAnswer, setAIAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
-  const [gamePhase, setGamePhase] = useState<"loading" | "playing" | "results">("loading");
+  const [gamePhase, setGamePhase] = useState<"setup" | "loading" | "playing" | "results">("setup");
   const [playerAnswers, setPlayerAnswers] = useState<(number | null)[]>([]);
   const [aiAnswers, setAIAnswers] = useState<number[]>([]);
   const [isAIGenerated, setIsAIGenerated] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Generating fresh questions...");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [streak, setStreak] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
 
-  const fetchQuestionsFromAPI = async (): Promise<Question[] | null> => {
+  const fetchQuestionsFromAPI = async (category?: string): Promise<Question[] | null> => {
     try {
       setLoadingMessage("Generating fresh AI questions...");
-      const response = await apiRequest("POST", "/api/games/trivia/questions", {});
+      const body: { category?: string; count?: number } = { count: 10 };
+      if (category && category !== "all") {
+        body.category = category;
+      }
+      const response = await apiRequest("POST", "/api/games/generate-trivia-questions", body);
       const data = await response.json();
       
       if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
@@ -410,21 +460,24 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     }
   };
 
-  const initializeGame = useCallback(async () => {
+  const startGame = async () => {
     setGamePhase("loading");
     setLoadingMessage("Generating fresh questions...");
     
     let gameQuestions: Question[] | null = null;
     
-    gameQuestions = await fetchQuestionsFromAPI();
+    gameQuestions = await fetchQuestionsFromAPI(selectedCategory);
     
-    if (gameQuestions && gameQuestions.length >= 10) {
+    if (gameQuestions && gameQuestions.length >= 5) {
       setIsAIGenerated(true);
       setQuestions(gameQuestions);
     } else {
       setLoadingMessage("Using classic questions...");
       setIsAIGenerated(false);
-      gameQuestions = getRandomQuestions(10);
+      gameQuestions = getRandomQuestions(10, selectedCategory !== "all" ? selectedCategory : undefined);
+      if (gameQuestions.length < 5) {
+        gameQuestions = getRandomQuestions(10);
+      }
       setQuestions(gameQuestions);
     }
     
@@ -439,13 +492,11 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     setAIAnswer(null);
     setShowResult(false);
     setPlayerAnswers([]);
+    setStreak(0);
+    setMaxStreak(0);
     
     setGamePhase("playing");
-  }, []);
-
-  useEffect(() => {
-    initializeGame();
-  }, [initializeGame]);
+  };
 
   useEffect(() => {
     if (gamePhase !== "playing" || showResult || questions.length === 0) return;
@@ -479,9 +530,21 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     const currentAIAnswer = aiAnswers[currentQuestionIndex];
     setAIAnswer(currentAIAnswer);
     
-    if (answerIndex === currentQuestion.correctAnswer) {
+    const isCorrect = answerIndex === currentQuestion.correctAnswer;
+    
+    if (isCorrect) {
       const points = currentQuestion.difficulty === "easy" ? 10 : currentQuestion.difficulty === "medium" ? 15 : 20;
-      setPlayerScore((prev) => prev + points);
+      const streakBonus = Math.floor(streak / 3) * 5;
+      setPlayerScore((prev) => prev + points + streakBonus);
+      setStreak(prev => {
+        const newStreak = prev + 1;
+        if (newStreak > maxStreak) {
+          setMaxStreak(newStreak);
+        }
+        return newStreak;
+      });
+    } else {
+      setStreak(0);
     }
     
     if (currentAIAnswer === currentQuestion.correctAnswer) {
@@ -511,32 +574,202 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     }
   }, [gamePhase, playerScore, aiScore, onGameEnd]);
 
-  const resetGame = async () => {
-    await initializeGame();
+  const resetGame = () => {
+    setGamePhase("setup");
+    setQuestions([]);
+    setCurrentQuestionIndex(0);
+    setPlayerScore(0);
+    setAIScore(0);
+    setTimeLeft(15);
+    setSelectedAnswer(null);
+    setAIAnswer(null);
+    setShowResult(false);
+    setPlayerAnswers([]);
+    setAIAnswers([]);
+    setIsAIGenerated(false);
+    setStreak(0);
+    setMaxStreak(0);
   };
+
+  const getCategoryIcon = (categoryValue: string) => {
+    const cat = CATEGORIES.find(c => c.value === categoryValue);
+    return cat?.icon || Globe;
+  };
+
+  if (gamePhase === "setup") {
+    return (
+      <Card className="overflow-visible">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Brain className="h-6 w-6 text-primary" />
+            Trivia Challenge
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center space-y-4"
+          >
+            <div className="relative mx-auto w-24 h-24 mb-4">
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  rotate: [0, 5, -5, 0]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Infinity,
+                  repeatType: "reverse"
+                }}
+                className="w-full h-full rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center shadow-lg"
+              >
+                <HelpCircle className="h-12 w-12 text-white" />
+              </motion.div>
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.3, 1],
+                  opacity: [0.5, 1, 0.5]
+                }}
+                transition={{ 
+                  duration: 1.5, 
+                  repeat: Infinity 
+                }}
+                className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center"
+              >
+                <Sparkles className="h-4 w-4 text-yellow-800" />
+              </motion.div>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold">Test Your Knowledge</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Answer 10 questions faster and more accurately than the AI opponent!
+              </p>
+            </div>
+          </motion.div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Choose Category
+              </label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full" data-testid="select-category">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    return (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{cat.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between text-sm p-3 bg-muted/50 rounded-md">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                <span>AI Opponent</span>
+              </div>
+              <Badge variant="secondary">Smart AI</Badge>
+            </div>
+
+            {!isPractice && (
+              <div className="flex items-center justify-between text-sm p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-md border border-green-500/20">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span>Stake</span>
+                </div>
+                <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 border-0">
+                  {stake} NGN
+                </Badge>
+              </div>
+            )}
+
+            {isPractice && (
+              <div className="flex items-center justify-between text-sm p-3 bg-blue-500/10 rounded-md border border-blue-500/20">
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span>Mode</span>
+                </div>
+                <Badge className="bg-blue-500/20 text-blue-600 dark:text-blue-400 border-0">
+                  Practice
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          <Button 
+            onClick={startGame} 
+            className="w-full gap-2" 
+            size="lg"
+            data-testid="button-start-trivia"
+          >
+            <Zap className="h-5 w-5" />
+            Start Challenge
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (gamePhase === "loading" || questions.length === 0) {
     return (
       <Card>
         <CardContent className="p-8">
-          <div className="flex flex-col items-center justify-center space-y-4">
+          <div className="flex flex-col items-center justify-center space-y-6">
             <div className="relative">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <Zap className="h-4 w-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary" />
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary"
+              />
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [1, 0.7, 1]
+                }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              >
+                <Brain className="h-6 w-6 text-primary" />
+              </motion.div>
             </div>
             <div className="text-center space-y-2">
-              <p className="font-medium">{loadingMessage}</p>
+              <motion.p 
+                animate={{ opacity: [1, 0.5, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="font-medium text-lg"
+              >
+                {loadingMessage}
+              </motion.p>
               <p className="text-sm text-muted-foreground">
                 Preparing your trivia challenge...
               </p>
+              {selectedCategory !== "all" && (
+                <Badge className={getCategoryColor(selectedCategory)}>
+                  {CATEGORIES.find(c => c.value === selectedCategory)?.label}
+                </Badge>
+              )}
             </div>
-            <div className="w-full max-w-xs space-y-2">
+            <div className="w-full max-w-xs space-y-3">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4 mx-auto" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <div className="space-y-2 mt-4">
+                <Skeleton className="h-12 w-full rounded-md" />
+                <Skeleton className="h-12 w-full rounded-md" />
+                <Skeleton className="h-12 w-full rounded-md" />
+                <Skeleton className="h-12 w-full rounded-md" />
+              </div>
             </div>
           </div>
         </CardContent>
@@ -567,23 +800,47 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     }
   };
 
+  const getDifficultyIcon = (difficulty: string) => {
+    switch (difficulty) {
+      case "easy": return Star;
+      case "medium": return Flame;
+      case "hard": return Crown;
+      default: return Star;
+    }
+  };
+
+  const DifficultyIcon = getDifficultyIcon(currentQuestion.difficulty);
+
   return (
     <div className="w-full max-w-lg mx-auto space-y-4">
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
               <HelpCircle className="h-5 w-5" />
               Trivia
-              {isAIGenerated && (
-                <Badge className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  AI
+              {isAIGenerated ? (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <Badge className="text-xs bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white border-0 shadow-md">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    AI Generated
+                  </Badge>
+                </motion.div>
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  <BookOpen className="h-3 w-3 mr-1" />
+                  Classic
                 </Badge>
               )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
               {!isPractice && (
                 <Badge variant="secondary" className="text-xs">
-                  Stake: {stake} NGN
+                  {stake} NGN
                 </Badge>
               )}
               {isPractice && (
@@ -591,31 +848,54 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
                   Practice
                 </Badge>
               )}
-            </CardTitle>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {gamePhase === "playing" && (
             <>
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-primary" />
-                  <span className="font-bold">{playerScore}</span>
-                  <span className="text-xs text-muted-foreground">pts</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <User className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-lg">{playerScore}</span>
+                    {streak >= 2 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="ml-1 text-xs text-orange-500"
+                      >
+                        <Flame className="inline h-3 w-3" />{streak}
+                      </motion.span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex-1 text-center">
-                  <span className="text-sm text-muted-foreground">
-                    Question {currentQuestionIndex + 1} / {questions.length}
-                  </span>
+                  <motion.span 
+                    key={currentQuestionIndex}
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="text-sm font-medium"
+                  >
+                    {currentQuestionIndex + 1} / {questions.length}
+                  </motion.span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">pts</span>
-                  <span className="font-bold">{aiScore}</span>
-                  <Bot className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="min-w-0">
+                    <span className="font-bold text-lg">{aiScore}</span>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
               </div>
 
-              <Progress value={((currentQuestionIndex) / questions.length) * 100} className="h-2" />
+              <Progress 
+                value={((currentQuestionIndex) / questions.length) * 100} 
+                className="h-2"
+              />
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -624,32 +904,47 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
                   </Badge>
                   <div className="flex items-center gap-2">
                     <Badge className={getDifficultyColor(currentQuestion.difficulty)}>
+                      <DifficultyIcon className="h-3 w-3 mr-1" />
                       {currentQuestion.difficulty}
                     </Badge>
-                    <Badge variant={timeLeft <= 5 ? "destructive" : "secondary"}>
-                      <Clock className="h-3 w-3 mr-1" />
-                      {timeLeft}s
-                    </Badge>
+                    <motion.div
+                      animate={timeLeft <= 5 ? { scale: [1, 1.1, 1] } : {}}
+                      transition={{ duration: 0.3, repeat: timeLeft <= 5 ? Infinity : 0 }}
+                    >
+                      <Badge variant={timeLeft <= 5 ? "destructive" : "secondary"}>
+                        <Clock className="h-3 w-3 mr-1" />
+                        {timeLeft}s
+                      </Badge>
+                    </motion.div>
                   </div>
                 </div>
 
-                <motion.div
-                  key={currentQuestionIndex}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-4 bg-muted/30 rounded-md"
-                >
-                  <p className="font-medium text-center">{currentQuestion.question}</p>
-                </motion.div>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentQuestionIndex}
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -50 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    className="p-4 bg-gradient-to-br from-muted/50 to-muted/30 rounded-lg border"
+                  >
+                    <p className="font-medium text-center text-base leading-relaxed">
+                      {currentQuestion.question}
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
 
                 <div className="grid gap-2">
                   {currentQuestion.options.map((option, index) => {
                     let buttonStyle = "";
+                    let isCorrect = index === currentQuestion.correctAnswer;
+                    let isSelected = index === selectedAnswer;
+                    let isWrong = isSelected && !isCorrect;
                     
                     if (showResult) {
-                      if (index === currentQuestion.correctAnswer) {
-                        buttonStyle = "bg-green-500/20 border-green-500 text-green-700 dark:text-green-300";
-                      } else if (index === selectedAnswer && index !== currentQuestion.correctAnswer) {
+                      if (isCorrect) {
+                        buttonStyle = "bg-green-500/20 border-green-500 text-green-700 dark:text-green-300 ring-2 ring-green-500/50";
+                      } else if (isWrong) {
                         buttonStyle = "bg-red-500/20 border-red-500 text-red-700 dark:text-red-300";
                       }
                     }
@@ -657,61 +952,80 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
                     return (
                       <motion.div
                         key={index}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
                       >
                         <Button
                           variant="outline"
-                          className={`w-full justify-start text-left h-auto py-3 px-4 ${buttonStyle} ${
-                            selectedAnswer === index && !showResult ? "ring-2 ring-primary" : ""
+                          className={`w-full justify-start text-left h-auto py-3 px-4 transition-all duration-200 ${buttonStyle} ${
+                            selectedAnswer === index && !showResult ? "ring-2 ring-primary shadow-md" : ""
                           }`}
                           onClick={() => !showResult && handleAnswer(index)}
                           disabled={showResult}
                           data-testid={`answer-${index}`}
                         >
-                          <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold mr-3">
-                            {String.fromCharCode(65 + index)}
-                          </span>
+                          <motion.span 
+                            animate={showResult && isCorrect ? { scale: [1, 1.2, 1] } : {}}
+                            transition={{ duration: 0.3 }}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mr-3 flex-shrink-0 ${
+                              showResult && isCorrect 
+                                ? "bg-green-500 text-white" 
+                                : showResult && isWrong 
+                                ? "bg-red-500 text-white"
+                                : "bg-muted"
+                            }`}
+                          >
+                            {showResult && isCorrect ? (
+                              <Check className="h-4 w-4" />
+                            ) : showResult && isWrong ? (
+                              <X className="h-4 w-4" />
+                            ) : (
+                              String.fromCharCode(65 + index)
+                            )}
+                          </motion.span>
                           <span className="flex-1">{option}</span>
-                          {showResult && index === currentQuestion.correctAnswer && (
-                            <Check className="h-5 w-5 text-green-500" />
-                          )}
-                          {showResult && index === selectedAnswer && index !== currentQuestion.correctAnswer && (
-                            <X className="h-5 w-5 text-red-500" />
-                          )}
                         </Button>
                       </motion.div>
                     );
                   })}
                 </div>
 
-                {showResult && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-md text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      {selectedAnswer === currentQuestion.correctAnswer ? (
-                        <span className="text-green-600 dark:text-green-400">Correct!</span>
-                      ) : selectedAnswer === null ? (
-                        <span className="text-muted-foreground">Time's up!</span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400">Wrong!</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {aiAnswer === currentQuestion.correctAnswer ? (
-                        <span className="text-green-600 dark:text-green-400">AI got it right</span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400">AI got it wrong</span>
-                      )}
-                      <Bot className="h-4 w-4" />
-                    </div>
-                  </motion.div>
-                )}
+                <AnimatePresence>
+                  {showResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm border"
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        {selectedAnswer === currentQuestion.correctAnswer ? (
+                          <motion.span 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="text-green-600 dark:text-green-400 font-medium"
+                          >
+                            Correct! +{currentQuestion.difficulty === "easy" ? 10 : currentQuestion.difficulty === "medium" ? 15 : 20}
+                          </motion.span>
+                        ) : selectedAnswer === null ? (
+                          <span className="text-muted-foreground">Time's up!</span>
+                        ) : (
+                          <span className="text-red-600 dark:text-red-400">Wrong!</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {aiAnswer === currentQuestion.correctAnswer ? (
+                          <span className="text-green-600 dark:text-green-400 text-xs">AI correct</span>
+                        ) : (
+                          <span className="text-red-600 dark:text-red-400 text-xs">AI wrong</span>
+                        )}
+                        <Bot className="h-4 w-4" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </>
           )}
@@ -722,53 +1036,116 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
               animate={{ opacity: 1, scale: 1 }}
               className="text-center space-y-6 py-4"
             >
-              <div className="flex items-center justify-center gap-3">
-                <Trophy className={`h-10 w-10 ${winner === "player" ? "text-yellow-500" : "text-muted-foreground"}`} />
-                <div>
-                  <p className="text-2xl font-bold">
-                    {winner === "player" ? "You Won!" : winner === "tie" ? "It's a Tie!" : "AI Won!"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Game Complete</p>
+              <motion.div 
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                className="flex items-center justify-center gap-3"
+              >
+                <div className={`p-4 rounded-full ${
+                  winner === "player" 
+                    ? "bg-gradient-to-br from-yellow-400 to-orange-500" 
+                    : winner === "tie" 
+                    ? "bg-gradient-to-br from-blue-400 to-purple-500"
+                    : "bg-muted"
+                }`}>
+                  <Trophy className={`h-10 w-10 ${
+                    winner === "player" || winner === "tie" ? "text-white" : "text-muted-foreground"
+                  }`} />
                 </div>
+              </motion.div>
+              
+              <div>
+                <motion.p 
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-2xl font-bold"
+                >
+                  {winner === "player" ? "Victory!" : winner === "tie" ? "It's a Tie!" : "AI Wins!"}
+                </motion.p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {isAIGenerated ? "AI-Generated Questions" : "Classic Questions"}
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div className="p-4 bg-muted/30 rounded-md">
+              <div className="grid grid-cols-2 gap-4">
+                <motion.div 
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className={`p-4 rounded-lg ${
+                    winner === "player" ? "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30" : "bg-muted/30"
+                  }`}
+                >
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <User className="h-5 w-5 text-primary" />
                     <span className="font-medium">You</span>
+                    {winner === "player" && <Crown className="h-4 w-4 text-yellow-500" />}
                   </div>
                   <p className="text-3xl font-bold">{playerScore}</p>
                   <p className="text-sm text-muted-foreground">
                     {playerAnswers.filter((a, i) => a === questions[i]?.correctAnswer).length}/{questions.length} correct
                   </p>
-                </div>
-                <div className="p-4 bg-muted/30 rounded-md">
+                  {maxStreak >= 2 && (
+                    <p className="text-xs text-orange-500 mt-1">
+                      <Flame className="inline h-3 w-3" /> Best streak: {maxStreak}
+                    </p>
+                  )}
+                </motion.div>
+                <motion.div 
+                  initial={{ x: 20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className={`p-4 rounded-lg ${
+                    winner === "ai" ? "bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30" : "bg-muted/30"
+                  }`}
+                >
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Bot className="h-5 w-5 text-muted-foreground" />
                     <span className="font-medium">AI</span>
+                    {winner === "ai" && <Crown className="h-4 w-4 text-yellow-500" />}
                   </div>
                   <p className="text-3xl font-bold">{aiScore}</p>
                   <p className="text-sm text-muted-foreground">
                     {aiAnswers.filter((a, i) => a === questions[i]?.correctAnswer).length}/{questions.length} correct
                   </p>
-                </div>
+                </motion.div>
               </div>
 
               {!isPractice && (
-                <p className="text-sm text-muted-foreground">
-                  {winner === "player" 
-                    ? `You earned ${(stake * 2 * 0.95).toFixed(0)} NGN!` 
-                    : winner === "tie"
-                    ? "Stakes returned."
-                    : `You lost ${stake} NGN.`}
-                </p>
+                <motion.div
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className={`p-3 rounded-lg ${
+                    winner === "player" 
+                      ? "bg-green-500/10 border border-green-500/30" 
+                      : winner === "tie"
+                      ? "bg-blue-500/10 border border-blue-500/30"
+                      : "bg-red-500/10 border border-red-500/30"
+                  }`}
+                >
+                  <p className="text-sm font-medium">
+                    {winner === "player" 
+                      ? `You earned ${Math.floor(stake * 2 * 0.95)} NGN!` 
+                      : winner === "tie"
+                      ? "Stakes returned to wallet."
+                      : `You lost ${stake} NGN.`}
+                  </p>
+                </motion.div>
               )}
 
-              <Button onClick={resetGame} variant="outline" className="gap-2" data-testid="button-play-again">
-                <RotateCcw className="h-4 w-4" />
-                Play Again
-              </Button>
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                <Button onClick={resetGame} variant="outline" className="gap-2" data-testid="button-play-again">
+                  <RotateCcw className="h-4 w-4" />
+                  Play Again
+                </Button>
+              </motion.div>
             </motion.div>
           )}
         </CardContent>

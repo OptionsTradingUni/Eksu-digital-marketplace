@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation, useSearch } from "wouter";
-import { HelpCircle, MessageCircle, LifeBuoy, Clock, Send, Ticket, CreditCard, User, AlertTriangle, Wrench, ChevronRight, Image, X, Upload, Loader2 } from "lucide-react";
+import { HelpCircle, MessageCircle, LifeBuoy, Clock, Send, Ticket, CreditCard, User, AlertTriangle, Wrench, ChevronRight, Image, X, Upload, Loader2, Phone, MapPin, Shield, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -13,9 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 import type { SupportTicket } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -28,6 +30,17 @@ const ticketFormSchema = z.object({
 
 type TicketFormData = z.infer<typeof ticketFormSchema>;
 
+const verificationFormSchema = z.object({
+  phoneNumber: z.string().optional(),
+  location: z.string().optional(),
+  ninNumber: z.string().optional(),
+}).refine(
+  (data) => data.phoneNumber || data.location || data.ninNumber,
+  { message: "Please provide at least one verification field" }
+);
+
+type VerificationFormData = z.infer<typeof verificationFormSchema>;
+
 const faqData = [
   {
     category: "Account",
@@ -35,7 +48,8 @@ const faqData = [
     questions: [
       {
         question: "How do I verify my account?",
-        answer: "To verify your account, go to your Profile page. You can update your personal information including phone number and location to build trust with other users. A verified profile helps establish credibility in the marketplace."
+        answer: "VERIFICATION_BUTTON",
+        hasButton: true,
       },
       {
         question: "Can I change my role from buyer to seller?",
@@ -138,15 +152,16 @@ const faqData = [
 interface QuickLink {
   title: string;
   description: string;
-  action: "navigate" | "tab";
+  action: "navigate" | "tab" | "modal";
   href?: string;
   tab?: string;
   category?: string;
+  modal?: string;
   icon: typeof User;
 }
 
 const quickLinks: QuickLink[] = [
-  { title: "Verify Your Account", description: "Get verified for trust badges", action: "navigate", href: "/profile", icon: User },
+  { title: "Verify Your Account", description: "Get verified for trust badges", action: "modal", modal: "verification", icon: Shield },
   { title: "Wallet & Payments", description: "Add funds or withdraw money", action: "navigate", href: "/wallet", icon: CreditCard },
   { title: "Report an Issue", description: "Report scams or violations", action: "tab", tab: "contact", category: "report", icon: AlertTriangle },
   { title: "Technical Help", description: "Fix app or account issues", action: "tab", tab: "contact", category: "technical", icon: Wrench },
@@ -195,11 +210,13 @@ function getCategoryIcon(category: string) {
 
 export default function SupportPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState("faq");
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contactFormRef = useRef<HTMLDivElement>(null);
 
@@ -227,6 +244,48 @@ export default function SupportPage() {
       message: "",
       category: "",
       priority: "medium",
+    },
+  });
+
+  const verificationForm = useForm<VerificationFormData>({
+    resolver: zodResolver(verificationFormSchema),
+    defaultValues: {
+      phoneNumber: user?.phoneNumber || "",
+      location: user?.location || "",
+      ninNumber: "",
+    },
+  });
+
+  useEffect(() => {
+    if (user) {
+      verificationForm.reset({
+        phoneNumber: user.phoneNumber || "",
+        location: user.location || "",
+        ninNumber: "",
+      });
+    }
+  }, [user]);
+
+  const verificationMutation = useMutation({
+    mutationFn: async (data: VerificationFormData) => {
+      const response = await apiRequest("POST", "/api/users/verify-account", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Account Verified",
+        description: "Your account has been successfully verified! You now have trust badges on your profile.",
+      });
+      setVerificationModalOpen(false);
+      verificationForm.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Failed to verify your account. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -339,7 +398,33 @@ export default function SupportPage() {
       setTimeout(() => {
         contactFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
+    } else if (link.action === "modal" && link.modal === "verification") {
+      if (!user) {
+        toast({
+          title: "Login Required",
+          description: "Please log in to verify your account.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setVerificationModalOpen(true);
     }
+  };
+
+  const handleOpenVerificationModal = () => {
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to verify your account.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setVerificationModalOpen(true);
+  };
+
+  const onVerificationSubmit = (data: VerificationFormData) => {
+    verificationMutation.mutate(data);
   };
 
   const onSubmit = (data: TicketFormData) => {
@@ -426,7 +511,31 @@ export default function SupportPage() {
                             {item.question}
                           </AccordionTrigger>
                           <AccordionContent className="text-muted-foreground">
-                            {item.answer}
+                            {(item as any).hasButton ? (
+                              <div className="space-y-4">
+                                <p>
+                                  Account verification helps build trust with other users on the marketplace. You can verify your account by providing:
+                                </p>
+                                <ul className="list-disc list-inside space-y-1 ml-2">
+                                  <li><strong>Phone Number</strong> - Verify your phone number for secure communication</li>
+                                  <li><strong>Campus Location</strong> - Confirm your campus area/hostel for local transactions</li>
+                                  <li><strong>NIN (Optional)</strong> - Add your National Identification Number for enhanced verification</li>
+                                </ul>
+                                <p>
+                                  Verified accounts get trust badges displayed on their profile, making it easier to build credibility with buyers and sellers.
+                                </p>
+                                <Button
+                                  onClick={handleOpenVerificationModal}
+                                  className="mt-2"
+                                  data-testid="button-faq-verify-account"
+                                >
+                                  <Shield className="mr-2 h-4 w-4" />
+                                  Verify Your Account Now
+                                </Button>
+                              </div>
+                            ) : (
+                              item.answer
+                            )}
                           </AccordionContent>
                         </AccordionItem>
                       ))}
@@ -754,6 +863,143 @@ export default function SupportPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={verificationModalOpen} onOpenChange={setVerificationModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              Verify Your Account
+            </DialogTitle>
+            <DialogDescription>
+              Complete your verification to get trust badges on your profile. Fill in at least one field below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {user?.isVerified && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="text-sm font-medium text-green-700 dark:text-green-400">Account Already Verified</p>
+                <p className="text-xs text-green-600 dark:text-green-500">
+                  You can still update your verification details below.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <Form {...verificationForm}>
+            <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-4">
+              <FormField
+                control={verificationForm.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Phone Number
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., +234 801 234 5678"
+                        {...field}
+                        data-testid="input-verification-phone"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Your Nigerian phone number for secure communication
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={verificationForm.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Campus Location
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., EKSU Main Campus, Block A"
+                        {...field}
+                        data-testid="input-verification-location"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Your campus area or hostel location
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={verificationForm.control}
+                name="ninNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      NIN (National Identification Number)
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="11-digit NIN"
+                        maxLength={11}
+                        {...field}
+                        data-testid="input-verification-nin"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Optional - for enhanced verification and trust
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {verificationForm.formState.errors.root && (
+                <p className="text-sm text-destructive">
+                  {verificationForm.formState.errors.root.message}
+                </p>
+              )}
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setVerificationModalOpen(false)}
+                  data-testid="button-cancel-verification"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={verificationMutation.isPending}
+                  data-testid="button-submit-verification"
+                >
+                  {verificationMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Verify Account
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
