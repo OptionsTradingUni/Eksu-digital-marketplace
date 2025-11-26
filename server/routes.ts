@@ -35,8 +35,12 @@ import {
   resetPasswordSchema,
   createAnnouncementSchema,
   updateAnnouncementSchema,
+  initiateMonnifyPaymentSchema,
+  insertNegotiationSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
+import { monnify, generatePaymentReference, generateDisbursementReference, isMonnifyConfigured } from "./monnify";
+import { calculatePricingFromSellerPrice, calculateMonnifyFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 
 // Setup multer for image uploads
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -494,6 +498,742 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error processing withdrawal:", error);
       res.status(500).json({ message: "Failed to process withdrawal" });
     }
+  });
+
+  // ==================== MONNIFY PAYMENT ROUTES ====================
+
+  // Check if Monnify is configured
+  app.get('/api/monnify/status', (req, res) => {
+    res.json({ configured: isMonnifyConfigured() });
+  });
+
+  // Initialize a Monnify payment
+  app.post('/api/monnify/initialize', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const validated = initiateMonnifyPaymentSchema.parse(req.body);
+      const amount = parseFloat(validated.amount);
+
+      if (amount < 100) {
+        return res.status(400).json({ message: "Minimum payment amount is ₦100" });
+      }
+
+      const paymentReference = generatePaymentReference();
+      const redirectUrl = `${process.env.APP_URL || 'https://eksu-marketplace.replit.app'}/payment/callback`;
+
+      const paymentResult = await monnify.initializePayment({
+        amount,
+        customerName: `${user.firstName} ${user.lastName}`,
+        customerEmail: user.email,
+        paymentReference,
+        paymentDescription: validated.paymentDescription || `${validated.purpose} - EKSU Marketplace`,
+        redirectUrl,
+        metadata: {
+          userId,
+          purpose: validated.purpose,
+        },
+      });
+
+      // Store payment record in database
+      await storage.createMonnifyPayment({
+        userId,
+        transactionReference: paymentResult.transactionReference,
+        paymentReference,
+        amount: amount.toString(),
+        purpose: validated.purpose,
+        status: 'PENDING',
+        paymentDescription: validated.paymentDescription || null,
+        checkoutUrl: paymentResult.checkoutUrl,
+      });
+
+      res.json({
+        checkoutUrl: paymentResult.checkoutUrl,
+        transactionReference: paymentResult.transactionReference,
+        paymentReference,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error initializing Monnify payment:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to initialize payment" });
+    }
+  });
+
+  // Verify a Monnify payment by reference
+  app.get('/api/monnify/verify/:reference', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const { reference } = req.params;
+      const userId = req.user.id;
+
+      // Get payment from database
+      const payment = await storage.getMonnifyPaymentByReference(reference);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (payment.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to verify this payment" });
+      }
+
+      // Verify with Monnify
+      const transactionStatus = await monnify.verifyTransaction(reference);
+
+      // Update payment status in database
+      const paidAt = transactionStatus.paymentStatus === 'PAID' && transactionStatus.paidOn
+        ? new Date(transactionStatus.paidOn)
+        : undefined;
+      
+      await storage.updateMonnifyPaymentStatus(reference, transactionStatus.paymentStatus, paidAt);
+
+      // If payment is successful, credit wallet
+      if (transactionStatus.paymentStatus === 'PAID' && payment.status !== 'PAID') {
+        const wallet = await storage.getOrCreateWallet(userId);
+        await storage.updateWalletBalance(userId, payment.amount, 'add');
+        
+        await storage.createTransaction({
+          walletId: wallet.id,
+          type: 'deposit',
+          amount: payment.amount,
+          description: `Monnify deposit - ${payment.purpose}`,
+          status: 'completed',
+          reference: payment.paymentReference,
+        });
+      }
+
+      res.json({
+        status: transactionStatus.paymentStatus,
+        amountPaid: transactionStatus.amountPaid,
+        paymentMethod: transactionStatus.paymentMethod,
+        paidOn: transactionStatus.paidOn,
+      });
+    } catch (error) {
+      console.error("Error verifying Monnify payment:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to verify payment" });
+    }
+  });
+
+  // Get user's Monnify payments
+  app.get('/api/monnify/payments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const payments = await storage.getUserMonnifyPayments(userId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching Monnify payments:", error);
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  // Monnify webhook handler (no auth - verified by signature)
+  app.post('/api/monnify/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+      const signature = req.headers['monnify-signature'] as string;
+      const payload = req.body.toString();
+
+      if (!signature || !monnify.verifyWebhookSignature(payload, signature)) {
+        console.error("Invalid Monnify webhook signature");
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+
+      const webhookData = JSON.parse(payload);
+      const { transactionReference, paymentStatus, amountPaid, paidOn } = webhookData;
+
+      // Find payment in database
+      const payment = await storage.getMonnifyPaymentByReference(transactionReference);
+      if (!payment) {
+        console.error(`Monnify webhook: Payment not found for reference ${transactionReference}`);
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      // Update payment status
+      const paidAtDate = paymentStatus === 'PAID' && paidOn ? new Date(paidOn) : undefined;
+      await storage.updateMonnifyPaymentStatus(transactionReference, paymentStatus, paidAtDate);
+
+      // Credit wallet if payment is successful
+      if (paymentStatus === 'PAID' && payment.status !== 'PAID') {
+        const wallet = await storage.getOrCreateWallet(payment.userId);
+        await storage.updateWalletBalance(payment.userId, amountPaid.toString(), 'add');
+        
+        await storage.createTransaction({
+          walletId: wallet.id,
+          type: 'deposit',
+          amount: amountPaid.toString(),
+          description: `Monnify deposit - ${payment.purpose}`,
+          status: 'completed',
+          reference: payment.paymentReference,
+        });
+
+        console.log(`Monnify webhook: Credited ₦${amountPaid} to user ${payment.userId}`);
+      }
+
+      res.json({ message: "Webhook processed successfully" });
+    } catch (error) {
+      console.error("Error processing Monnify webhook:", error);
+      res.status(500).json({ message: "Failed to process webhook" });
+    }
+  });
+
+  // Get list of banks
+  app.get('/api/monnify/banks', async (req, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const banks = await monnify.getBankList();
+      res.json(banks);
+    } catch (error) {
+      console.error("Error fetching bank list:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch bank list" });
+    }
+  });
+
+  // Verify bank account
+  app.post('/api/monnify/verify-bank', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const { accountNumber, bankCode } = req.body;
+
+      if (!accountNumber || !bankCode) {
+        return res.status(400).json({ message: "Account number and bank code are required" });
+      }
+
+      const accountDetails = await monnify.verifyBankAccount(accountNumber, bankCode);
+      res.json(accountDetails);
+    } catch (error) {
+      console.error("Error verifying bank account:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to verify bank account" });
+    }
+  });
+
+  // Initiate withdrawal via Monnify disbursement
+  app.post('/api/monnify/withdraw', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isMonnifyConfigured()) {
+        return res.status(503).json({ message: "Payment service is not configured" });
+      }
+
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { amount, bankCode, bankName, accountNumber, accountName } = req.body;
+      const withdrawAmount = parseFloat(amount);
+
+      if (!withdrawAmount || withdrawAmount < 500) {
+        return res.status(400).json({ message: "Minimum withdrawal is ₦500" });
+      }
+
+      if (!bankCode || !bankName || !accountNumber || !accountName) {
+        return res.status(400).json({ message: "Bank details are required" });
+      }
+
+      const wallet = await storage.getOrCreateWallet(userId);
+      const balance = parseFloat(wallet.balance);
+
+      // Check if withdrawal is allowed
+      const withdrawalCheck = isWithdrawalAllowed(
+        withdrawAmount,
+        user.isVerified || false,
+        balance,
+        0
+      );
+
+      if (!withdrawalCheck.allowed) {
+        return res.status(400).json({ message: withdrawalCheck.reason });
+      }
+
+      // Generate disbursement reference
+      const reference = generateDisbursementReference();
+
+      // Create disbursement record
+      await storage.createMonnifyDisbursement({
+        userId,
+        reference,
+        amount: withdrawAmount.toString(),
+        bankCode,
+        bankName,
+        accountNumber,
+        accountName,
+        status: 'PENDING',
+      });
+
+      // Deduct from wallet first
+      await storage.updateWalletBalance(userId, withdrawAmount.toString(), 'subtract');
+
+      // Create pending transaction
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: 'withdrawal',
+        amount: withdrawAmount.toString(),
+        description: `Withdrawal to ${bankName} - ${accountNumber}`,
+        status: 'pending',
+        reference,
+      });
+
+      // Initiate disbursement with Monnify
+      try {
+        const disbursementResult = await monnify.initiateDisbursement({
+          amount: withdrawAmount,
+          reference,
+          narration: `EKSU Marketplace withdrawal - ${user.firstName} ${user.lastName}`,
+          destinationBankCode: bankCode,
+          destinationAccountNumber: accountNumber,
+        });
+
+        // Update disbursement status
+        await storage.updateMonnifyDisbursementStatus(
+          reference,
+          disbursementResult.status,
+          undefined,
+          disbursementResult.status === 'SUCCESS' ? new Date() : undefined
+        );
+
+        res.json({
+          message: "Withdrawal initiated successfully",
+          reference,
+          status: disbursementResult.status,
+        });
+      } catch (disbursementError) {
+        // Refund wallet if disbursement fails
+        await storage.updateWalletBalance(userId, withdrawAmount.toString(), 'add');
+        await storage.updateMonnifyDisbursementStatus(reference, 'FAILED', String(disbursementError));
+        
+        throw disbursementError;
+      }
+    } catch (error) {
+      console.error("Error processing Monnify withdrawal:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to process withdrawal" });
+    }
+  });
+
+  // ==================== NEGOTIATION ROUTES ====================
+
+  // Submit a price offer on a product
+  app.post('/api/negotiations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { productId, offerPrice, message } = req.body;
+
+      // Validate required fields
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+      if (!offerPrice || isNaN(parseFloat(offerPrice))) {
+        return res.status(400).json({ message: "Valid offer price is required" });
+      }
+
+      const offerPriceNum = parseFloat(offerPrice);
+
+      // Validate offer price is positive
+      if (offerPriceNum <= 0) {
+        return res.status(400).json({ message: "Offer price must be greater than 0" });
+      }
+
+      // Get the product and validate it exists
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Check product is available
+      if (!product.isAvailable || product.isSold) {
+        return res.status(400).json({ message: "Product is not available for negotiation" });
+      }
+
+      // Validate buyer is not the seller
+      if (product.sellerId === userId) {
+        return res.status(400).json({ message: "You cannot make an offer on your own product" });
+      }
+
+      // Validate offer is not above original price
+      const originalPrice = parseFloat(product.price);
+      if (offerPriceNum > originalPrice) {
+        return res.status(400).json({ message: "Offer price cannot be higher than the original price" });
+      }
+
+      // Create the negotiation record
+      const negotiation = await storage.createNegotiation({
+        productId,
+        buyerId: userId,
+        sellerId: product.sellerId,
+        originalPrice: product.price,
+        offerPrice: offerPriceNum.toFixed(2),
+        buyerMessage: message || null,
+        status: 'pending',
+      });
+
+      // Return with product details
+      res.status(201).json({
+        ...negotiation,
+        product: {
+          id: product.id,
+          title: product.title,
+          price: product.price,
+          images: product.images,
+        },
+      });
+    } catch (error) {
+      console.error("Error creating negotiation:", error);
+      res.status(500).json({ message: "Failed to create negotiation" });
+    }
+  });
+
+  // Get offers received on seller's products
+  app.get('/api/negotiations/received', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const statusFilter = req.query.status as string | undefined;
+
+      // Get all negotiations where user is the seller
+      const negotiations = await storage.getUserNegotiations(userId);
+      
+      // Filter to only received negotiations (where user is seller)
+      let receivedNegotiations = negotiations.filter(n => n.sellerId === userId);
+
+      // Apply status filter if provided
+      if (statusFilter) {
+        receivedNegotiations = receivedNegotiations.filter(n => n.status === statusFilter);
+      }
+
+      // Enrich with product and buyer details
+      const enrichedNegotiations = await Promise.all(
+        receivedNegotiations.map(async (negotiation) => {
+          const product = await storage.getProduct(negotiation.productId);
+          const buyer = await storage.getUser(negotiation.buyerId);
+          return {
+            ...negotiation,
+            product: product ? {
+              id: product.id,
+              title: product.title,
+              price: product.price,
+              images: product.images,
+            } : null,
+            buyer: buyer ? {
+              id: buyer.id,
+              firstName: buyer.firstName,
+              lastName: buyer.lastName,
+              profileImageUrl: buyer.profileImageUrl,
+            } : null,
+          };
+        })
+      );
+
+      res.json(enrichedNegotiations);
+    } catch (error) {
+      console.error("Error fetching received negotiations:", error);
+      res.status(500).json({ message: "Failed to fetch received negotiations" });
+    }
+  });
+
+  // Get offers sent by buyer
+  app.get('/api/negotiations/sent', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      // Get all negotiations where user is the buyer
+      const negotiations = await storage.getUserNegotiations(userId);
+      
+      // Filter to only sent negotiations (where user is buyer)
+      const sentNegotiations = negotiations.filter(n => n.buyerId === userId);
+
+      // Enrich with product and seller details
+      const enrichedNegotiations = await Promise.all(
+        sentNegotiations.map(async (negotiation) => {
+          const product = await storage.getProduct(negotiation.productId);
+          const seller = await storage.getUser(negotiation.sellerId);
+          return {
+            ...negotiation,
+            product: product ? {
+              id: product.id,
+              title: product.title,
+              price: product.price,
+              images: product.images,
+            } : null,
+            seller: seller ? {
+              id: seller.id,
+              firstName: seller.firstName,
+              lastName: seller.lastName,
+              profileImageUrl: seller.profileImageUrl,
+            } : null,
+          };
+        })
+      );
+
+      res.json(enrichedNegotiations);
+    } catch (error) {
+      console.error("Error fetching sent negotiations:", error);
+      res.status(500).json({ message: "Failed to fetch sent negotiations" });
+    }
+  });
+
+  // Get single negotiation
+  app.get('/api/negotiations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+
+      const negotiation = await storage.getNegotiation(id);
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+
+      // Validate user is buyer or seller
+      if (negotiation.buyerId !== userId && negotiation.sellerId !== userId) {
+        return res.status(403).json({ message: "You do not have access to this negotiation" });
+      }
+
+      // Get product and user details
+      const product = await storage.getProduct(negotiation.productId);
+      const buyer = await storage.getUser(negotiation.buyerId);
+      const seller = await storage.getUser(negotiation.sellerId);
+
+      res.json({
+        ...negotiation,
+        product: product ? {
+          id: product.id,
+          title: product.title,
+          price: product.price,
+          images: product.images,
+          description: product.description,
+        } : null,
+        buyer: buyer ? {
+          id: buyer.id,
+          firstName: buyer.firstName,
+          lastName: buyer.lastName,
+          profileImageUrl: buyer.profileImageUrl,
+        } : null,
+        seller: seller ? {
+          id: seller.id,
+          firstName: seller.firstName,
+          lastName: seller.lastName,
+          profileImageUrl: seller.profileImageUrl,
+        } : null,
+      });
+    } catch (error) {
+      console.error("Error fetching negotiation:", error);
+      res.status(500).json({ message: "Failed to fetch negotiation" });
+    }
+  });
+
+  // Accept an offer
+  app.post('/api/negotiations/:id/accept', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+
+      const negotiation = await storage.getNegotiation(id);
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+
+      // Validate user is the seller
+      if (negotiation.sellerId !== userId) {
+        return res.status(403).json({ message: "Only the seller can accept an offer" });
+      }
+
+      // Validate negotiation is pending
+      if (negotiation.status !== 'pending') {
+        return res.status(400).json({ message: `Cannot accept a negotiation with status '${negotiation.status}'` });
+      }
+
+      // Update status to accepted
+      const updated = await storage.updateNegotiationStatus(id, 'accepted', {
+        acceptedAt: new Date(),
+      });
+
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update negotiation" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error accepting negotiation:", error);
+      res.status(500).json({ message: "Failed to accept negotiation" });
+    }
+  });
+
+  // Reject an offer
+  app.post('/api/negotiations/:id/reject', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+
+      const negotiation = await storage.getNegotiation(id);
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+
+      // Validate user is the seller
+      if (negotiation.sellerId !== userId) {
+        return res.status(403).json({ message: "Only the seller can reject an offer" });
+      }
+
+      // Validate negotiation is pending
+      if (negotiation.status !== 'pending') {
+        return res.status(400).json({ message: `Cannot reject a negotiation with status '${negotiation.status}'` });
+      }
+
+      // Update status to rejected
+      const updated = await storage.updateNegotiationStatus(id, 'rejected', {
+        rejectedAt: new Date(),
+      });
+
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update negotiation" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error rejecting negotiation:", error);
+      res.status(500).json({ message: "Failed to reject negotiation" });
+    }
+  });
+
+  // Counter offer
+  app.post('/api/negotiations/:id/counter', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+      const { counterPrice, counterMessage } = req.body;
+
+      // Validate counter price
+      if (!counterPrice || isNaN(parseFloat(counterPrice))) {
+        return res.status(400).json({ message: "Valid counter price is required" });
+      }
+
+      const counterPriceNum = parseFloat(counterPrice);
+      if (counterPriceNum <= 0) {
+        return res.status(400).json({ message: "Counter price must be greater than 0" });
+      }
+
+      const negotiation = await storage.getNegotiation(id);
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+
+      // Validate user is the seller
+      if (negotiation.sellerId !== userId) {
+        return res.status(403).json({ message: "Only the seller can make a counter offer" });
+      }
+
+      // Validate negotiation is pending
+      if (negotiation.status !== 'pending') {
+        return res.status(400).json({ message: `Cannot counter a negotiation with status '${negotiation.status}'` });
+      }
+
+      // Validate counter price is reasonable (should be between offer and original price)
+      const offerPriceNum = parseFloat(negotiation.offerPrice);
+      const originalPriceNum = parseFloat(negotiation.originalPrice);
+      
+      if (counterPriceNum < offerPriceNum) {
+        return res.status(400).json({ message: "Counter price cannot be lower than the buyer's offer" });
+      }
+      if (counterPriceNum > originalPriceNum) {
+        return res.status(400).json({ message: "Counter price cannot be higher than the original price" });
+      }
+
+      // Update status to countered
+      const updated = await storage.updateNegotiationStatus(id, 'countered', {
+        counterOfferPrice: counterPriceNum.toFixed(2),
+        sellerMessage: counterMessage || null,
+        rejectedAt: new Date(), // Using rejectedAt as respondedAt for counter offers
+      });
+
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update negotiation" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error creating counter offer:", error);
+      res.status(500).json({ message: "Failed to create counter offer" });
+    }
+  });
+
+  // Cancel an offer (buyer only)
+  app.post('/api/negotiations/:id/cancel', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+
+      const negotiation = await storage.getNegotiation(id);
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+
+      // Validate user is the buyer
+      if (negotiation.buyerId !== userId) {
+        return res.status(403).json({ message: "Only the buyer can cancel an offer" });
+      }
+
+      // Validate negotiation is pending
+      if (negotiation.status !== 'pending') {
+        return res.status(400).json({ message: `Cannot cancel a negotiation with status '${negotiation.status}'` });
+      }
+
+      // Update status to cancelled
+      const updated = await storage.updateNegotiationStatus(id, 'cancelled', {});
+
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update negotiation" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error cancelling negotiation:", error);
+      res.status(500).json({ message: "Failed to cancel negotiation" });
+    }
+  });
+
+  // ==================== PRICING API ROUTES ====================
+
+  // Calculate pricing from seller price
+  app.post('/api/pricing/calculate', (req, res) => {
+    try {
+      const { sellerPrice, paymentMethod } = req.body;
+      
+      if (!sellerPrice || isNaN(parseFloat(sellerPrice))) {
+        return res.status(400).json({ message: "Valid seller price is required" });
+      }
+
+      const pricing = calculatePricingFromSellerPrice(
+        parseFloat(sellerPrice),
+        paymentMethod || 'CARD'
+      );
+
+      res.json(pricing);
+    } catch (error) {
+      console.error("Error calculating pricing:", error);
+      res.status(500).json({ message: "Failed to calculate pricing" });
+    }
+  });
+
+  // Get current commission rate and config
+  app.get('/api/pricing/config', (req, res) => {
+    res.json({
+      commissionRate: getCommissionRate(),
+      securityDepositAmount: getSecurityDepositAmount(),
+    });
   });
 
   // Role switcher

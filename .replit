@@ -104,3 +104,9 @@ waitForPort = 5000
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:1.0.0", "javascript_websocket:1.0.0"]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+WEBSITE_COMMISSION_RATE = "0.10"
+SECURITY_DEPOSIT_AMOUNT = "0"

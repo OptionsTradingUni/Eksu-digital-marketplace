@@ -40,6 +40,9 @@ import {
   socialPosts,
   socialPostLikes,
   socialPostComments,
+  monnifyPayments,
+  monnifyDisbursements,
+  negotiations,
   type User,
   type UpsertUser,
   type Product,
@@ -104,6 +107,12 @@ import {
   type SocialPostLike,
   type SocialPostComment,
   type InsertSocialPostComment,
+  type MonnifyPayment,
+  type InsertMonnifyPayment,
+  type MonnifyDisbursement,
+  type InsertMonnifyDisbursement,
+  type Negotiation,
+  type InsertNegotiation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -259,11 +268,17 @@ export interface IStorage {
   // Escrow operations
   createEscrowTransaction(transaction: InsertEscrowTransaction & { buyerId: string; sellerId: string }): Promise<EscrowTransaction>;
   getEscrowTransaction(id: string): Promise<EscrowTransaction | undefined>;
+  getEscrowTransactionWithDetails(id: string): Promise<(EscrowTransaction & { product?: Product; buyer: User; seller: User }) | undefined>;
   getUserEscrowTransactions(userId: string): Promise<EscrowTransaction[]>;
+  getUserPurchases(buyerId: string): Promise<(EscrowTransaction & { product?: Product; seller: User })[]>;
+  getUserSales(sellerId: string): Promise<(EscrowTransaction & { product?: Product; buyer: User })[]>;
   confirmEscrowByBuyer(id: string): Promise<EscrowTransaction>;
   confirmEscrowBySeller(id: string): Promise<EscrowTransaction>;
   releaseEscrowFunds(id: string): Promise<EscrowTransaction>;
   refundEscrow(id: string): Promise<EscrowTransaction>;
+  addToEscrowBalance(sellerId: string, amount: string): Promise<Wallet>;
+  getSellerCompletedSalesCount(sellerId: string): Promise<number>;
+  lockSecurityDeposit(userId: string, amount: string): Promise<Wallet>;
   
   // Paystack payment operations
   createPaystackPayment(payment: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment>;
@@ -366,6 +381,25 @@ export interface IStorage {
   getPostComments(postId: string): Promise<(SocialPostComment & { author: User })[]>;
   createPostComment(comment: { postId: string; authorId: string; content: string }): Promise<SocialPostComment>;
   deleteSocialPost(postId: string): Promise<void>;
+  
+  // Monnify payment operations
+  createMonnifyPayment(payment: InsertMonnifyPayment): Promise<MonnifyPayment>;
+  getMonnifyPayment(id: string): Promise<MonnifyPayment | undefined>;
+  getMonnifyPaymentByReference(transactionReference: string): Promise<MonnifyPayment | undefined>;
+  updateMonnifyPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<MonnifyPayment | undefined>;
+  getUserMonnifyPayments(userId: string): Promise<MonnifyPayment[]>;
+  
+  // Monnify disbursement operations
+  createMonnifyDisbursement(disbursement: InsertMonnifyDisbursement): Promise<MonnifyDisbursement>;
+  getMonnifyDisbursementByReference(reference: string): Promise<MonnifyDisbursement | undefined>;
+  updateMonnifyDisbursementStatus(reference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<MonnifyDisbursement | undefined>;
+  
+  // Negotiation operations
+  createNegotiation(negotiation: InsertNegotiation): Promise<Negotiation>;
+  getNegotiation(id: string): Promise<Negotiation | undefined>;
+  getProductNegotiations(productId: string): Promise<Negotiation[]>;
+  getUserNegotiations(userId: string): Promise<Negotiation[]>;
+  updateNegotiationStatus(id: string, status: string, data?: Partial<Negotiation>): Promise<Negotiation | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2706,6 +2740,107 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSocialPost(postId: string): Promise<void> {
     await db.delete(socialPosts).where(eq(socialPosts.id, postId));
+  }
+
+  // Monnify payment operations
+  async createMonnifyPayment(payment: InsertMonnifyPayment): Promise<MonnifyPayment> {
+    const [created] = await db.insert(monnifyPayments).values(payment).returning();
+    return created;
+  }
+
+  async getMonnifyPayment(id: string): Promise<MonnifyPayment | undefined> {
+    const [payment] = await db.select().from(monnifyPayments).where(eq(monnifyPayments.id, id));
+    return payment;
+  }
+
+  async getMonnifyPaymentByReference(transactionReference: string): Promise<MonnifyPayment | undefined> {
+    const [payment] = await db.select().from(monnifyPayments).where(eq(monnifyPayments.transactionReference, transactionReference));
+    return payment;
+  }
+
+  async updateMonnifyPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<MonnifyPayment | undefined> {
+    const updateData: any = { status, updatedAt: new Date() };
+    if (paidAt) {
+      updateData.paidAt = paidAt;
+    }
+    const [updated] = await db
+      .update(monnifyPayments)
+      .set(updateData)
+      .where(eq(monnifyPayments.transactionReference, transactionReference))
+      .returning();
+    return updated;
+  }
+
+  async getUserMonnifyPayments(userId: string): Promise<MonnifyPayment[]> {
+    return await db
+      .select()
+      .from(monnifyPayments)
+      .where(eq(monnifyPayments.userId, userId))
+      .orderBy(desc(monnifyPayments.createdAt));
+  }
+
+  // Monnify disbursement operations
+  async createMonnifyDisbursement(disbursement: InsertMonnifyDisbursement): Promise<MonnifyDisbursement> {
+    const [created] = await db.insert(monnifyDisbursements).values(disbursement).returning();
+    return created;
+  }
+
+  async getMonnifyDisbursementByReference(reference: string): Promise<MonnifyDisbursement | undefined> {
+    const [disbursement] = await db.select().from(monnifyDisbursements).where(eq(monnifyDisbursements.reference, reference));
+    return disbursement;
+  }
+
+  async updateMonnifyDisbursementStatus(reference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<MonnifyDisbursement | undefined> {
+    const updateData: any = { status };
+    if (responseMessage) {
+      updateData.responseMessage = responseMessage;
+    }
+    if (completedAt) {
+      updateData.completedAt = completedAt;
+    }
+    const [updated] = await db
+      .update(monnifyDisbursements)
+      .set(updateData)
+      .where(eq(monnifyDisbursements.reference, reference))
+      .returning();
+    return updated;
+  }
+
+  // Negotiation operations
+  async createNegotiation(negotiation: InsertNegotiation): Promise<Negotiation> {
+    const [created] = await db.insert(negotiations).values(negotiation).returning();
+    return created;
+  }
+
+  async getNegotiation(id: string): Promise<Negotiation | undefined> {
+    const [negotiation] = await db.select().from(negotiations).where(eq(negotiations.id, id));
+    return negotiation;
+  }
+
+  async getProductNegotiations(productId: string): Promise<Negotiation[]> {
+    return await db
+      .select()
+      .from(negotiations)
+      .where(eq(negotiations.productId, productId))
+      .orderBy(desc(negotiations.createdAt));
+  }
+
+  async getUserNegotiations(userId: string): Promise<Negotiation[]> {
+    return await db
+      .select()
+      .from(negotiations)
+      .where(or(eq(negotiations.buyerId, userId), eq(negotiations.sellerId, userId)))
+      .orderBy(desc(negotiations.createdAt));
+  }
+
+  async updateNegotiationStatus(id: string, status: string, data?: Partial<Negotiation>): Promise<Negotiation | undefined> {
+    const updateData: any = { status, updatedAt: new Date(), ...data };
+    const [updated] = await db
+      .update(negotiations)
+      .set(updateData)
+      .where(eq(negotiations.id, id))
+      .returning();
+    return updated;
   }
 }
 
