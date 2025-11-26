@@ -471,7 +471,48 @@ export class DatabaseStorage implements IStorage {
       await this.getOrCreateSellerAnalytics(user.id);
     }
     
+    // Auto-follow system user and send welcome DM
+    await this.autoFollowSystemUserAndSendWelcomeDM(user.id);
+    
     return user;
+  }
+  
+  private async autoFollowSystemUserAndSendWelcomeDM(userId: string): Promise<void> {
+    try {
+      const systemUserId = process.env.SYSTEM_WELCOME_USER_ID;
+      if (!systemUserId) {
+        console.log('SYSTEM_WELCOME_USER_ID not configured, skipping auto-follow and welcome DM');
+        return;
+      }
+      
+      // Verify system user exists
+      const systemUser = await this.getUser(systemUserId);
+      if (!systemUser) {
+        console.log(`System user ${systemUserId} not found, skipping auto-follow and welcome DM`);
+        return;
+      }
+      
+      // Auto-follow the system user (new user follows @CampusPlugOfficial)
+      try {
+        await this.followUser(userId, systemUserId);
+        console.log(`User ${userId} now follows system user ${systemUserId}`);
+      } catch (error) {
+        console.log(`Could not auto-follow system user: ${error}`);
+      }
+      
+      // Send welcome DM from system user
+      const welcomeMessage = "Welcome to the family! Check out 'The Plug' for campus gist and verify your account to start selling. Stay safe and only pay through the CampusPlug Wallet!";
+      
+      await this.createMessage({
+        senderId: systemUserId,
+        receiverId: userId,
+        content: welcomeMessage,
+      });
+      console.log(`Welcome DM sent to user ${userId}`);
+      
+    } catch (error) {
+      console.error('Error in autoFollowSystemUserAndSendWelcomeDM:', error);
+    }
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -509,6 +550,9 @@ export class DatabaseStorage implements IStorage {
       if (user.role === 'seller' || user.role === 'admin') {
         await this.getOrCreateSellerAnalytics(user.id);
       }
+      
+      // Auto-follow system user and send welcome DM
+      await this.autoFollowSystemUserAndSendWelcomeDM(user.id);
     }
 
     return user;

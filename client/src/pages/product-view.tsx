@@ -6,11 +6,49 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck } from "lucide-react";
+import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot } from "lucide-react";
+import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import type { Product, User } from "@shared/schema";
+
+function formatJoinDate(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "Recently";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 30) return "This month";
+  if (diffDays < 60) return "1 month ago";
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  
+  const years = Math.floor(diffDays / 365);
+  return years === 1 ? "1 year ago" : `${years} years ago`;
+}
+
+function formatOnlineStatus(dateStr: string | Date | null | undefined): { text: string; isActive: boolean } {
+  if (!dateStr) return { text: "Offline", isActive: false };
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  
+  if (diffMins < 5) return { text: "Active now", isActive: true };
+  if (diffMins < 60) return { text: `Active ${diffMins}m ago`, isActive: true };
+  if (diffMins < 1440) return { text: `Last seen ${Math.floor(diffMins / 60)}h ago`, isActive: false };
+  if (diffMins < 10080) return { text: `Last seen ${Math.floor(diffMins / 1440)}d ago`, isActive: false };
+  return { text: "Last seen a while ago", isActive: false };
+}
+
+function formatResponseTime(minutes: number | null | undefined): string {
+  if (!minutes || minutes === 0) return "Not available";
+  if (minutes < 60) return `Usually responds in ${minutes}m`;
+  if (minutes < 1440) return `Usually responds in ${Math.floor(minutes / 60)}h`;
+  return `Usually responds in ${Math.floor(minutes / 1440)}d`;
+}
 
 export default function ProductView() {
   const { id } = useParams();
@@ -18,6 +56,7 @@ export default function ProductView() {
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showSafetyModal, setShowSafetyModal] = useState(false);
 
   const { data: product, isLoading } = useQuery<Product & { seller: User }>({
     queryKey: ["/api/products", id],
@@ -99,6 +138,16 @@ export default function ProductView() {
       window.location.href = "/api/login";
       return;
     }
+    
+    if (product?.sellerId && !hasSafetyBeenAcknowledged(product.sellerId)) {
+      setShowSafetyModal(true);
+      return;
+    }
+    
+    setLocation(`/messages?user=${product?.sellerId}`);
+  };
+
+  const handleSafetyAcknowledge = () => {
     setLocation(`/messages?user=${product?.sellerId}`);
   };
 
@@ -241,34 +290,74 @@ export default function ProductView() {
               </p>
             </div>
 
-            {/* Seller Card */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={product.seller?.profileImageUrl || undefined} />
-                    <AvatarFallback>{sellerInitials}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
+            {/* Enhanced Seller Card */}
+            <Card className="border-2">
+              <CardContent className="p-6">
+                {/* Seller Header */}
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                    <Avatar className="h-16 w-16 border-2 border-background">
+                      <AvatarImage src={product.seller?.profileImageUrl || undefined} />
+                      <AvatarFallback className="text-lg">{sellerInitials}</AvatarFallback>
+                    </Avatar>
+                    {(() => {
+                      const onlineStatus = formatOnlineStatus(product.seller?.updatedAt);
+                      return onlineStatus.isActive ? (
+                        <span 
+                          className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-green-500 border-2 border-background" 
+                          title={onlineStatus.text}
+                          data-testid="indicator-seller-online"
+                        />
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold" data-testid="text-seller-name">
-                        {product.seller?.firstName || "Seller"}
+                      <p className="font-semibold text-lg truncate" data-testid="text-seller-name">
+                        {product.seller?.firstName 
+                          ? `${product.seller.firstName}${product.seller.lastName ? ` ${product.seller.lastName}` : ''}`
+                          : "Seller"}
                       </p>
                       {product.seller?.isVerified && (
-                        <Badge variant="outline" className="gap-1">
-                          <Shield className="h-3 w-3" />
-                          Verified
+                        <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" data-testid="icon-seller-verified" />
+                      )}
+                      {product.seller?.isTrustedSeller && (
+                        <Badge className="bg-blue-500 dark:bg-blue-600 flex-shrink-0">
+                          <Shield className="h-3 w-3 mr-1" />
+                          Trusted
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                      <span>{product.seller?.trustScore || "5.0"}</span>
-                      <span>({product.seller?.totalRatings || 0} reviews)</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                      <span data-testid="text-seller-follower-count">
-                        {followStats?.followerCount || 0} followers
+                    {product.seller?.instagramHandle && (
+                      <p className="text-sm text-muted-foreground" data-testid="text-seller-username">
+                        @{product.seller.instagramHandle}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1 mt-1">
+                      <div className="flex items-center">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const trustScore = parseFloat(String(product.seller?.trustScore || "5.0"));
+                          const filled = star <= Math.floor(trustScore);
+                          const halfFilled = !filled && star === Math.ceil(trustScore) && trustScore % 1 >= 0.5;
+                          return (
+                            <Star
+                              key={star}
+                              className={`h-4 w-4 ${
+                                filled 
+                                  ? "fill-yellow-400 text-yellow-400" 
+                                  : halfFilled 
+                                    ? "fill-yellow-400/50 text-yellow-400" 
+                                    : "text-muted-foreground/30"
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span className="text-sm font-medium ml-1" data-testid="text-seller-rating">
+                        {product.seller?.trustScore || "5.0"}
+                      </span>
+                      <span className="text-sm text-muted-foreground" data-testid="text-seller-reviews">
+                        ({product.seller?.totalRatings || 0} reviews)
                       </span>
                     </div>
                   </div>
@@ -285,7 +374,7 @@ export default function ProductView() {
                       }}
                       disabled={followMutation.isPending || unfollowMutation.isPending}
                       data-testid="button-follow-seller"
-                      className="gap-1"
+                      className="gap-1 flex-shrink-0"
                     >
                       {followStats?.isFollowing ? (
                         <>
@@ -300,6 +389,54 @@ export default function ProductView() {
                       )}
                     </Button>
                   )}
+                </div>
+
+                <Separator className="my-4" />
+
+                {/* Seller Stats Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Online Status */}
+                  <div className="flex items-center gap-2">
+                    <CircleDot className={`h-4 w-4 flex-shrink-0 ${
+                      formatOnlineStatus(product.seller?.updatedAt).isActive 
+                        ? "text-green-500" 
+                        : "text-muted-foreground"
+                    }`} />
+                    <span className="text-sm text-muted-foreground truncate" data-testid="text-seller-online-status">
+                      {formatOnlineStatus(product.seller?.updatedAt).text}
+                    </span>
+                  </div>
+
+                  {/* Join Date */}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate" data-testid="text-seller-joined">
+                      Joined {formatJoinDate(product.seller?.createdAt)}
+                    </span>
+                  </div>
+
+                  {/* Total Sales */}
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground" data-testid="text-seller-sales">
+                      {product.seller?.totalSales || 0} sales
+                    </span>
+                  </div>
+
+                  {/* Response Time */}
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate" data-testid="text-seller-response-time">
+                      {formatResponseTime(product.seller?.responseTime)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Followers count */}
+                <div className="mt-4 text-center">
+                  <span className="text-sm text-muted-foreground" data-testid="text-seller-follower-count">
+                    <span className="font-semibold text-foreground">{followStats?.followerCount || 0}</span> followers
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -328,6 +465,16 @@ export default function ProductView() {
           </div>
         </div>
       </div>
+
+      {/* Safety Shield Modal */}
+      {product?.sellerId && (
+        <SafetyShieldModal
+          sellerId={product.sellerId}
+          open={showSafetyModal}
+          onOpenChange={setShowSafetyModal}
+          onAcknowledge={handleSafetyAcknowledge}
+        />
+      )}
     </div>
   );
 }

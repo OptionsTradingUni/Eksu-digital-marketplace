@@ -23,6 +23,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import type { Message, User } from "@shared/schema";
 import { useSearch } from "wouter";
 
@@ -333,15 +334,29 @@ export default function Messages() {
   const preselectedUserId = searchParams.get("user");
   const isMobile = useIsMobile();
   
-  const [selectedUser, setSelectedUser] = useState<string | null>(preselectedUserId);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [messageContent, setMessageContent] = useState("");
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isTyping, setIsTyping] = useState(false);
-  const [showMobileChat, setShowMobileChat] = useState(!!preselectedUserId);
+  const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (preselectedUserId) {
+      if (hasSafetyBeenAcknowledged(preselectedUserId)) {
+        setSelectedUser(preselectedUserId);
+        setShowMobileChat(true);
+      } else {
+        setPendingUserId(preselectedUserId);
+        setShowSafetyModal(true);
+      }
+    }
+  }, [preselectedUserId]);
 
   // Fetch chat threads
   const { data: threads, isLoading: threadsLoading } = useQuery<ChatThread[]>({
@@ -441,9 +456,24 @@ export default function Messages() {
   };
 
   const handleSelectThread = (userId: string) => {
-    setSelectedUser(userId);
-    if (isMobile) {
-      setShowMobileChat(true);
+    if (hasSafetyBeenAcknowledged(userId)) {
+      setSelectedUser(userId);
+      if (isMobile) {
+        setShowMobileChat(true);
+      }
+    } else {
+      setPendingUserId(userId);
+      setShowSafetyModal(true);
+    }
+  };
+
+  const handleSafetyAcknowledge = () => {
+    if (pendingUserId) {
+      setSelectedUser(pendingUserId);
+      if (isMobile) {
+        setShowMobileChat(true);
+      }
+      setPendingUserId(null);
     }
   };
 
@@ -685,26 +715,50 @@ export default function Messages() {
   // Mobile layout with Sheet
   if (isMobile) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex flex-col">
-        {showMobileChat ? (
-          ChatContent
-        ) : (
-          ThreadListContent
+      <>
+        <div className="h-[calc(100vh-4rem)] flex flex-col">
+          {showMobileChat ? (
+            ChatContent
+          ) : (
+            ThreadListContent
+          )}
+        </div>
+        
+        {/* Safety Shield Modal */}
+        {pendingUserId && (
+          <SafetyShieldModal
+            sellerId={pendingUserId}
+            open={showSafetyModal}
+            onOpenChange={setShowSafetyModal}
+            onAcknowledge={handleSafetyAcknowledge}
+          />
         )}
-      </div>
+      </>
     );
   }
 
   // Desktop layout
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
-      {/* Threads List */}
-      <div className="w-80 border-r flex flex-col">
-        {ThreadListContent}
-      </div>
+    <>
+      <div className="h-[calc(100vh-4rem)] flex">
+        {/* Threads List */}
+        <div className="w-80 border-r flex flex-col">
+          {ThreadListContent}
+        </div>
 
-      {/* Chat Area */}
-      {ChatContent}
-    </div>
+        {/* Chat Area */}
+        {ChatContent}
+      </div>
+      
+      {/* Safety Shield Modal */}
+      {pendingUserId && (
+        <SafetyShieldModal
+          sellerId={pendingUserId}
+          open={showSafetyModal}
+          onOpenChange={setShowSafetyModal}
+          onAcknowledge={handleSafetyAcknowledge}
+        />
+      )}
+    </>
   );
 }

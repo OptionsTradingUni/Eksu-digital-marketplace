@@ -73,6 +73,39 @@ function getUserId(req: any): string | null {
   return req.user?.id || null;
 }
 
+// Helper functions for Admin/Support role checks via environment variables
+function isSuperAdmin(userId: string | null): boolean {
+  if (!userId) return false;
+  const adminIds = process.env.SUPER_ADMIN_IDS?.split(',').map(id => id.trim()) || [];
+  return adminIds.includes(userId);
+}
+
+function isSupportRep(userId: string | null): boolean {
+  if (!userId) return false;
+  const supportIds = process.env.SUPPORT_IDS?.split(',').map(id => id.trim()) || [];
+  return supportIds.includes(userId);
+}
+
+function hasAdminAccess(userId: string | null): boolean {
+  return isSuperAdmin(userId);
+}
+
+function hasSupportAccess(userId: string | null): boolean {
+  return isSuperAdmin(userId) || isSupportRep(userId);
+}
+
+// Combined admin check - checks both database role AND environment variable
+async function isAdminUser(userId: string | null): Promise<boolean> {
+  if (!userId) return false;
+  
+  // Check environment variable first (faster)
+  if (isSuperAdmin(userId)) return true;
+  
+  // Fall back to database role check
+  const user = await storage.getUser(userId);
+  return user?.role === "admin";
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Passport.js authentication (email/password) for Render deployment
   await setupPassportAuth(app);
@@ -374,7 +407,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // Remove password from user object before sending to client
       const { password: _, ...safeUser } = user;
-      res.json(safeUser);
+      
+      // Add admin/support access flags based on both database role and environment variables
+      const isAdmin = user.role === "admin" || isSuperAdmin(userId);
+      const isSupport = hasSupportAccess(userId);
+      
+      res.json({
+        ...safeUser,
+        isAdmin,
+        isSupport,
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -2008,8 +2050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Prevent non-admins from setting admin role
       if (role === "admin") {
-        const user = await storage.getUser(userId);
-        if (user?.role !== "admin") {
+        if (!(await isAdminUser(userId))) {
           return res.status(403).json({ message: "Cannot set admin role" });
         }
       }
@@ -2504,8 +2545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2524,8 +2564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2547,8 +2586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2570,8 +2608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2590,8 +2627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2646,8 +2682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!userId) {
           return res.status(404).json({ message: "Announcement not found" });
         }
-        const user = await storage.getUser(userId);
-        if (user?.role !== "admin") {
+        if (!(await isAdminUser(userId))) {
           return res.status(404).json({ message: "Announcement not found" });
         }
       }
@@ -2676,8 +2711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Only admins can create announcements" });
       }
 
@@ -2709,8 +2743,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Only admins can update announcements" });
       }
 
@@ -2741,8 +2774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Only admins can delete announcements" });
       }
 
@@ -2778,8 +2810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -2937,8 +2968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check ownership (or admin)
-      const user = await storage.getUser(userId);
-      if (post.authorId !== userId && user?.role !== "admin") {
+      if (post.authorId !== userId && !(await isAdminUser(userId))) {
         return res.status(403).json({ message: "You can only delete your own posts" });
       }
 
@@ -2958,8 +2988,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -3007,8 +3036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -3059,8 +3087,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
-      if (user?.role !== "admin") {
+      if (!(await isAdminUser(userId))) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
