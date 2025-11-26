@@ -1,0 +1,111 @@
+/**
+ * FILENAME: campusplug_spec.js
+ * * CAMPUSPLUG DEVELOPMENT SPECIFICATION (FINAL V3)
+ * Target: Replit Agent / Development Team
+ * Goal: Fix P0 bugs, implement all advanced features (Social Feed, Scalable Games, Advanced Security).
+ *
+ * NOTE: The developer must check the existing codebase and only build/fix the features that are not yet functional or implemented.
+ * DO NOT ASK FOR API KEYS. USE SUPABASE/FLUTTERWAVE/PAYSTACK WEBHOOKS AS PLANNED.
+ */
+
+// ====================================================================
+// SECTION 1: CRITICAL BUG FIXES & P0 ACTIONS
+// ====================================================================
+
+// 1.1 AUTHENTICATION FIXES
+// -----------------------
+// P0 FIX: Sign-Up Failure. Fix the persistent '500: {"message": "Failed to register user"}' error. Verify server-side logic and database integrity.
+// P0 FIX: Logout Error. Correctly clear user session/tokens and route to the login page without generating a router error.
+// P0 FIX: Password Reset. Implement the full Forgot Password / Reset Password flow via email code.
+
+// 1.2 UI/UX & NAVIGATION FIXES
+// ----------------------------
+// P0 FIX: Help Center Navigation. Reroute "Verify Account" from Help Center to the dedicated Seller Verification flow (ID upload, selfie, etc.).
+// P1 FIX: Ludo Dice. Change Ludo gameplay logic to use the standard 2-dice mechanism, not a single die.
+
+// 1.3 ANTI-FRAUD & REWARDS SECURITY
+// ---------------------------------
+// P0 SECURITY: Rewards Anti-Fraud. Implement server-side validation and hashing for all login/daily rewards. MUST prevent date manipulation/client-side hacking. Rewards must be very low.
+// P0 SECURITY: Payment Finality. Payment confirmation for wallet top-ups/purchases MUST ONLY rely on secure Paystack/Flutterwave webhooks, ignoring any client-side "receipt" data.
+
+// ====================================================================
+// SECTION 2: CORE PLATFORM & ROLE MANAGEMENT
+// ====================================================================
+
+// 2.1 SETTINGS & ROLES
+// --------------------
+// Settings Panel: Implement a dedicated Settings page allowing users to:
+//   1. Edit Email Address.
+//   2. Switch Role: Seamlessly switch between Buyer and Seller, or toggle Act as Both.
+// Role Identification: Ensure the user's current role (Buyer/Seller) is clearly visible (e.g., via the Verification Badge or a tag).
+// Functionality: Ensure Seller and Admin functionalities are fully operational.
+
+// 2.2 ALGORITHMIC MACHINE & AI CORE
+// --------------------------------
+// Algorithm Core: Build a foundational ML/Algorithmic layer for: Feed Personalization, Best Posting Time Suggestions, and Price Suggestion.
+// Smart Chatbot: Enhance the chatbot to be conversational, STOP using asterisks (**), and possess a knowledge base covering every section of the app for guidance.
+// Advanced AI Scam Detection: Implement the Predictive Fraud Score (Admin-only view) based on listing volume, price abnormality, and geographical login changes.
+// Voice Notes in Chats: Full implementation of voice recording and playback functionality within the real-time chat module.
+
+// ====================================================================
+// SECTION 3: SOCIAL MEDIA FEED: "THE PLUG"
+// ====================================================================
+
+// New Tab: Implement a new tab, "The Plug," in the Bottom Navigation Bar.
+// Posting: Users can create general text and photo posts (like X/Bluesky), separate from marketplace listings.
+// Profile Integration: Users can view the poster's profile, see their role, view their marketplace listings, and Follow them.
+// Social Features: Implement Follow/Unfollow and dedicated Follower Feed and Discovery Feed.
+
+// ====================================================================
+// SECTION 4: GAMES LOGIC & CONTENT SCALABILITY
+// ====================================================================
+
+// Scalable Content: All content (words, questions) MUST be pulled from scalable, manageable database tables (Supabase). No hardcoding.
+// Content Management: Admin Dashboard must include tools to easily upload and manage categories and questions in batches to exceed 10,000 questions.
+// Word Games: Must use a comprehensive dictionary/lexicon database. Maintain a separate, curated database for accepted Pidgin/Slang words.
+// AI Opponent: Implement logic for the Chatbot/Computer to act as a challenging opponent in Trivia and Word Battle, utilizing the scalable content databases.
+// Whot / Truth or Dare: Fully implement game rules and logic, including a scalable database for Truth or Dare prompts.
+
+// ====================================================================
+// SECTION 5: MARKETPLACE, SELLER TOOLS & GROWTH
+// ====================================================================
+
+// Location Filters: Add specific location filters: School Gate, Town, Yemkem, Iworoko, Phase2, Osekita.
+// Seller Tools: Implement Draft Product Listings, Scheduled Posting, and Best Posting Time Suggestions.
+// Search Tools: Implement Save Searches with Price Alerts and Search History Tracking.
+// Dynamic Price Drop: Seller option to set a "Time-Bound Price Drop" (e.g., price drops every hour until sold or hitting a floor price).
+// Seller Performance Auto-Boost: Algorithm grants a free 48-hour boost to high-performing sellers (4.9+ rating on last 10 sales, 95% chat response rate).
+// AI Ad Creatives: System generates ready-to-share social media graphics/videos for paid boost packages.
+// Wishlist Drop Notification: Buyers get a notification and a one-click share option when a tracked item's price drops.
+
+// ====================================================================
+// SECTION 6: SECURITY & TRUST HARDENING
+// ====================================================================
+
+// MFA for Financial Actions: Require a temporary code (email/SMS) for Wallet Withdrawals and Changing Bank Details.
+// Automated Fund Sweeping: Automatically lock the ₦10,000 security deposit from the seller's wallet balance for the Pre-Order Pool upon availability.
+// Transaction Fingerprinting: Invisibly embed user ID/timestamp into all uploaded images (chat and product listings) for fraud tracing.
+// Peer-to-Peer Dispute Panel: Implement the "Peer Judge" role for trusted students to resolve minor disputes (₦500-₦5,000).
+// Untrusted Profile Flag: Prominent flag on profiles with low Trust Score or high reports, visible to other users.
+// Reporting: Report Seller function must notify Admin Dashboard and the seller (for temporary freeze/review).
+
+// ====================================================================
+// SECTION 7: UTILITY & ACADEMIC INTEGRATION
+// ====================================================================
+
+// Offline Utility: Implement Offline Wishlist & Cart Sync and Chat Message Pre-Compose.
+// Offline Directory: Campus Resource Directory (Menu, Timetable, etc.) must be easily cachable and viewable entirely offline.
+// Academic/Social: Implement Group Chat/Study Groups (based on course codes/hostels) and the AI Coursework Exchange/Swap Board.
+// Personalization: Location-Based Dynamic Content Slots: Ads/Promotions are prioritized based on the user's last known location filter.
+
+// ====================================================================
+// SECTION 8: README.MD INSTRUCTIONS
+// ====================================================================
+
+/*
+ * The following guide MUST be added to the project's README.md file:
+ * * ⚠️ Error Boundary and Render Setup
+ * * To maintain application stability, implement global error handling using React's Error Boundaries in Next.js 14:
+ * * 1. Global Error Boundary: Create `app/error.js` (a Client Component) to catch errors from Server Components and provide a standard fallback UI with a `reset()` button.
+ * 2. Client-Side Boundaries: Implement custom Client Components that use `componentDidCatch` or a similar hook to wrap critical UI segments (e.g., Games Tab, Chat, Cart) to prevent a single component failure from crashing the whole application.
+ */
