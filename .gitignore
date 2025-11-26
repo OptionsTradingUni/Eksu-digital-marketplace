@@ -10,6 +10,9 @@ vite.config.ts.*
 .env.local
 .env.*.local
 
+# System account credentials (sensitive)
+SYSTEM_ACCOUNT_CREDENTIALS.md
+
 # Uploads directory (user-uploaded files)
 uploads/
 

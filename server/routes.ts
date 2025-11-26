@@ -339,6 +339,17 @@ Happy trading!`;
               content: welcomeMessage,
             });
             console.log(`Welcome DM sent to ${user.email} from system user`);
+            
+            // Also create a welcome notification
+            await createAndBroadcastNotification({
+              userId: user.id,
+              type: "welcome",
+              title: "Welcome to EKSU Marketplace!",
+              message: `Hey ${user.firstName || 'there'}! Your account is ready. Start exploring deals on campus or list your own items to sell.`,
+              link: "/",
+              relatedUserId: systemUserId,
+            });
+            console.log(`Welcome notification sent to ${user.email}`);
           } else {
             console.log(`System user with ID ${systemUserId} not found`);
           }
@@ -2334,6 +2345,12 @@ Happy trading!`;
     }
   });
 
+  // Helper to check if a user is the system account
+  function isSystemAccount(userId: string): boolean {
+    const systemUserId = process.env.SYSTEM_USER_ID;
+    return systemUserId ? userId === systemUserId : false;
+  }
+
   // Follow routes
   app.post("/api/users/:id/follow", isAuthenticated, async (req: any, res) => {
     try {
@@ -2343,6 +2360,15 @@ Happy trading!`;
       }
 
       const targetUserId = req.params.id;
+      
+      // Prevent regular users from following the system account
+      // (System account should only be auto-followed during registration)
+      if (isSystemAccount(targetUserId) && !isSystemAccount(userId)) {
+        return res.status(403).json({ 
+          message: "You cannot follow the official Campus Hub account. You are already following it!" 
+        });
+      }
+      
       const follow = await storage.followUser(userId, targetUserId);
       
       // Create notification for the followed user
@@ -2470,6 +2496,13 @@ Happy trading!`;
         senderId: userId,
         ...req.body,
       });
+
+      // Prevent regular users from messaging the system account
+      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
+        return res.status(403).json({ 
+          message: "You cannot send messages to the Campus Hub account. For support, please use the Help section." 
+        });
+      }
 
       const message = await storage.createMessage(validated);
       

@@ -40,6 +40,7 @@ The EKSU Campus Marketplace is built with a modern full-stack architecture.
 - **Referral System:** Earning rewards for successful signups.
 - **Role Switcher:** Users can dynamically switch between buyer, seller, and admin modes.
 - **Login Streak Rewards:** Daily rewards for consistent platform engagement.
+- **System Account (Campus Hub):** An official marketplace account that auto-follows new users, sends welcome messages, and can post announcements in "The Plug" social feed. Regular users cannot follow back or message this account.
 - **Monnify Payment Integration:** Comprehensive payment processing (Card, Bank Transfer, USSD) with fee calculation, seller payouts, and bank verification.
 - **Order Management System:** 11 delivery statuses with full audit trail, role-based permissions, unique order numbers, delivery method selection, and escrow integration.
 - **Security:** Role-based access control, user verification, trust scores, reporting mechanisms, admin moderation, session management, and HTTPS enforcement. Admin/Support roles are managed via environment variables and database flags.
@@ -59,3 +60,24 @@ The EKSU Campus Marketplace is built with a modern full-stack architecture.
 - **Socket.io-like WebSocket:** Real-time communication.
 - **Multer:** For handling multi-part form data, specifically image uploads.
 - **Render:** Recommended deployment platform, handling PostgreSQL and environment variables.
+
+## System Account Setup
+
+The EKSU Marketplace includes an official system account ("Campus Hub") that provides:
+- Welcome messages to new users
+- Auto-follow relationship with all new users
+- Ability to post official announcements in "The Plug" social feed
+- Protection against regular users following back or messaging
+
+**Setup Steps:**
+1. Run `npm run db:seed-system` to create the system account (if not already created)
+2. The script generates credentials and saves them to `SYSTEM_ACCOUNT_CREDENTIALS.md`
+3. The `SYSTEM_USER_ID` environment variable is set automatically
+
+**Environment Variables:**
+- `SYSTEM_USER_ID`: The UUID of the system account (required for auto-follow and welcome messages)
+
+**Security Notes:**
+- The credentials file is excluded from git via `.gitignore`
+- Regular users cannot follow the system account (auto-followed on registration)
+- Regular users cannot send messages to the system account
