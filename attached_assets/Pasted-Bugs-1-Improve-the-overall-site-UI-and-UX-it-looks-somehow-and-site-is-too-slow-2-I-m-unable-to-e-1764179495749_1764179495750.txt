@@ -1,0 +1,33 @@
+Bugs
+1. Improve the overall site UI and UX it looks somehow and site is too slow 
+2. I’m unable to edit price range in apply filters 
+And the cursor moving stuff is difficult to move 
+3. Broke student mode should be 10k bit 5k
+4. ⁠all categories add more to categories , list all of it 
+5. ⁠I have to be sending messages or refresh site to get a new message it’s not supposed to be like that, please work on it 
+6. ⁠message too slow 
+7. ⁠I’m not getting notifications whether someone followed, messaged or added 
+8. ⁠if someone messages or made an order and other things , notifications in a written up message should be sent to both sellers and buyers and sellers can reply via the email too and it reflect on chat message too and also create a .md for this so I know how to go about setting it up maybe a email.md
+9. ⁠whenever I add a profile picture whether it’s a product or profile it gets deleted , messages are not saved 
+10. ⁠Follow button isn’t working too 
+11. ⁠if I click on their profile anywhere I see their profile and click it should take me there it either take it to mine or not responsive 
+12. ⁠wishlist doesn’t exist and it’s not working and there should be a link to product incase you want to share 
+13. ⁠there should be an option to add or disguise a discount by seller the best way and to strike through a price and add a new one 
+14. ⁠in social post the plug I want you to improve the look it’s somehow make it sharp and nice improve the UI also 
+15. ⁠let seller be able to add many pictures in her profile and edit how it’s arranged so it’s not abnormal 
+16. ⁠add more things to add so the profile looks like a standard one and not too empty 
+17. ⁠increase number of characters in messages in normal message and comments etc and ability to write as you want , good formatting like normal WhatsApp , add more emojis and let all these things be fast 
+18. ⁠is welcome message sending working? By a account from and for the website which could also be used to post in the plug and automatically followed by users . It follows no one unless I want to , also a email and password for it generated too 
+19. ⁠in verify your account, it collects this info 
+Phone number , campus location, nin and also a picture of your portal profile showing your name, your picture, department, level 
+The reason for this is to prevent scam and fraud from dishonest people explain it well and add disclaimer that it’s not saved in profile after verification it gets deleted in system but it doesn’t it’s saved so incase there’s fraud issue in future I’ll be able to track 
+20. She drops her face pic too, she take picture 
+21. ⁠After I want you to code a facial verification for face and see if it matches 
+22. ⁠ask to drop their WhatsApp number not ordinary phone number 
+23. ⁠after verification, tell them an agent would message their WhatsApp number for video session to verify their identify and after that they would be verified 
+24. ⁠this is needed to prevent scam and issues for them and anyone on the site promoting transparency 
+25. ⁠there should be a list of those who just filled for verification or verified in admin panel then you can approve or disapprove 
+26. Please improve the UI and the site is too slow please 
+27. ⁠also copy the layout of the images too
+28. ⁠nudity photos or words not allowed, it would be deleted and warning sent by system message to the user if it persist account get banned or suspended immediately
+29. ⁠in pay with monnify im seeing this error error 500, monnify api error could not find specified contract  
