@@ -262,7 +262,7 @@ export default function Home() {
               }
             }}
             max={DEFAULT_MAX_PRICE}
-            step={1000}
+            step={500}
             data-testid="slider-price-range"
           />
         </div>

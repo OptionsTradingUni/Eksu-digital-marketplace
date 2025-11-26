@@ -174,6 +174,7 @@ export interface IStorage {
   // Watchlist operations
   addToWatchlist(userId: string, productId: string): Promise<Watchlist>;
   getUserWatchlist(userId: string): Promise<Watchlist[]>;
+  getWishlistWithProducts(userId: string): Promise<(Watchlist & { product: Product & { seller: User } })[]>;
   removeFromWatchlist(userId: string, productId: string): Promise<void>;
   
   // Report operations
@@ -892,6 +893,27 @@ export class DatabaseStorage implements IStorage {
       .from(watchlist)
       .where(eq(watchlist.userId, userId))
       .orderBy(desc(watchlist.createdAt));
+  }
+
+  async getWishlistWithProducts(userId: string): Promise<(Watchlist & { product: Product & { seller: User } })[]> {
+    const results = await db
+      .select()
+      .from(watchlist)
+      .leftJoin(products, eq(watchlist.productId, products.id))
+      .leftJoin(users, eq(products.sellerId, users.id))
+      .where(eq(watchlist.userId, userId))
+      .orderBy(desc(watchlist.createdAt));
+
+    // Filter out items with missing products or sellers and map to the expected format
+    return results
+      .filter(r => r.watchlist && r.products && r.users)
+      .map(r => ({
+        ...r.watchlist!,
+        product: {
+          ...r.products!,
+          seller: r.users!,
+        },
+      }));
   }
 
   async removeFromWatchlist(userId: string, productId: string): Promise<void> {

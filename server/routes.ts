@@ -45,16 +45,55 @@ import { monnify, generatePaymentReference, generateDisbursementReference, isMon
 import { calculatePricingFromSellerPrice, calculateMonnifyFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 
 // Module-level WebSocket connections map for broadcasting notifications
-const wsConnections = new Map<string, WebSocket>();
+// Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
+// This fixes the issue where NotificationBell and Messages page connections were overwriting each other
+const wsConnections = new Map<string, Set<WebSocket>>();
 
-// Helper function to broadcast a notification to a user via WebSocket
+// Helper function to add a WebSocket connection for a user
+function addWsConnection(userId: string, ws: WebSocket) {
+  if (!wsConnections.has(userId)) {
+    wsConnections.set(userId, new Set());
+  }
+  wsConnections.get(userId)!.add(ws);
+}
+
+// Helper function to remove a WebSocket connection for a user
+function removeWsConnection(userId: string, ws: WebSocket) {
+  const connections = wsConnections.get(userId);
+  if (connections) {
+    connections.delete(ws);
+    if (connections.size === 0) {
+      wsConnections.delete(userId);
+    }
+  }
+}
+
+// Helper function to broadcast a notification to all of a user's WebSocket connections
 async function broadcastNotification(userId: string, notification: any) {
-  const ws = wsConnections.get(userId);
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
+  const connections = wsConnections.get(userId);
+  if (connections) {
+    const message = JSON.stringify({
       type: "new_notification",
       notification,
-    }));
+    });
+    connections.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+      }
+    });
+  }
+}
+
+// Helper function to broadcast any message to all of a user's WebSocket connections
+function broadcastToUser(userId: string, data: any) {
+  const connections = wsConnections.get(userId);
+  if (connections) {
+    const message = JSON.stringify(data);
+    connections.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+      }
+    });
   }
 }
 
@@ -2459,6 +2498,22 @@ Happy trading!`;
     }
   });
 
+  // Get wishlist with full product and seller details
+  app.get("/api/wishlist/full", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const wishlistWithProducts = await storage.getWishlistWithProducts(userId);
+      res.json(wishlistWithProducts);
+    } catch (error) {
+      console.error("Error fetching wishlist with products:", error);
+      res.status(500).json({ message: "Failed to fetch wishlist" });
+    }
+  });
+
   // Report routes
   app.post("/api/reports", isAuthenticated, async (req: any, res) => {
     try {
@@ -4681,8 +4736,8 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
             }
             
             userId = decoded.userId;
-            wsConnections.set(userId, ws);
-            console.log(`WebSocket authenticated for user: ${userId}`);
+            addWsConnection(userId, ws);
+            console.log(`WebSocket authenticated for user: ${userId} (connection added)`);
             ws.send(JSON.stringify({ type: "auth_success", userId }));
           } catch (error) {
             console.error("WebSocket auth error:", error);
@@ -4705,14 +4760,11 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
             productId: data.productId,
           });
           
-          // Send to recipient if they're connected
-          const recipientWs = wsConnections.get(data.receiverId);
-          if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-            recipientWs.send(JSON.stringify({
-              type: "new_message",
-              message: savedMessage,
-            }));
-          }
+          // Send to recipient if they're connected (broadcasts to all their connections)
+          broadcastToUser(data.receiverId, {
+            type: "new_message",
+            message: savedMessage,
+          });
           
           // Create notification for message receiver
           if (data.receiverId && data.receiverId !== userId) {
@@ -4752,15 +4804,15 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
 
     ws.on("close", () => {
       if (userId) {
-        wsConnections.delete(userId);
-        console.log(`WebSocket disconnected for user: ${userId}`);
+        removeWsConnection(userId, ws);
+        console.log(`WebSocket disconnected for user: ${userId} (connection removed)`);
       }
     });
     
     ws.on("error", (error) => {
       console.error(`WebSocket error for user ${userId}:`, error);
       if (userId) {
-        wsConnections.delete(userId);
+        removeWsConnection(userId, ws);
       }
     });
   });
