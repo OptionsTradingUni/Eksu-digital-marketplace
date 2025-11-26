@@ -1,11 +1,70 @@
 import { Client } from "@replit/object-storage";
+import fs from "fs";
+import path from "path";
 
-const client = new Client();
+let client: Client | null = null;
+let objectStorageAvailable = false;
+
+// Try to initialize object storage client
+async function initObjectStorage(): Promise<boolean> {
+  if (client !== null) {
+    return objectStorageAvailable;
+  }
+  
+  try {
+    client = new Client();
+    // Test if bucket is configured by trying a simple operation
+    const testResult = await client.list({ prefix: "__test__" });
+    objectStorageAvailable = testResult.ok;
+    if (objectStorageAvailable) {
+      console.log("Object storage initialized successfully");
+    } else {
+      console.log("Object storage not available, falling back to disk storage");
+    }
+  } catch (error) {
+    console.log("Object storage not configured, falling back to disk storage");
+    objectStorageAvailable = false;
+  }
+  
+  return objectStorageAvailable;
+}
+
+// Initialize on module load - but don't block
+initObjectStorage().catch(() => {});
+
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+async function uploadToDisk(file: Express.Multer.File): Promise<string | null> {
+  try {
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    const extension = file.originalname.split('.').pop() || 'jpg';
+    const filename = `${timestamp}-${randomId}.${extension}`;
+    const filepath = path.join(uploadDir, filename);
+    
+    fs.writeFileSync(filepath, file.buffer);
+    return `/uploads/${filename}`;
+  } catch (error) {
+    console.error("Disk upload failed:", error);
+    return null;
+  }
+}
 
 export async function uploadToObjectStorage(
   file: Express.Multer.File,
   prefix: string = ""
 ): Promise<string | null> {
+  // Check if object storage is available
+  const isAvailable = await initObjectStorage();
+  
+  if (!isAvailable || !client) {
+    // Fallback to disk storage
+    return uploadToDisk(file);
+  }
+  
   try {
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
@@ -16,13 +75,15 @@ export async function uploadToObjectStorage(
     
     if (!ok) {
       console.error("Object storage upload error:", error);
-      return null;
+      // Fallback to disk on error
+      return uploadToDisk(file);
     }
     
-    return objectName;
+    return `/storage/${objectName}`;
   } catch (error) {
     console.error("Object storage upload failed:", error);
-    return null;
+    // Fallback to disk on exception
+    return uploadToDisk(file);
   }
 }
 
@@ -36,13 +97,17 @@ export async function uploadMultipleToObjectStorage(
 }
 
 export async function getObjectUrl(objectName: string): Promise<string | null> {
+  const isAvailable = await initObjectStorage();
+  if (!isAvailable || !client) {
+    return null;
+  }
+  
   try {
     const { ok, value, error } = await client.downloadAsBytes(objectName);
     if (!ok) {
       console.error("Object storage download error:", error);
       return null;
     }
-    // value is [Buffer] tuple, extract the buffer
     const [buffer] = value;
     const base64 = buffer.toString('base64');
     const extension = objectName.split('.').pop()?.toLowerCase() || 'jpg';
@@ -57,6 +122,11 @@ export async function getObjectUrl(objectName: string): Promise<string | null> {
 }
 
 export async function deleteFromObjectStorage(objectName: string): Promise<boolean> {
+  const isAvailable = await initObjectStorage();
+  if (!isAvailable || !client) {
+    return false;
+  }
+  
   try {
     const { ok, error } = await client.delete(objectName);
     if (!ok) {
@@ -71,6 +141,11 @@ export async function deleteFromObjectStorage(objectName: string): Promise<boole
 }
 
 export async function listObjects(prefix: string = ""): Promise<string[]> {
+  const isAvailable = await initObjectStorage();
+  if (!isAvailable || !client) {
+    return [];
+  }
+  
   try {
     const { ok, value, error } = await client.list({ prefix });
     if (!ok) {
@@ -84,4 +159,8 @@ export async function listObjects(prefix: string = ""): Promise<string[]> {
   }
 }
 
-export { client as objectStorageClient };
+export function getClient(): Client | null {
+  return client;
+}
+
+export { initObjectStorage, objectStorageAvailable };
