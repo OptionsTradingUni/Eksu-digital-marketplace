@@ -98,6 +98,34 @@ function broadcastToUser(userId: string, data: any) {
   }
 }
 
+// Helper function to get all online user IDs
+function getOnlineUserIds(): string[] {
+  return Array.from(wsConnections.keys());
+}
+
+// Helper function to check if a specific user is online
+function isUserOnline(userId: string): boolean {
+  return wsConnections.has(userId);
+}
+
+// Helper function to broadcast user online/offline status to all connected users
+function broadcastUserStatusChange(userId: string, isOnline: boolean) {
+  const statusMessage = JSON.stringify({
+    type: "user_status_change",
+    userId,
+    isOnline,
+  });
+  
+  // Broadcast to all connected users
+  wsConnections.forEach((connections, connectedUserId) => {
+    connections.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(statusMessage);
+      }
+    });
+  });
+}
+
 // Helper function to create and broadcast a notification
 async function createAndBroadcastNotification(data: {
   userId: string;
@@ -2157,6 +2185,17 @@ Happy trading!`;
     }
   });
 
+  // Online status endpoint - returns which users are currently online
+  app.get("/api/users/online-status", async (req, res) => {
+    try {
+      const onlineUserIds = getOnlineUserIds();
+      res.json({ onlineUserIds });
+    } catch (error) {
+      console.error("Error fetching online status:", error);
+      res.status(500).json({ message: "Failed to fetch online status" });
+    }
+  });
+
   // User profile routes
   app.get("/api/users/:id", async (req, res) => {
     try {
@@ -3130,8 +3169,8 @@ Happy trading!`;
     }
   });
 
-  // Create a new social post
-  app.post("/api/social-posts", isAuthenticated, upload.array("images", 5), async (req: any, res) => {
+  // Create a new social post (supports images and videos)
+  app.post("/api/social-posts", isAuthenticated, upload.array("media", 10), async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -3143,13 +3182,23 @@ Happy trading!`;
         return res.status(400).json({ message: "Content is required" });
       }
 
-      // Upload images to object storage
+      // Upload media to object storage and separate images from videos
       const images: string[] = [];
+      const videos: string[] = [];
+      
       if (req.files && Array.isArray(req.files)) {
         const prefix = `posts/${userId}/`;
-        const objectNames = await uploadMultipleToObjectStorage(req.files as Express.Multer.File[], prefix);
-        for (const name of objectNames) {
-          images.push(`/storage/${name}`);
+        
+        for (const file of req.files as Express.Multer.File[]) {
+          const objectName = await uploadToObjectStorage(file, prefix);
+          const mediaUrl = `/storage/${objectName}`;
+          
+          // Check if file is video based on mimetype
+          if (file.mimetype.startsWith('video/')) {
+            videos.push(mediaUrl);
+          } else {
+            images.push(mediaUrl);
+          }
         }
       }
 
@@ -3157,6 +3206,7 @@ Happy trading!`;
         authorId: userId,
         content: content.trim(),
         images,
+        videos,
       });
 
       // Fetch the full post with author info
@@ -3265,6 +3315,47 @@ Happy trading!`;
     } catch (error) {
       console.error("Error deleting post:", error);
       res.status(500).json({ message: "Failed to delete post" });
+    }
+  });
+
+  // Repost a social post (toggle)
+  app.post("/api/social-posts/:id/repost", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const postId = req.params.id;
+      const { quoteContent } = req.body;
+
+      // Check if already reposted
+      const isReposted = await storage.isPostReposted(postId, userId);
+      
+      if (isReposted) {
+        // Unrepost
+        await storage.unrepostSocialPost(postId, userId);
+        res.json({ success: true, action: "unreposted" });
+      } else {
+        // Repost
+        const repost = await storage.repostSocialPost(postId, userId, quoteContent);
+        res.json({ success: true, action: "reposted", repost });
+      }
+    } catch (error) {
+      console.error("Error toggling repost:", error);
+      res.status(500).json({ message: "Failed to toggle repost" });
+    }
+  });
+
+  // Get reposts for a post
+  app.get("/api/social-posts/:id/reposts", async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const reposts = await storage.getPostReposts(postId);
+      res.json(reposts);
+    } catch (error) {
+      console.error("Error fetching reposts:", error);
+      res.status(500).json({ message: "Failed to fetch reposts" });
     }
   });
 
@@ -4851,9 +4942,17 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
             }
             
             userId = decoded.userId;
+            // Check if this is user's first connection (they were offline before)
+            const wasOffline = !isUserOnline(userId);
             addWsConnection(userId, ws);
             console.log(`WebSocket authenticated for user: ${userId} (connection added)`);
             ws.send(JSON.stringify({ type: "auth_success", userId }));
+            
+            // Broadcast that user is now online if this was their first connection
+            if (wasOffline) {
+              broadcastUserStatusChange(userId, true);
+              console.log(`User ${userId} is now online - status broadcast sent`);
+            }
           } catch (error) {
             console.error("WebSocket auth error:", error);
             ws.send(JSON.stringify({ 
@@ -4921,6 +5020,12 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       if (userId) {
         removeWsConnection(userId, ws);
         console.log(`WebSocket disconnected for user: ${userId} (connection removed)`);
+        
+        // Broadcast that user is now offline if they have no more connections
+        if (!isUserOnline(userId)) {
+          broadcastUserStatusChange(userId, false);
+          console.log(`User ${userId} is now offline - status broadcast sent`);
+        }
       }
     });
     
@@ -4928,6 +5033,12 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       console.error(`WebSocket error for user ${userId}:`, error);
       if (userId) {
         removeWsConnection(userId, ws);
+        
+        // Broadcast that user is now offline if they have no more connections
+        if (!isUserOnline(userId)) {
+          broadcastUserStatusChange(userId, false);
+          console.log(`User ${userId} is now offline (due to error) - status broadcast sent`);
+        }
       }
     });
   });

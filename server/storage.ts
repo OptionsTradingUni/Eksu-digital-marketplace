@@ -41,6 +41,7 @@ import {
   socialPosts,
   socialPostLikes,
   socialPostComments,
+  socialPostReposts,
   monnifyPayments,
   monnifyDisbursements,
   negotiations,
@@ -111,6 +112,7 @@ import {
   type SocialPostLike,
   type SocialPostComment,
   type InsertSocialPostComment,
+  type SocialPostRepost,
   type MonnifyPayment,
   type InsertMonnifyPayment,
   type MonnifyDisbursement,
@@ -386,8 +388,8 @@ export interface IStorage {
   isAnnouncementRead(userId: string, announcementId: string): Promise<boolean>;
   
   // Social post operations ("The Plug")
-  getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean })[]>;
-  createSocialPost(post: { authorId: string; content: string; images?: string[] }): Promise<SocialPost>;
+  getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean })[]>;
+  createSocialPost(post: { authorId: string; content: string; images?: string[]; videos?: string[] }): Promise<SocialPost>;
   getSocialPost(id: string): Promise<(SocialPost & { author: User }) | undefined>;
   likeSocialPost(postId: string, userId: string): Promise<SocialPostLike>;
   unlikeSocialPost(postId: string, userId: string): Promise<void>;
@@ -395,6 +397,10 @@ export interface IStorage {
   getPostComments(postId: string): Promise<(SocialPostComment & { author: User })[]>;
   createPostComment(comment: { postId: string; authorId: string; content: string }): Promise<SocialPostComment>;
   deleteSocialPost(postId: string): Promise<void>;
+  repostSocialPost(postId: string, userId: string, quoteContent?: string): Promise<SocialPostRepost>;
+  unrepostSocialPost(postId: string, userId: string): Promise<void>;
+  isPostReposted(postId: string, userId: string): Promise<boolean>;
+  getPostReposts(postId: string): Promise<(SocialPostRepost & { reposter: User })[]>;
   
   // Monnify payment operations
   createMonnifyPayment(payment: InsertMonnifyPayment): Promise<MonnifyPayment>;
@@ -2792,7 +2798,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Social post operations ("The Plug")
-  async getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean })[]> {
+  async getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean })[]> {
     let query = db
       .select()
       .from(socialPosts)
@@ -2813,42 +2819,55 @@ export class DatabaseStorage implements IStorage {
       posts = posts.filter(p => p.authorId === options.authorId);
     }
 
-    // Filter by following only if specified
-    if (options?.followingOnly && options?.userId) {
+    // Get following list for both filtering and display
+    let followingIds = new Set<string>();
+    if (options?.userId) {
       const followingResult = await db
         .select({ followingId: follows.followingId })
         .from(follows)
         .where(eq(follows.followerId, options.userId));
       
-      const followingIds = new Set(followingResult.map(f => f.followingId));
+      followingIds = new Set(followingResult.map(f => f.followingId));
+    }
+
+    // Filter by following only if specified
+    if (options?.followingOnly && options?.userId) {
       posts = posts.filter(p => followingIds.has(p.authorId));
     }
 
-    // Add isLiked status if userId is provided
+    // Add isLiked, isFollowingAuthor, and isReposted status if userId is provided
     if (options?.userId) {
-      const likedPosts = await db
-        .select({ postId: socialPostLikes.postId })
-        .from(socialPostLikes)
-        .where(eq(socialPostLikes.userId, options.userId));
+      const [likedPosts, repostedPosts] = await Promise.all([
+        db.select({ postId: socialPostLikes.postId })
+          .from(socialPostLikes)
+          .where(eq(socialPostLikes.userId, options.userId)),
+        db.select({ originalPostId: socialPostReposts.originalPostId })
+          .from(socialPostReposts)
+          .where(eq(socialPostReposts.reposterId, options.userId))
+      ]);
       
       const likedPostIds = new Set(likedPosts.map(l => l.postId));
+      const repostedPostIds = new Set(repostedPosts.map(r => r.originalPostId));
       
       return posts.map(p => ({
         ...p,
         isLiked: likedPostIds.has(p.id),
+        isFollowingAuthor: followingIds.has(p.authorId),
+        isReposted: repostedPostIds.has(p.id),
       }));
     }
 
     return posts;
   }
 
-  async createSocialPost(post: { authorId: string; content: string; images?: string[] }): Promise<SocialPost> {
+  async createSocialPost(post: { authorId: string; content: string; images?: string[]; videos?: string[] }): Promise<SocialPost> {
     const [created] = await db
       .insert(socialPosts)
       .values({
         authorId: post.authorId,
         content: post.content,
         images: post.images || [],
+        videos: post.videos || [],
       })
       .returning();
     return created;
@@ -2966,6 +2985,86 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSocialPost(postId: string): Promise<void> {
     await db.delete(socialPosts).where(eq(socialPosts.id, postId));
+  }
+
+  async repostSocialPost(postId: string, userId: string, quoteContent?: string): Promise<SocialPostRepost> {
+    // Check if already reposted
+    const existing = await db
+      .select()
+      .from(socialPostReposts)
+      .where(
+        and(
+          eq(socialPostReposts.originalPostId, postId),
+          eq(socialPostReposts.reposterId, userId)
+        )
+      );
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    // Create repost
+    const [repost] = await db
+      .insert(socialPostReposts)
+      .values({ originalPostId: postId, reposterId: userId, quoteContent })
+      .returning();
+
+    // Increment reposts count
+    await db
+      .update(socialPosts)
+      .set({ repostsCount: sql`COALESCE(${socialPosts.repostsCount}, 0) + 1` })
+      .where(eq(socialPosts.id, postId));
+
+    return repost;
+  }
+
+  async unrepostSocialPost(postId: string, userId: string): Promise<void> {
+    const result = await db
+      .delete(socialPostReposts)
+      .where(
+        and(
+          eq(socialPostReposts.originalPostId, postId),
+          eq(socialPostReposts.reposterId, userId)
+        )
+      )
+      .returning();
+
+    // Decrement reposts count only if we actually deleted a repost
+    if (result.length > 0) {
+      await db
+        .update(socialPosts)
+        .set({ repostsCount: sql`GREATEST(COALESCE(${socialPosts.repostsCount}, 0) - 1, 0)` })
+        .where(eq(socialPosts.id, postId));
+    }
+  }
+
+  async isPostReposted(postId: string, userId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(socialPostReposts)
+      .where(
+        and(
+          eq(socialPostReposts.originalPostId, postId),
+          eq(socialPostReposts.reposterId, userId)
+        )
+      );
+    return !!result;
+  }
+
+  async getPostReposts(postId: string): Promise<(SocialPostRepost & { reposter: User })[]> {
+    const results = await db
+      .select()
+      .from(socialPostReposts)
+      .leftJoin(users, eq(socialPostReposts.reposterId, users.id))
+      .where(eq(socialPostReposts.originalPostId, postId))
+      .orderBy(desc(socialPostReposts.createdAt));
+
+    return results
+      .filter(r => r.social_post_reposts && r.users)
+      .map(r => ({
+        ...r.social_post_reposts!,
+        reposter: r.users!,
+      }));
   }
 
   // Monnify payment operations

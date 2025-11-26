@@ -1504,8 +1504,10 @@ export const socialPosts = pgTable("social_posts", {
   authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   images: text("images").array().default(sql`ARRAY[]::text[]`),
+  videos: text("videos").array().default(sql`ARRAY[]::text[]`),
   likesCount: integer("likes_count").default(0),
   commentsCount: integer("comments_count").default(0),
+  repostsCount: integer("reposts_count").default(0),
   isVisible: boolean("is_visible").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1536,16 +1538,34 @@ export const socialPostComments = pgTable("social_post_comments", {
   index("idx_post_comments_post").on(table.postId),
 ]);
 
+// Social post reposts (Twitter-like repost/retweet functionality)
+export const socialPostReposts = pgTable("social_post_reposts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalPostId: varchar("original_post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  reposterId: varchar("reposter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  quoteContent: text("quote_content"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_reposts_original_post").on(table.originalPostId),
+  index("idx_reposts_reposter").on(table.reposterId),
+]);
+
 // Insert schemas for social posts
 export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({
   id: true,
   likesCount: true,
   commentsCount: true,
+  repostsCount: true,
   createdAt: true,
   updatedAt: true,
 });
 
 export const insertSocialPostCommentSchema = createInsertSchema(socialPostComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSocialPostRepostSchema = createInsertSchema(socialPostReposts).omit({
   id: true,
   createdAt: true,
 });
@@ -1556,6 +1576,8 @@ export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
 export type SocialPostLike = typeof socialPostLikes.$inferSelect;
 export type SocialPostComment = typeof socialPostComments.$inferSelect;
 export type InsertSocialPostComment = z.infer<typeof insertSocialPostCommentSchema>;
+export type SocialPostRepost = typeof socialPostReposts.$inferSelect;
+export type InsertSocialPostRepost = z.infer<typeof insertSocialPostRepostSchema>;
 
 // Password reset tokens table
 export const passwordResetTokens = pgTable("password_reset_tokens", {

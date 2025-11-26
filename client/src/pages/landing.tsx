@@ -25,17 +25,39 @@ export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"signin" | "signup">("signup");
   const [authModalDefaultRole, setAuthModalDefaultRole] = useState<"buyer" | "seller" | "both">("both");
+  const [authModalReferralCode, setAuthModalReferralCode] = useState("");
   const [showSplash, setShowSplash] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get("ref");
+    
+    if (refCode) {
+      setAuthModalReferralCode(refCode.toUpperCase());
+    }
+  }, []);
 
   useEffect(() => {
     const hasSeenSplash = sessionStorage.getItem("hasSeenSplash");
     if (hasSeenSplash) {
       setShowSplash(false);
+      const urlParams = new URLSearchParams(window.location.search);
+      const refCode = urlParams.get("ref");
+      if (refCode) {
+        setAuthModalTab("signup");
+        setAuthModalOpen(true);
+      }
     } else {
       const timer = setTimeout(() => {
         setShowSplash(false);
         sessionStorage.setItem("hasSeenSplash", "true");
+        const urlParams = new URLSearchParams(window.location.search);
+        const refCode = urlParams.get("ref");
+        if (refCode) {
+          setAuthModalTab("signup");
+          setAuthModalOpen(true);
+        }
       }, 2500);
       return () => clearTimeout(timer);
     }
@@ -503,6 +525,7 @@ export default function Landing() {
         onOpenChange={setAuthModalOpen}
         defaultTab={authModalTab}
         defaultRole={authModalDefaultRole}
+        defaultReferralCode={authModalReferralCode}
       />
     </div>
   );

@@ -59,9 +59,10 @@ interface AuthModalProps {
   onOpenChange: (open: boolean) => void;
   defaultTab?: "signin" | "signup";
   defaultRole?: "buyer" | "seller" | "both";
+  defaultReferralCode?: string;
 }
 
-export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "both" }: AuthModalProps) {
+export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "both", defaultReferralCode = "" }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { toast } = useToast();
@@ -92,7 +93,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       lastName: "",
       phoneNumber: "",
       role: defaultRole,
-      referralCode: "",
+      referralCode: defaultReferralCode,
     },
   });
   
@@ -101,6 +102,12 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       signUpForm.setValue("role", defaultRole);
     }
   }, [open, defaultRole]);
+
+  useEffect(() => {
+    if (open && defaultReferralCode) {
+      signUpForm.setValue("referralCode", defaultReferralCode);
+    }
+  }, [open, defaultReferralCode]);
 
   const forgotPasswordForm = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),

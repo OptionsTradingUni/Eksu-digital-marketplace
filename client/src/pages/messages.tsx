@@ -228,17 +228,16 @@ function ThreadItem({
   thread,
   isSelected,
   onClick,
+  isOnline,
 }: {
   thread: ChatThread;
   isSelected: boolean;
   onClick: () => void;
+  isOnline: boolean;
 }) {
   const lastMessageTime = thread.lastMessage?.createdAt
     ? formatRelativeTime(new Date(thread.lastMessage.createdAt))
     : null;
-
-  // Simulate online status (in real app, this would come from WebSocket)
-  const isOnline = thread.user.id.charCodeAt(0) % 3 === 0;
 
   return (
     <button
@@ -346,6 +345,7 @@ export default function Messages() {
   const [isTyping, setIsTyping] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -376,6 +376,19 @@ export default function Messages() {
     queryKey: ["/api/messages", selectedUser],
     enabled: !!selectedUser,
   });
+
+  // Fetch initial online status
+  const { data: onlineStatusData } = useQuery<{ onlineUserIds: string[] }>({
+    queryKey: ["/api/users/online-status"],
+    refetchInterval: 30000, // Refetch every 30 seconds as backup
+  });
+
+  // Update onlineUserIds when API data changes
+  useEffect(() => {
+    if (onlineStatusData?.onlineUserIds) {
+      setOnlineUserIds(new Set(onlineStatusData.onlineUserIds));
+    }
+  }, [onlineStatusData]);
 
   // Send message mutation with optimistic update
   const sendMutation = useMutation({
@@ -542,6 +555,20 @@ export default function Messages() {
                 clearTimeout(typingTimeoutRef.current);
               }
               typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
+            }
+
+            // Handle user online/offline status changes
+            if (data.type === "user_status_change") {
+              console.log(`User ${data.userId} is now ${data.isOnline ? "online" : "offline"}`);
+              setOnlineUserIds((prev) => {
+                const updated = new Set(prev);
+                if (data.isOnline) {
+                  updated.add(data.userId);
+                } else {
+                  updated.delete(data.userId);
+                }
+                return updated;
+              });
             }
           } catch (error) {
             console.error("Error parsing WebSocket message:", error);
@@ -755,6 +782,7 @@ export default function Messages() {
                 thread={thread}
                 isSelected={selectedUser === thread.user.id}
                 onClick={() => handleSelectThread(thread.user.id)}
+                isOnline={onlineUserIds.has(thread.user.id)}
               />
             ))}
           </div>
@@ -792,7 +820,7 @@ export default function Messages() {
               {/* Online indicator */}
               <span
                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                  (selectedThread?.user.id?.charCodeAt(0) ?? 0) % 3 === 0 ? "bg-green-500" : "bg-muted-foreground/50"
+                  selectedUser && onlineUserIds.has(selectedUser) ? "bg-green-500" : "bg-muted-foreground/50"
                 }`}
                 data-testid="status-chat-online"
               />
@@ -808,7 +836,7 @@ export default function Messages() {
                   </Badge>
                 )}
                 <span className="text-xs text-muted-foreground" data-testid="text-chat-status">
-                  {(selectedThread?.user.id?.charCodeAt(0) ?? 0) % 3 === 0 ? "Online" : "Offline"}
+                  {selectedUser && onlineUserIds.has(selectedUser) ? "Online" : "Offline"}
                 </span>
               </div>
             </div>
