@@ -7,14 +7,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,7 +46,15 @@ import {
   Copy,
   Check,
   Hash,
-  AtSign
+  AtSign,
+  Eye,
+  EyeOff,
+  BadgeCheck,
+  Phone,
+  Mail,
+  Globe,
+  Instagram,
+  MessageCircle
 } from "lucide-react";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
@@ -61,6 +69,8 @@ export default function Profile() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [showPreviewAfterSave, setShowPreviewAfterSave] = useState(false);
 
   const { data: followStats } = useQuery<{
     followerCount: number;
@@ -122,9 +132,11 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setIsEditDialogOpen(false);
+      setShowPreviewAfterSave(true);
+      setIsPreviewMode(true);
       toast({
-        title: "Success",
-        description: "Profile updated successfully",
+        title: "Profile Updated",
+        description: "Your profile has been updated. Preview how it looks to others!",
       });
     },
     onError: (error: Error) => {
@@ -418,66 +430,80 @@ export default function Profile() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-background" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
           
-          {/* Cover Photo Upload Button */}
-          <button
-            type="button"
-            onClick={() => coverInputRef.current?.click()}
-            className="absolute top-4 left-4 p-2 rounded-full bg-black/40 text-white backdrop-blur-sm hover-elevate active-elevate-2 transition-all"
-            data-testid="button-change-cover"
-          >
-            <ImagePlus className="h-4 w-4" />
-          </button>
-          <input
-            ref={coverInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleCoverSelect}
-            className="hidden"
-            data-testid="input-cover-file"
-          />
+          {/* Cover Photo Upload Button - Hide in preview mode */}
+          {!isPreviewMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="absolute top-4 left-4 p-2 rounded-full bg-black/40 text-white backdrop-blur-sm hover-elevate active-elevate-2 transition-all"
+                data-testid="button-change-cover"
+              >
+                <ImagePlus className="h-4 w-4" />
+              </button>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverSelect}
+                className="hidden"
+                data-testid="input-cover-file"
+              />
+              
+              {/* Settings Dropdown - Top Right */}
+              <div className="absolute top-4 right-4 z-10">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="bg-black/40 text-white backdrop-blur-sm border-0"
+                      data-testid="button-settings-menu"
+                    >
+                      <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem 
+                      onClick={() => setIsEditDialogOpen(true)}
+                      className="cursor-pointer"
+                      data-testid="menu-item-edit-profile"
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => coverInputRef.current?.click()}
+                      className="cursor-pointer"
+                      data-testid="menu-item-change-cover"
+                    >
+                      <ImagePlus className="mr-2 h-4 w-4" />
+                      Change Cover
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={copyUserId}
+                      className="cursor-pointer"
+                      data-testid="menu-item-copy-id"
+                    >
+                      {copiedId ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                      Copy User ID
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </>
+          )}
           
-          {/* Settings Dropdown - Top Right */}
-          <div className="absolute top-4 right-4 z-10">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="bg-black/40 text-white backdrop-blur-sm border-0"
-                  data-testid="button-settings-menu"
-                >
-                  <MoreHorizontal className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem 
-                  onClick={() => setIsEditDialogOpen(true)}
-                  className="cursor-pointer"
-                  data-testid="menu-item-edit-profile"
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => coverInputRef.current?.click()}
-                  className="cursor-pointer"
-                  data-testid="menu-item-change-cover"
-                >
-                  <ImagePlus className="mr-2 h-4 w-4" />
-                  Change Cover
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={copyUserId}
-                  className="cursor-pointer"
-                  data-testid="menu-item-copy-id"
-                >
-                  {copiedId ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                  Copy User ID
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {/* Preview Mode Indicator - Top Right when in preview */}
+          {isPreviewMode && (
+            <div className="absolute top-4 right-4 z-10">
+              <Badge variant="secondary" className="gap-1.5 bg-black/40 text-white backdrop-blur-sm border-0">
+                <Eye className="h-3 w-3" />
+                Preview Mode
+              </Badge>
+            </div>
+          )}
         </div>
 
         {/* Profile Content Overlay */}
@@ -502,19 +528,21 @@ export default function Profile() {
                   </AvatarFallback>
                 </Avatar>
               </motion.div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-1 right-1 p-2.5 rounded-full bg-primary text-primary-foreground shadow-lg hover-elevate active-elevate-2 transition-all"
-                data-testid="button-change-avatar"
-                disabled={uploadImageMutation.isPending}
-              >
-                {uploadImageMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Camera className="h-4 w-4" />
-                )}
-              </button>
+              {!isPreviewMode && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-1 right-1 p-2.5 rounded-full bg-primary text-primary-foreground shadow-lg hover-elevate active-elevate-2 transition-all"
+                  data-testid="button-change-avatar"
+                  disabled={uploadImageMutation.isPending}
+                >
+                  {uploadImageMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
+                </button>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -616,12 +644,107 @@ export default function Profile() {
                   {currentUser.bio}
                 </motion.p>
               )}
+
+              {/* Edit/Preview Mode Toggle and Edit Button */}
+              <motion.div
+                className="flex items-center justify-center gap-3 mt-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.35 }}
+              >
+                {!isPreviewMode ? (
+                  <Button
+                    variant="default"
+                    onClick={() => setIsEditDialogOpen(true)}
+                    className="gap-2"
+                    data-testid="button-edit-profile-main"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsPreviewMode(false);
+                      setShowPreviewAfterSave(false);
+                    }}
+                    className="gap-2"
+                    data-testid="button-exit-preview"
+                  >
+                    <EyeOff className="h-4 w-4" />
+                    Exit Preview
+                  </Button>
+                )}
+                
+                <Button
+                  variant={isPreviewMode ? "default" : "outline"}
+                  onClick={() => setIsPreviewMode(!isPreviewMode)}
+                  className="gap-2"
+                  data-testid="button-toggle-preview"
+                >
+                  {isPreviewMode ? (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      Preview Mode
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      Preview Profile
+                    </>
+                  )}
+                </Button>
+              </motion.div>
             </motion.div>
           </motion.div>
 
-          {/* Image Upload Preview Card */}
+          {/* Preview Mode Banner */}
           <AnimatePresence>
-            {selectedFile && (
+            {isPreviewMode && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-6"
+              >
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="py-4">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-primary/10">
+                          <Eye className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm" data-testid="text-preview-banner-title">
+                            {showPreviewAfterSave ? "Profile Updated Successfully!" : "Preview Mode"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            This is how your profile appears to other users
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsPreviewMode(false);
+                          setShowPreviewAfterSave(false);
+                        }}
+                        data-testid="button-close-preview-banner"
+                      >
+                        Back to Edit
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Image Upload Preview Card - Hide in preview mode */}
+          <AnimatePresence>
+            {selectedFile && !isPreviewMode && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -703,55 +826,57 @@ export default function Profile() {
             ))}
           </motion.div>
 
-          {/* Role Switching Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <Card className="mt-6 border-2 border-primary/10 bg-gradient-to-br from-primary/5 via-transparent to-transparent">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="h-5 w-5 text-primary" />
-                  Switch Your Role
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Choose how you want to use CampusPlug
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-3" data-testid="role-switch-group">
-                  {[
-                    { role: "buyer" as const, icon: ShoppingCart, label: "Buyer", desc: "Shop products" },
-                    { role: "seller" as const, icon: Store, label: "Seller", desc: "Sell products" },
-                    { role: "both" as const, icon: Users, label: "Both", desc: "Buy & Sell" },
-                  ].map((item) => (
-                    <Button
-                      key={item.role}
-                      variant={currentUser.role === item.role ? "default" : "outline"}
-                      onClick={() => handleRoleChange(item.role)}
-                      disabled={roleMutation.isPending || currentUser.role === "admin"}
-                      className="flex flex-col gap-1.5 h-auto py-4"
-                      data-testid={`button-role-${item.role}`}
-                    >
-                      <item.icon className="h-5 w-5" />
-                      <span className="font-semibold text-sm">{item.label}</span>
-                      <span className="text-[10px] opacity-80">{item.desc}</span>
-                      {roleMutation.isPending && currentUser.role !== item.role && (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      )}
-                    </Button>
-                  ))}
-                </div>
-                
-                {currentUser.role === "admin" && (
-                  <p className="text-sm text-muted-foreground mt-3 text-center">
-                    Admin accounts cannot change their role.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+          {/* Role Switching Section - Only show when not in preview mode */}
+          {!isPreviewMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card className="mt-6 border-2 border-primary/10 bg-gradient-to-br from-primary/5 via-transparent to-transparent">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-5 w-5 text-primary" />
+                    Switch Your Role
+                  </CardTitle>
+                  <CardDescription>
+                    Choose how you want to use CampusPlug
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-3" data-testid="role-switch-group">
+                    {[
+                      { role: "buyer" as const, icon: ShoppingCart, label: "Buyer", desc: "Shop products" },
+                      { role: "seller" as const, icon: Store, label: "Seller", desc: "Sell products" },
+                      { role: "both" as const, icon: Users, label: "Both", desc: "Buy & Sell" },
+                    ].map((item) => (
+                      <Button
+                        key={item.role}
+                        variant={currentUser.role === item.role ? "default" : "outline"}
+                        onClick={() => handleRoleChange(item.role)}
+                        disabled={roleMutation.isPending || currentUser.role === "admin"}
+                        className="flex flex-col gap-1.5 h-auto py-4"
+                        data-testid={`button-role-${item.role}`}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        <span className="font-semibold text-sm">{item.label}</span>
+                        <span className="text-[10px] opacity-80">{item.desc}</span>
+                        {roleMutation.isPending && currentUser.role !== item.role && (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        )}
+                      </Button>
+                    ))}
+                  </div>
+                  
+                  {currentUser.role === "admin" && (
+                    <p className="text-sm text-muted-foreground mt-3 text-center">
+                      Admin accounts cannot change their role.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Additional Seller Stats */}
           {isSeller && followStats && (
