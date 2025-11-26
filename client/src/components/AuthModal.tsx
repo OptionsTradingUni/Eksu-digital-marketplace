@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +65,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (open) {
@@ -120,6 +122,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       onOpenChange(false);
       signInForm.reset();
+      setLocation("/");
     },
     onError: (error: any) => {
       toast({
@@ -143,6 +146,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       onOpenChange(false);
       signUpForm.reset();
+      setLocation("/");
     },
     onError: (error: any) => {
       toast({

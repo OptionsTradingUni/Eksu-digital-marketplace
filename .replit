@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20", "web", "postgresql-16"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -110,3 +110,4 @@ expertMode = true
 [userenv.shared]
 WEBSITE_COMMISSION_RATE = "0.10"
 SECURITY_DEPOSIT_AMOUNT = "0"
+DATABASE_URL = "postgresql://neondb_owner:npg_4Eswfa6SyHgC@ep-ancient-dust-agz33a36.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require"
