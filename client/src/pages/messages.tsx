@@ -18,7 +18,9 @@ import {
   ArrowLeft,
   MessageCircle,
   Users,
-  Search
+  Search,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +28,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import type { Message, User } from "@shared/schema";
 import { useSearch } from "wouter";
+
+type WebSocketStatus = "connecting" | "connected" | "disconnected" | "error";
 
 interface ChatThread {
   user: User;
@@ -338,13 +342,17 @@ export default function Messages() {
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [messageContent, setMessageContent] = useState("");
-  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [wsStatus, setWsStatus] = useState<WebSocketStatus>("disconnected");
   const [isTyping, setIsTyping] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (preselectedUserId) {
@@ -369,23 +377,60 @@ export default function Messages() {
     enabled: !!selectedUser,
   });
 
-  // Send message mutation
+  // Send message mutation with optimistic update
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
+      if (wsStatus === "connected" && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: "message",
+          receiverId: selectedUser,
+          content,
+        }));
+        return { success: true, viaWebSocket: true };
+      }
+
       return await apiRequest("POST", "/api/messages", {
         receiverId: selectedUser,
         content,
       });
     },
-    onSuccess: () => {
+    onMutate: async (content: string) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/messages", selectedUser] });
+
+      const previousMessages = queryClient.getQueryData<Message[]>(["/api/messages", selectedUser]);
+
+      const optimisticMessage: Message = {
+        id: `temp-${Date.now()}`,
+        senderId: currentUser?.id || "",
+        receiverId: selectedUser || "",
+        content,
+        isRead: false,
+        createdAt: new Date(),
+        productId: null,
+      };
+
+      queryClient.setQueryData<Message[]>(
+        ["/api/messages", selectedUser],
+        (old) => [...(old || []), optimisticMessage]
+      );
+
+      return { previousMessages, optimisticMessage };
+    },
+    onSuccess: (data, _, context) => {
       setMessageContent("");
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser] });
-      queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+
+      if (!(data as any)?.viaWebSocket) {
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser] });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+      }
     },
-    onError: () => {
+    onError: (error, _, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(["/api/messages", selectedUser], context.previousMessages);
+      }
       toast({
         title: "Error",
         description: "Failed to send message",
@@ -394,40 +439,178 @@ export default function Messages() {
     },
   });
 
-  // WebSocket connection
+  // Helper function to append a message to the messages cache
+  const appendMessageToCache = useCallback((newMessage: Message) => {
+    const conversationUserId = newMessage.senderId === currentUser?.id 
+      ? newMessage.receiverId 
+      : newMessage.senderId;
+    
+    queryClient.setQueryData<Message[]>(
+      ["/api/messages", conversationUserId],
+      (oldMessages) => {
+        if (!oldMessages) return [newMessage];
+        const exists = oldMessages.some(m => m.id === newMessage.id);
+        if (exists) return oldMessages;
+        return [...oldMessages, newMessage];
+      }
+    );
+
+    queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+  }, [currentUser?.id]);
+
+  // WebSocket connection with proper JWT authentication and reconnection
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const socket = new WebSocket(wsUrl);
+    if (!currentUser) return;
 
-    socket.onopen = () => {
-      console.log("WebSocket connected");
-    };
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const BASE_RECONNECT_DELAY = 1000;
 
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "message") {
-        queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
-      }
-      if (data.type === "typing" && data.userId === selectedUser) {
-        setIsTyping(true);
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
+    const connectWebSocket = async () => {
+      try {
+        setWsStatus("connecting");
+
+        const tokenResponse = await fetch("/api/auth/ws-token", {
+          credentials: "include",
+        });
+
+        if (!tokenResponse.ok) {
+          console.error("Failed to get WebSocket token");
+          setWsStatus("error");
+          scheduleReconnect();
+          return;
         }
-        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
+
+        const { token } = await tokenResponse.json();
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          console.log("WebSocket connection opened, authenticating...");
+          socket.send(JSON.stringify({ type: "auth", token }));
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "auth_success") {
+              console.log("WebSocket authenticated successfully");
+              setWsStatus("connected");
+              reconnectAttemptRef.current = 0;
+            }
+
+            if (data.type === "auth_error") {
+              console.error("WebSocket auth error:", data.message);
+              setWsStatus("error");
+              socket.close();
+              scheduleReconnect();
+              return;
+            }
+
+            if (data.type === "new_message" && data.message) {
+              console.log("Received new message via WebSocket:", data.message.id);
+              appendMessageToCache(data.message);
+            }
+
+            if (data.type === "message_sent" && data.message) {
+              console.log("Message sent confirmation:", data.message.id);
+              appendMessageToCache(data.message);
+            }
+
+            if (data.type === "typing" && data.userId === selectedUser) {
+              setIsTyping(true);
+              if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+              }
+              typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
+            }
+          } catch (error) {
+            console.error("Error parsing WebSocket message:", error);
+          }
+        };
+
+        socket.onclose = (event) => {
+          console.log("WebSocket closed:", event.code, event.reason);
+          setWsStatus("disconnected");
+          wsRef.current = null;
+
+          if (event.code !== 1000) {
+            scheduleReconnect();
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          setWsStatus("error");
+        };
+
+        wsRef.current = socket;
+      } catch (error) {
+        console.error("Failed to connect WebSocket:", error);
+        setWsStatus("error");
+        scheduleReconnect();
       }
     };
 
-    setWs(socket);
+    const scheduleReconnect = () => {
+      if (reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        console.log("Max reconnection attempts reached, stopping reconnection");
+        return;
+      }
+
+      const delay = Math.min(
+        BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current),
+        30000
+      );
+      
+      console.log(`Scheduling reconnection attempt ${reconnectAttemptRef.current + 1} in ${delay}ms`);
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectAttemptRef.current++;
+        connectWebSocket();
+      }, delay);
+    };
+
+    connectWebSocket();
 
     return () => {
-      socket.close();
+      if (wsRef.current) {
+        wsRef.current.close(1000, "Component unmounting");
+        wsRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [selectedUser]);
+  }, [currentUser, selectedUser, appendMessageToCache]);
+
+  // Polling fallback - refetch messages every 5 seconds as backup
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    pollingIntervalRef.current = setInterval(() => {
+      if (wsStatus !== "connected") {
+        console.log("WebSocket not connected, polling for messages...");
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser] });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+      }
+    }, 5000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [selectedUser, wsStatus]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -601,7 +784,7 @@ export default function Messages() {
               <p className="font-semibold" data-testid="text-chat-user-name">
                 {selectedThread?.user.firstName || selectedThread?.user.email}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {selectedThread?.user.isVerified && (
                   <Badge variant="outline" className="text-xs" data-testid="badge-verified">
                     Verified
@@ -611,6 +794,20 @@ export default function Messages() {
                   {(selectedThread?.user.id?.charCodeAt(0) ?? 0) % 3 === 0 ? "Online" : "Offline"}
                 </span>
               </div>
+            </div>
+            {/* Connection status indicator */}
+            <div 
+              className="flex items-center gap-1 text-xs"
+              data-testid="status-connection"
+              title={wsStatus === "connected" ? "Real-time updates active" : "Polling for updates"}
+            >
+              {wsStatus === "connected" ? (
+                <Wifi className="h-4 w-4 text-green-500" />
+              ) : wsStatus === "connecting" ? (
+                <Wifi className="h-4 w-4 text-yellow-500 animate-pulse" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-muted-foreground" />
+              )}
             </div>
           </div>
 

@@ -25,7 +25,7 @@ const EKSU_LOCATIONS = [
   { value: "osekita", label: "Osekita" },
 ];
 
-const BROKE_STUDENT_MAX_PRICE = 5000;
+const BROKE_STUDENT_MAX_PRICE = 10000;
 const DEFAULT_MAX_PRICE = 100000;
 const SEARCH_DEBOUNCE_MS = 300;
 const MIN_SEARCH_CHARS = 2;
@@ -141,7 +141,7 @@ export default function Home() {
         >
           <Wallet className="h-4 w-4" />
           Broke Student Mode
-          {isBrokeStudentMode && <Badge variant="secondary" className="ml-auto text-xs">Under ₦5k</Badge>}
+          {isBrokeStudentMode && <Badge variant="secondary" className="ml-auto text-xs">Under ₦10k</Badge>}
         </Button>
       </div>
 
