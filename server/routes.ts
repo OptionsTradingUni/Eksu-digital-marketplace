@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { z } from "zod";
 import { 
   insertProductSchema, 
@@ -27,6 +27,10 @@ import {
   createSupportTicketSchema,
   createGameSchema,
   completeGameSchema,
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 
@@ -75,35 +79,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registration route
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, phoneNumber, role } = req.body;
-
-      // Validate required fields
-      if (!email || !password || !firstName || !lastName) {
-        return res.status(400).json({ message: "Missing required fields" });
+      // Validate request body with Zod schema
+      const validationResult = registerSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        const errors = validationResult.error.flatten();
+        console.log("Registration validation failed:", errors);
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: errors.fieldErrors
+        });
       }
 
-      // Validate role if provided
-      const validRoles = ["buyer", "seller", "both"] as const;
-      const userRole: "buyer" | "seller" | "both" = validRoles.includes(role) ? role : "buyer";
+      const { email, password, firstName, lastName, phoneNumber, role } = validationResult.data;
 
       // Check if user already exists
-      const existingUser = await storage.getUserByEmail(email);
+      const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
       if (existingUser) {
         return res.status(400).json({ message: "Email already registered" });
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Create user
-      const user = await storage.createUser({
-        email,
+      // Create user - only pass phoneNumber if it's not empty
+      const userData: { 
+        email: string; 
+        password: string; 
+        firstName: string; 
+        lastName: string; 
+        phoneNumber?: string; 
+        role: "buyer" | "seller" | "both" 
+      } = {
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
-        firstName,
-        lastName,
-        phoneNumber,
-        role: userRole,
-      });
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        role: role || "buyer",
+      };
+      
+      // Only include phoneNumber if it's a non-empty string
+      if (phoneNumber && phoneNumber.trim().length > 0) {
+        userData.phoneNumber = phoneNumber.trim();
+      }
+
+      console.log("Creating user with data:", { ...userData, password: "[HIDDEN]" });
+
+      const user = await storage.createUser(userData);
 
       // Remove password from user object before storing in session/sending to client
       const { password: _, ...safeUser } = user;
@@ -114,11 +136,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Error logging in after registration:", err);
           return res.status(500).json({ message: "Registration successful but login failed" });
         }
+        console.log("User registered and logged in successfully:", safeUser.email);
         res.json(safeUser);
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error registering user:", error);
-      res.status(500).json({ message: "Failed to register user" });
+      
+      // Handle specific database errors
+      if (error.message?.includes("duplicate key") || error.code === "23505") {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to register user. Please try again.",
+        error: process.env.NODE_ENV === "development" ? error.message : undefined
+      });
     }
   });
 
@@ -147,50 +179,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Logout route
   app.post("/api/auth/logout", (req, res) => {
+    const sessionId = req.sessionID;
+    
     req.logout((err) => {
       if (err) {
         console.error("Error logging out:", err);
         return res.status(500).json({ message: "Failed to logout" });
       }
-      res.json({ message: "Logged out successfully" });
+      
+      // Destroy the session completely
+      req.session.destroy((sessionErr) => {
+        if (sessionErr) {
+          console.error("Error destroying session:", sessionErr);
+        }
+        
+        // Clear the session cookie
+        res.clearCookie("connect.sid", {
+          path: "/",
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax"
+        });
+        
+        console.log("User logged out, session destroyed:", sessionId);
+        res.json({ message: "Logged out successfully" });
+      });
     });
   });
 
-  // Forgot password route (placeholder - email sending to be implemented)
+  // Forgot password route - generates reset token
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
-      const { email } = req.body;
+      const validationResult = forgotPasswordSchema.safeParse(req.body);
       
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({ message: "Email is required" });
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Valid email is required" });
       }
 
+      const { email } = validationResult.data;
+      
       // Check if user exists
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByEmail(email.toLowerCase().trim());
       
       // For security, always return success even if user doesn't exist
       // This prevents email enumeration attacks
       if (!user) {
+        console.log(`Password reset requested for non-existent email: ${email}`);
         return res.json({ 
-          message: "If an account exists with this email, a password reset link will be sent." 
+          message: "If an account exists with this email, a password reset link will be sent.",
+          success: true
         });
       }
 
-      // TODO: Implement email sending functionality
-      // For now, just log the reset request
-      console.log(`Password reset requested for user: ${email}`);
+      // Generate a secure random token
+      const resetToken = crypto.randomBytes(32).toString("hex");
       
-      // In production, this would:
-      // 1. Generate a unique reset token
-      // 2. Store it in database with expiration
-      // 3. Send email with reset link
+      // Token expires in 1 hour
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      
+      // Store the token in database
+      await storage.createPasswordResetToken(user.id, resetToken, expiresAt);
+      
+      console.log(`Password reset token generated for user: ${email}`);
+      console.log(`Reset token (for development): ${resetToken}`);
+      
+      // In production, send email with reset link
+      // For now, include the token in the response for development/testing
+      // The frontend can use this to navigate to /reset-password?token=xxx
       
       res.json({ 
-        message: "If an account exists with this email, a password reset link will be sent." 
+        message: "If an account exists with this email, a password reset link will be sent.",
+        success: true,
+        // Include token in development mode for testing
+        ...(process.env.NODE_ENV === "development" && { resetToken })
       });
     } catch (error) {
       console.error("Error in forgot password:", error);
       res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
+  // Reset password route - validates token and updates password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const validationResult = resetPasswordSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        const errors = validationResult.error.flatten();
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: errors.fieldErrors
+        });
+      }
+
+      const { token, password } = validationResult.data;
+      
+      // Find the reset token
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ 
+          message: "Invalid or expired reset token. Please request a new password reset." 
+        });
+      }
+      
+      // Hash the new password
+      const hashedPassword = await bcrypt.hash(password, 12);
+      
+      // Update the user's password
+      await storage.updateUserPassword(resetToken.userId, hashedPassword);
+      
+      // Mark the token as used
+      await storage.markPasswordResetTokenUsed(token);
+      
+      console.log(`Password reset successful for user: ${resetToken.userId}`);
+      
+      res.json({ 
+        message: "Password has been reset successfully. You can now log in with your new password.",
+        success: true
+      });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Validate reset token route - checks if token is valid before showing reset form
+  app.get("/api/auth/validate-reset-token", async (req, res) => {
+    try {
+      const { token } = req.query;
+      
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ valid: false, message: "Token is required" });
+      }
+      
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.json({ 
+          valid: false, 
+          message: "Invalid or expired reset token" 
+        });
+      }
+      
+      res.json({ valid: true });
+    } catch (error) {
+      console.error("Error validating reset token:", error);
+      res.status(500).json({ valid: false, message: "Failed to validate token" });
     }
   });
 

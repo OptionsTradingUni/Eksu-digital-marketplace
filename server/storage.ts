@@ -29,6 +29,7 @@ import {
   cartItems,
   games,
   gameMatches,
+  passwordResetTokens,
   type User,
   type UpsertUser,
   type Product,
@@ -79,9 +80,10 @@ import {
   type InsertGame,
   type GameMatch,
   type InsertGameMatch,
+  type PasswordResetToken,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, like, desc, sql } from "drizzle-orm";
+import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (authentication & profiles)
@@ -287,6 +289,13 @@ export interface IStorage {
   cancelGame(gameId: string): Promise<Game>;
   createGameMatch(match: InsertGameMatch): Promise<GameMatch>;
   getGameMatches(gameId: string): Promise<GameMatch[]>;
+  
+  // Password reset token operations
+  createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
+  getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  deleteExpiredPasswordResetTokens(): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1958,6 +1967,91 @@ export class DatabaseStorage implements IStorage {
       .from(gameMatches)
       .where(eq(gameMatches.gameId, gameId))
       .orderBy(gameMatches.roundNumber);
+  }
+
+  async processPaystackSuccess(reference: string, amount: string): Promise<void> {
+    const [payment] = await db
+      .select()
+      .from(paystackPayments)
+      .where(eq(paystackPayments.reference, reference));
+    
+    if (!payment) {
+      throw new Error("Payment not found");
+    }
+
+    await db
+      .update(paystackPayments)
+      .set({ status: "success", paidAt: new Date() })
+      .where(eq(paystackPayments.reference, reference));
+
+    await this.updateWalletBalance(payment.userId, amount, "add");
+
+    await this.createTransaction({
+      walletId: (await this.getWallet(payment.userId))!.id,
+      amount,
+      type: "deposit",
+      status: "completed",
+      description: `Paystack deposit - ${reference}`,
+    });
+  }
+
+  // Password reset token operations
+  async createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<PasswordResetToken> {
+    await db
+      .delete(passwordResetTokens)
+      .where(eq(passwordResetTokens.userId, userId));
+
+    const [created] = await db
+      .insert(passwordResetTokens)
+      .values({ userId, token, expiresAt })
+      .returning();
+    return created;
+  }
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, token),
+          eq(passwordResetTokens.used, false),
+          gt(passwordResetTokens.expiresAt, new Date())
+        )
+      );
+    return resetToken;
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.token, token));
+  }
+
+  async deleteExpiredPasswordResetTokens(): Promise<void> {
+    await db
+      .delete(passwordResetTokens)
+      .where(
+        or(
+          eq(passwordResetTokens.used, true),
+          gt(new Date(), passwordResetTokens.expiresAt)
+        )
+      );
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+    
+    return user;
   }
 }
 

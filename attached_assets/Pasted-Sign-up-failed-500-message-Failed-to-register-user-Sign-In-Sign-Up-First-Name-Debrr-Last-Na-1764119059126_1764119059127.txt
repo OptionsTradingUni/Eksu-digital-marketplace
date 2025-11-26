@@ -1,0 +1,324 @@
+Sign up failed
+500: {"message" "Failed to register user"}
+Sign In
+Sign Up
+First Name
+^ Debrr
+Last Name
+Chris
+Email
+eddyward863@gmail.com
+Phone Number (Optional)
++234 XXX XXX XXXX
+What do you want to do?
+Buy
+Sell
+Both
+Password
+Confirm Password
+stA AnnALInt
+Work on these 
+
+our support team for assistance.
+TC
+=
+Verify Your Account Get verified for trust badges
+Wallet & Payments
+Add funds or withdraw money
+Report an Issue
+Report scams or violations
+Technical Help
+Fix Revenue Stream
+Escrow Fee
+Fee/Percentage
+4-6%
+Note
+Cha
+mar
+Games Cut
+10-15%
+Cha stak
+Boosting Fee/Percentage
+Notes
+4-6%
+Charged on all successful marketplace sales.
+10-15%
+Charged only on the pot of staked games.
+N500-N2,000
+
+Fixed fees for promoting listings.
+N200-N500
+Buyer fee, goes into the segregated Refund Insurance Pool (Owner's safety net)./Urgent
+N500-N2,000
+Fixe listir
+Pre-Order Insurance
+N200-N500 
+app or account issues
+
+Game
+Type
+Stak
+Ludo Classic
+4-player Live
+50 -
+Word Battle
+2-player Live
+20 -
+Daily Trivia
+Multi/Single
+50 -
+Guess the Price
+Multiplayer Quiz
+50 -
+Whot
+2-player Card Game
+50 -
+Quick Draw
+2-4 Player Pictionary
+50 -
+Speed Typing
+Leaderboard
+50 c
+Campus Bingo
+Live
+100
+Truth or Dare
+Multiplayer
+50
+
+Stake Range (N)
+Your Cut
+Notes
+50 - 300
+15%
+Voice chat.
+20 - 200
+15%
+Pidgin Scrabble.
+50 - 500
+10%
+Campus questions
+50 - 200
+15%
+
+50 - 150
+15%
+(New Addition)
+50 - 200
+15%
+(New Addition)
+50 optional
+10%
+Daily competition.
+100 optional
+15%
+
+50 dare stake
+10%
+Campus edition.
+English scrabble too
+Good pictures or images for them 
+
+
+
+
+
+
+
+
+
+
+
+🔒 II. User Accounts & Verification (Seller-Focused)
+2.1. Authentication & Profile
+• Sign-Up Flow: Standard email/password registration. Includes Captcha verification (e.g., Google reCAPTCHA). Optional Referral Code input.
+• Role Selection: Post-sign-up, users select their primary role: Buyer / Seller / Both.
+• Password Management: Full implementation of Forgot Password / Reset Password via email code.
+• Profile Editing (Buyer & Seller): Users can edit name, location, contact info, and Upload/Remove Profile Picture.
+2.2. Mandatory Seller Verification
+All sellers must pass a manual verification process before listing products.
+1. Seller completes steps: Upload Student ID/NIN + Selfie.
+2. Data enters Admin's Manual Verification Queue.
+3. Admin reviews and initiates a WhatsApp Video Call to confirm student status (matric number, name, department, level).
+4. Upon successful manual verification, the seller receives the Verified Student (Green) Badge.
+2.3. Seller Trust & Gamification
+• Custom Shop: Seller gets a unique URL: yoursite.ng/@username.
+• Profile Features: Gradient + sparkle banner, Emoji bio allowed, custom accent colour, Follow Seller, Items Sold Counter.
+• Trust Score: 0–100 score based on sales, reviews, and dispute history.
+• Response Time Badge.
+• Gamification: Super Seller Crowns, XP + Levels, Weekly King of Sales.
+💰 III. Wallet, Escrow & Financial Systems
+3.1. Payment Methods & Wallet
+• Wallet Bonus: ₦500–₦1,000 welcome bonus upon full verification.
+• Accepted Payment Methods (No Crypto): Credit/Debit Card, Bank Transfer/Payment, USSD.
+• Wallet Functions: Buyer Deposit, Buyer Withdrawal, Seller Deposit, Seller Withdrawal.
+• Automatic Money Flow: All funds are handled by Paystack/Flutterwave, ensuring automatic deduction/crediting for marketplace sales and staked games.
+
+🛍️ IV. Marketplace & Product Listings
+4.1. Product Display
+• Grid View: Products must be displayed in a 4-column grid view (instead of a traditional 2-column list) for maximum browsing.
+• Feed: TikTok-style Infinite Feed implementation.
+• Images: Seller uploads a minimum of 2 and a maximum of 20 pictures per product. Images must be well-arranged and no price overlays.
+• Cart System: Fully functional Multi-Seller Cart System.
+4.2. Advanced AI Tools (2026 Level)
+• AI Listing Creator: AI generates product title and description from 3 photos + a voice note.
+• AI Price Suggestion: Real-time pricing recommendations for sellers.
+• AI Scam Photo Detector: Flags known fraudulent images and patterns.
+4.3. The Pre-Order Escrow System (Safe Version)
+The system is built to be self-sufficient, requiring no owner money for refunds.
+1. Trusted Pre-Order Seller Badge: Unlocked only after meeting requirements: 50+ normal sales, 4.9+ rating, full verification, and ₦10,000 refundable security deposit (or frozen wallet amount).
+2. Order Flow: Buyer pays into platform escrow. Money is HELD until delivery.
+3. Delivery Schedule: Seller specifies the Max Delivery Date/Time and Available Days. Buyer submits contact info.
+4. Security: Buyer pays a small Insurance Fee (₦200–₦500) into the Refund Insurance Pool.
+5. Release: Money is released only after the buyer clicks "Received & OK."
+6. Failure: If the item is not delivered by the agreed date, an AUTO REFUND occurs (drawn from the Insurance Pool). The seller immediately loses the badge and the ₦10,000 deposit.
+🧠 V. Search Engine & Filters
+The search engine must be highly intelligent and context-aware.
+• Nigerian Language Support: Full support for Nigerian slang / Pidgin search.
+• Voice Search: Supports Pidgin, English, Yoruba, Igbo, Hausa.
+• Tolerance: 99% typo tolerance built into the search algorithm.
+• Filters:
+• Emoji Search (₦ for phones, ✨ for premium).
+• Course Code Search (e.g., MEE203, CSC101).
+• Hostel + Distance Filter.
+• Broke Student Filter (Under ₦5k).
+• Price Slider with voice commands ("under 200k").
+🕹️ VI. GAMES TAB – “Play Zone”
+The Play Zone is a critical engagement tool and must be implemented as a dedicated tab in the Bottom Navigation Bar.
+6.1. Games Features & Monetization
+• Navigation: Must be in the Bottom Navigation Bar (Home | Play | Search | Cart | Profile).
+• Core Rule: 100% optional betting. Free Mode is always available.
+• Winnings: Winner auto-credited instantly via the wallet.
+• Leaderboards: Real-time leaderboards for all competitive games.
+• Rewards: Free daily login credit (₦50), Ad watch credit, Daily Spin Wheel.
+• Ads Environment: Non-intrusive ads on non-staked game screens.
+
+VII. Admin & Safety Features (Free Cost)
+• Admin Dashboard: Comprehensive dashboard for management, analytics, and manual actions.
+• Actions: One-click freeze / ban users/listings.
+• Verification: Management of the Manual Verification Queue.
+• Dispute Centre: Handle disputes with photo/video evidence.
+• Reporting: User report immediately triggers a review and listing freeze.
+• Safety Tools: Scam Score Flag, Emergency SOS Button, Real-time Safe Location Sharing (opt-in).
+• Product Pushing: Ability for Admin to manually push specific products to the homepage or boosted slots.
+VIII. Remaining High-Value & Naija-Only Features
+• Campus Life Integration: Textbook ISBN scanner, Sublet & bedspace board, Ride-share, Lost & Found, Free food alerts, Rain delay notification, NEPA light tracker per hostel.
+• Crazy Naija Vibes: Valentine love letter delivery, "Ghost delivery," "Roast my price" public thread, "Who dey owe me" debt list, Prayer request section.
+• Accessibility: USSD version (*code#) mirror for basic functions, WhatsApp bot mirror.
+IX. Critical Action Items & Bug Fixes
+These items must be verified and fixed during the first development sprint.
+1. Fix Sign-Up: Ensure the process completes without error and correctly captures the user's role.
+2. Fix Logout: Must correctly clear the session and route the user to the login page (not showing a router error).
+3. Fix Password Reset: Implement the full password reset flow.
+4. Navigation: All primary navigation must use the Bottom Navigation Bar for mobile optimization.
+5. Referral History: Ensure the display is clearly arranged, separating Pending and Completed statuses.
+\text{README.md} - Error Boundary Guide
+The developer must implement proper error boundaries. The following guide is to be included in the project's \bm{\text{README.md}}:
+
+🛡️ I. Maximum Security & Trust Liquidity
+While you have strong verification and escrow, enhancing the safety net and simplifying money management is critical for user adoption.
+1. Automated Fund Sweeping (For Seller Deposits)
+• Feature: Automatically monitor seller wallets and sweep the required ₦10,000 security deposit for the Trusted Pre-Order Seller Badge as soon as the balance is available.
+• Why Add: Currently, a seller might be verified but forget to lock the deposit. Automated sweeping ensures the Pre-Order Insurance Pool is immediately secured, minimizing manual administrative work and guaranteeing 100% refund capability (your biggest selling point for pre-orders).
+2. Multi-Factor Authentication (MFA) for Financial Actions
+• Feature: Require a temporary code (via email or SMS) for high-risk actions, specifically wallet withdrawals and changing bank details.
+• Why Add: Given that your platform handles real money and student data, this is non-negotiable best practice. It protects users from account takeover, which is crucial for building trust, especially in a region prone to digital fraud.
+3. AI Behavioral Anomaly Detection
+• Feature: A simple system that flags unusual user activity (e.g., a brand new account immediately listing 20 high-value electronics and attempting a large withdrawal; or a student account logging in from a distant, non-campus IP address).
+• Why Add: This acts as an early warning system against sophisticated scammers who might pass the initial verification. It complements your existing AI scam photo detector and manual checks.
+📈 II. Liquidity & Financial Flexibility
+These features directly reduce friction in financial transactions, encouraging more activity and boosting your revenue base.
+1. Micro-Lending Integration (Optional, Phase 3)
+• Feature: Partner with a licensed Nigerian FinTech (like PiggyVest or Carbon) to offer small, short-term loans (e.g., ₦5k – ₦50k) directly through the platform. Loans could be used for education expenses or purchasing high-value items on CampusPlug.
+• Why Add: This addresses the "Sapa" issue head-on. It encourages sales by providing instant purchasing power to students who need cash flow, increasing your overall transaction volume and escrow fee revenue.
+2. Withdrawal Threshold Gamification
+• Feature: Offer tiered, lower withdrawal fees or faster processing times for users who maintain a minimum balance (e.g., keeping ₦5,000 in the wallet).
+• Why Add: This encourages users to keep funds on the platform (improving liquidity) instead of immediately withdrawing every sale. More money on CampusPlug means more easy purchasing power for games and goods.
+🤝 III. Sustainable Engagement & Community
+These ideas focus on making the app the default communication and social hub for students, keeping them coming back even when they aren't shopping or gaming.
+1. Group Chat/Study Groups
+• Feature: Allow students to create or join private/public group chats based on course codes (e.g., CSC101, MEE203) or residence (Hostel A).
+• Why Add: This transforms the app from a transaction platform into a campus utility. If students use the app for academic coordination, their daily usage frequency skyrockets, ensuring they see listings, game notifications, and advertisements constantly.
+2. Daily Price Volatility Game (Economic Vibe)
+• Feature: A simple game (like the Guess the Price game, but with a twist) where users bet on whether the average price of a popular category (e.g., "Used Phones") will go up or down in the next 24 hours.
+• Why Add: This leverages the high energy of campus discussions about market prices ("Dollar rate is high!"). It ties real-world economics to your gaming platform, boosting engagement and your revenue cut.
+3. Campus Events & Notice Board
+• Feature: A dedicated, admin-curated section for verified campus news, SUG announcements, faculty notices, and upcoming social events.
+• Why Add: This centralizes essential campus information. It pulls users away from WhatsApp/Telegram groups into your app daily, increasing exposure to your ads and listings.
+
+🏛️ IV. Community Governance & Academic Integration
+These features are designed to make the app essential to a student's daily academic life and to offload moderation tasks to trusted, verified students.
+1. Peer-to-Peer Dispute Resolution Panel
+
+Feature: Create an optional "Peer Judge" role for the most trusted, high-level (Lvl 50+), and verified students. When a minor dispute occurs (e.g., item slightly different than described, ₦500-₦5,000 value), both parties can submit evidence to a panel of three randomly selected Peer Judges.
+
+Why Add: This is a scalability tool. It drastically reduces the manual load on your admin team for small issues, enabling faster dispute resolution, which keeps money flowing. It also gamifies trust, as the judges earn a tiny commission and XP for fair ruling.
+
+Dynamic Pricing for Urgency
+• Feature: Allow sellers to set a "Time-Bound Price Drop" for urgent items. For example, a phone listed for ₦50,000 drops by ₦1,000 every hour until it sells or hits a floor price of ₦45,000.
+• Why Add: This leverages the Urgent Red Badge with a strong psychological driver. It creates excitement and urgency for buyers (they rush to buy before the price increases or someone else snatches it), significantly increasing conversion rates on distressed inventory.
+3. AI Coursework Exchange/Swap Board
+• Feature: Beyond the Textbook ISBN Scanner, create a Coursework/Handout Swap Board. Students can list old project reports, lab manuals, or past questions specific to their course code and department (e.g., MEE203 Lab Report). Items can be listed for free, swap, or a small fee.
+• Why Add: This directly ties into student academic survival. Course materials are high-value, recurring needs. This feature ensures students visit the app daily, particularly during high-stress exam and project periods, reinforcing the "CampusPlug" brand as essential utility.
+🛡️ V. Advanced Platform Security & Reliability
+These are critical backend and UX features that communicate a high level of professionalism and trustworthiness.
+1. Real-Time System Health Status Page
+• Feature: A publicly accessible status page (e.g., status.yoursite.ng) showing the uptime of core services: Marketplace, Payments, Games, Chat, and Verification. This is standard for professional tech companies.
+• Why Add: In case of a major bug (like the 500 sign-up error) or server downtime, users can instantly check if it's a personal issue or a platform issue. It manages expectations and builds trust by demonstrating transparency and accountability.
+2. Transaction Fingerprinting/Watermarking
+• Feature: Invisibly embed a unique user ID and timestamp (a "fingerprint") into images uploaded in the chat (or optionally, product images). If that image appears in a dispute or is reported as a scam on another platform, you can trace the original uploader instantly.
+• Why Add: This is a powerful anti-scam tool that targets image reuse and catfishing. It makes the platform significantly safer, as scammers know their images can be traced back to their account, enabling faster bans and protecting the community.
+3. Automated Tax/Compliance Reporting (Phase 3)
+• Feature: Implement a system (in partnership with your payment gateway) to track total seller payouts annually or monthly, generating simplified reports that aid in future tax or regulatory compliance as the platform scales.
+• Why Add: While not immediately required, setting up the framework early saves massive headaches later. It ensures your financial operations are scalable and ready for growth when revenue hits higher thresholds, protecting your business's future.
+
+📈 IV. Marketing Automation & Growth Hacking
+These features automate your promotional efforts and turn user activity into viral growth loops.
+1. Seller Performance-Based Auto-Boost
+• Feature: The algorithm automatically grants a free 48-hour boost to sellers who meet specific performance metrics, such as achieving a 4.9+ rating on their last 10 sales, or maintaining a 95% response rate in chat.
+• Why Add: This is a free incentive that rewards good behaviour. Instead of relying solely on paid boosts, this drives sellers to offer better customer service, which directly improves the overall buyer experience and marketplace quality.
+2. AI-Generated Social Media Ad Creatives
+• Feature: For paid booster packages, the system automatically generates a ready-to-post graphic or short video clip (based on the listing photos) with a compelling title and call-to-action (e.g., "Must See! Price Dropped!") that the seller can download and share instantly on social media.
+• Why Add: This removes the friction of creating external ads. It gives the seller a powerful, professional tool, making them more likely to pay for the boost and spread the CampusPlug brand visibility across platforms like Instagram and TikTok.
+3. Shareable "Wishlist Drop" Notification
+• Feature: When an item on a buyer's watchlist/wishlist gets a price reduction, the buyer receives a notification. They also get a one-click option to share the deal with friends ("Check out this deal on CampusPlug!").
+• Why Add: This turns passive users into active promoters. It uses the fear of missing out (FOMO) to drive both the original user back to the app and organically introduce new users to a specific, high-interest product.
+👥 V. Dynamic User Segmentation & Personalization
+These tools help the administration and the AI understand and act on user behavior for better targeting and safety.
+1. "High-Value Buyer" Status
+• Feature: Automatically apply a "High-Value Buyer" badge to users who have completed 20+ transactions, have zero reports, and an average seller rating of 5.0 (on the review they left).
+• Why Add: This allows sellers to filter their messages/bids to prioritize proven, trustworthy buyers, increasing the chance of a successful sale. It provides a non-financial incentive for buyers to be good actors.
+2. AI-Driven Predictive Fraud Score
+• Feature: Beyond the Scam Score Flag, the system should calculate a Predictive Fraud Score based on a seller's listing categories (e.g., too many unrelated categories), price deviation from the mean, and geographical login changes. This score is only visible to the admin.
+• Why Add: This provides a proactive security layer. Instead of waiting for a report, the score allows the admin to manually review suspicious accounts before they can attempt a major scam, protecting the platform's integrity.
+3. Location-Based Dynamic Content Slots
+• Feature: The homepage slots, ad banners, and push notifications are dynamically controlled by the user's last known Hostel/Location filter selection. For example, a user near Phase2 sees ads for Phase2 hostels and services first.
+• Why Add: This makes the app feel highly relevant and local. It ensures that your advertisers (Hostel owners, local service providers) get maximum value, justifying higher ad pricing and improving overall ad click-through rates.
+🔌 VI. Enhanced Offline & Utility Features
+Focusing on features that make the app useful even with poor network connectivity, which is common in a campus setting.
+1. Offline Wishlist & Cart Sync
+• Feature: Users can add items to their Cart or Wishlist even when the network is down. The items are stored locally and automatically sync the moment the network connection is restored.
+• Why Add: It prevents lost conversions due to network drops. If a student sees an item but loses connection, they won't have to manually search for it later.
+2. Chat Message Pre-Compose
+• Feature: Users can type and compose chat messages even when offline. The message is stored locally and sent instantly upon reconnection.
+• Why Add: This improves the reliability of the real-time chat, making the seller-buyer communication much smoother and preventing frustration over lost messages.
+3. Campus Resource Directory (Offline Cachable)
+• Feature: The Cafeteria Menu, Shuttle Timetable, and Printing Directory (from the 501-600 list) should be built to be easily cached and viewable entirely offline once a user has visited the page once.
+• Why Add: This transforms these utility features into reliable, essential tools. Students will open the app for this offline information even when not shopping, creating a high-frequency daily habit.
+
+There should be a one player game and it’s not a must to stake well to start a game maybe 100 naira sure for the system that’s okay too
+But for people to stake or bet not a must only if they want and they get matched with someone who wants too also gamble amount is from 10k-100k
+
+Don't skip or stop to add an api or ask some questions don't worry 
+Just continue building till you finish it 
+Make sure you finish it 
+Add more to the filter stuff 
+Location available is school gate, town, yemkem, iworoko, phase2, osekita 
+Make chatbot more smart too
+Show if a profile is untrusted 
+Option to report seller giving notifications to both admin and seller
+Also the site is somehow slow now 
+Also people selling services maybe painter etc, should it be free or there’s a monthly subscription for them to post their thing maybe free 
+Don't skip or stop to add an api or ask some questions don't worry 
+Just continue building till you finish it 
+Make sure you finish
