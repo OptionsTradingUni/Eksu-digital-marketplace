@@ -1,5 +1,11 @@
 # EKSU Campus Marketplace
 
+<div align="center">
+  <img src="https://github-readme-stats.vercel.app/api?username=optionstradinguni&show_icons=true&theme=radical" height="180" alt="stats graph"  />
+  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=your-username&layout=compact&theme=radical" height="180" alt="languages graph"  />
+</div>
+
+
 A comprehensive peer-to-peer marketplace built specifically for EKSU students to buy and sell items, find hostels, connect with services, and more.
 
 ## 🚀 Features
