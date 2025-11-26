@@ -12,6 +12,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { z } from "zod";
+import Groq from "groq-sdk";
 import { 
   insertProductSchema, 
   insertMessageSchema, 
@@ -1186,6 +1187,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating profile image:", error);
       res.status(500).json({ message: "Failed to update profile image" });
+    }
+  });
+
+  // Update user role
+  app.put("/api/users/:id/role", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId || userId !== req.params.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const validationResult = roleUpdateSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid role",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { role } = validationResult.data;
+      
+      // Prevent non-admins from setting admin role
+      if (role === "admin") {
+        const user = await storage.getUser(userId);
+        if (user?.role !== "admin") {
+          return res.status(403).json({ message: "Cannot set admin role" });
+        }
+      }
+
+      const updated = await storage.updateUserProfile(req.params.id, { role });
+      const { password: _, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update role" });
     }
   });
 
@@ -2637,6 +2673,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching trivia question:", error);
       res.status(500).json({ message: "Failed to fetch trivia question" });
+    }
+  });
+
+  // Generate trivia questions using Groq AI
+  app.post("/api/games/trivia/questions", isAuthenticated, async (req: any, res) => {
+    try {
+      const apiKey = process.env.GROQ_API_KEY;
+      
+      if (!apiKey) {
+        console.warn("GROQ_API_KEY not configured, returning error");
+        return res.status(503).json({ 
+          message: "AI question generation not available. Please configure GROQ_API_KEY.",
+          useFallback: true
+        });
+      }
+
+      const groq = new Groq({ apiKey });
+
+      const categories = ["General Knowledge", "Nigerian Culture", "Campus Life", "Sports", "Entertainment"];
+      const difficulties = ["easy", "medium", "hard"];
+
+      const prompt = `Generate exactly 10 trivia questions for Nigerian university students. 
+      
+Requirements:
+- Questions should be relevant to Nigerian culture, campus life, current affairs, sports, and entertainment
+- Mix of difficulty levels: 4 easy, 4 medium, 2 hard questions
+- Categories to use: ${categories.join(", ")}
+- Each question must have exactly 4 answer options
+- Questions should be educational, fun, and appropriate for university students
+- Include questions about Nigerian music artists, Nollywood, Nigerian football, campus slang, Nigerian history, food, festivals, and pop culture
+
+Return ONLY a valid JSON array with this exact structure (no markdown, no explanation):
+[
+  {
+    "id": 1,
+    "category": "General Knowledge",
+    "question": "What is the capital of Nigeria?",
+    "options": ["Lagos", "Abuja", "Kano", "Ibadan"],
+    "correctAnswer": 1,
+    "difficulty": "easy"
+  }
+]
+
+The correctAnswer is the 0-based index of the correct option in the options array.
+Generate exactly 10 unique questions with varied topics across all categories.`;
+
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: "You are a trivia question generator specializing in Nigerian culture and university life. You always respond with valid JSON arrays only, no markdown formatting or explanations."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.8,
+        max_tokens: 3000,
+      });
+
+      const responseContent = completion.choices[0]?.message?.content;
+      
+      if (!responseContent) {
+        console.error("Empty response from Groq API");
+        return res.status(500).json({ 
+          message: "Failed to generate questions - empty response",
+          useFallback: true
+        });
+      }
+
+      // Parse and validate the response
+      let questions;
+      try {
+        // Clean the response - remove any markdown formatting
+        let cleanedResponse = responseContent.trim();
+        if (cleanedResponse.startsWith("```json")) {
+          cleanedResponse = cleanedResponse.slice(7);
+        }
+        if (cleanedResponse.startsWith("```")) {
+          cleanedResponse = cleanedResponse.slice(3);
+        }
+        if (cleanedResponse.endsWith("```")) {
+          cleanedResponse = cleanedResponse.slice(0, -3);
+        }
+        cleanedResponse = cleanedResponse.trim();
+
+        questions = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error("Failed to parse Groq response:", parseError);
+        console.error("Raw response:", responseContent);
+        return res.status(500).json({ 
+          message: "Failed to parse AI response",
+          useFallback: true
+        });
+      }
+
+      // Validate the questions structure
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.error("Invalid questions array from Groq");
+        return res.status(500).json({ 
+          message: "Invalid questions format from AI",
+          useFallback: true
+        });
+      }
+
+      // Validate and sanitize each question
+      const validatedQuestions = questions.map((q: any, index: number) => ({
+        id: index + 1,
+        category: categories.includes(q.category) ? q.category : "General Knowledge",
+        question: String(q.question || ""),
+        options: Array.isArray(q.options) && q.options.length === 4 
+          ? q.options.map((opt: any) => String(opt))
+          : ["Option A", "Option B", "Option C", "Option D"],
+        correctAnswer: typeof q.correctAnswer === "number" && q.correctAnswer >= 0 && q.correctAnswer <= 3 
+          ? q.correctAnswer 
+          : 0,
+        difficulty: difficulties.includes(q.difficulty) ? q.difficulty : "medium"
+      }));
+
+      // Ensure we have exactly 10 questions
+      const finalQuestions = validatedQuestions.slice(0, 10);
+      
+      if (finalQuestions.length < 10) {
+        console.warn(`Only got ${finalQuestions.length} valid questions from AI`);
+      }
+
+      console.log(`Generated ${finalQuestions.length} trivia questions using Groq AI`);
+      res.json({ questions: finalQuestions });
+    } catch (error: any) {
+      console.error("Error generating trivia questions with Groq:", error);
+      
+      // Check for specific API errors
+      if (error.status === 401) {
+        return res.status(503).json({ 
+          message: "Invalid Groq API key",
+          useFallback: true
+        });
+      }
+      
+      if (error.status === 429) {
+        return res.status(503).json({ 
+          message: "Rate limit exceeded. Please try again later.",
+          useFallback: true
+        });
+      }
+
+      res.status(500).json({ 
+        message: "Failed to generate questions",
+        useFallback: true
+      });
     }
   });
 

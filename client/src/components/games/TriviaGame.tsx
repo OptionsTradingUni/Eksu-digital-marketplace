@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Clock, Trophy, Bot, User, Check, X, RotateCcw, HelpCircle, Sparkles } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Clock, Trophy, Bot, User, Check, X, RotateCcw, HelpCircle, Sparkles, Loader2, AlertCircle, Zap } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 interface TriviaGameProps {
   stake: number;
@@ -358,6 +360,25 @@ const getRandomQuestions = (count: number): Question[] => {
   return shuffled.slice(0, count);
 };
 
+const generateAIAnswers = (gameQuestions: Question[]): number[] => {
+  return gameQuestions.map((q) => {
+    const difficultyAccuracy = {
+      easy: 0.85,
+      medium: 0.65,
+      hard: 0.45
+    };
+    
+    const accuracy = difficultyAccuracy[q.difficulty];
+    
+    if (Math.random() < accuracy) {
+      return q.correctAnswer;
+    } else {
+      const wrongAnswers = [0, 1, 2, 3].filter((i) => i !== q.correctAnswer);
+      return wrongAnswers[Math.floor(Math.random() * wrongAnswers.length)];
+    }
+  });
+};
+
 export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -367,33 +388,64 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [aiAnswer, setAIAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
-  const [gamePhase, setGamePhase] = useState<"playing" | "results">("playing");
+  const [gamePhase, setGamePhase] = useState<"loading" | "playing" | "results">("loading");
   const [playerAnswers, setPlayerAnswers] = useState<(number | null)[]>([]);
   const [aiAnswers, setAIAnswers] = useState<number[]>([]);
+  const [isAIGenerated, setIsAIGenerated] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Generating fresh questions...");
+
+  const fetchQuestionsFromAPI = async (): Promise<Question[] | null> => {
+    try {
+      setLoadingMessage("Generating fresh AI questions...");
+      const response = await apiRequest("POST", "/api/games/trivia/questions", {});
+      const data = await response.json();
+      
+      if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+        return data.questions;
+      }
+      return null;
+    } catch (error) {
+      console.error("Failed to fetch AI questions:", error);
+      return null;
+    }
+  };
+
+  const initializeGame = useCallback(async () => {
+    setGamePhase("loading");
+    setLoadingMessage("Generating fresh questions...");
+    
+    let gameQuestions: Question[] | null = null;
+    
+    gameQuestions = await fetchQuestionsFromAPI();
+    
+    if (gameQuestions && gameQuestions.length >= 10) {
+      setIsAIGenerated(true);
+      setQuestions(gameQuestions);
+    } else {
+      setLoadingMessage("Using classic questions...");
+      setIsAIGenerated(false);
+      gameQuestions = getRandomQuestions(10);
+      setQuestions(gameQuestions);
+    }
+    
+    const aiAnswersList = generateAIAnswers(gameQuestions);
+    setAIAnswers(aiAnswersList);
+    
+    setCurrentQuestionIndex(0);
+    setPlayerScore(0);
+    setAIScore(0);
+    setTimeLeft(15);
+    setSelectedAnswer(null);
+    setAIAnswer(null);
+    setShowResult(false);
+    setPlayerAnswers([]);
+    
+    setGamePhase("playing");
+  }, []);
 
   useEffect(() => {
-    const gameQuestions = getRandomQuestions(10);
-    setQuestions(gameQuestions);
-    
-    const aiAnswersList = gameQuestions.map((q) => {
-      const difficultyAccuracy = {
-        easy: 0.85,
-        medium: 0.65,
-        hard: 0.45
-      };
-      
-      const accuracy = difficultyAccuracy[q.difficulty];
-      
-      if (Math.random() < accuracy) {
-        return q.correctAnswer;
-      } else {
-        const wrongAnswers = [0, 1, 2, 3].filter((i) => i !== q.correctAnswer);
-        return wrongAnswers[Math.floor(Math.random() * wrongAnswers.length)];
-      }
-    });
-    
-    setAIAnswers(aiAnswersList);
-  }, []);
+    initializeGame();
+  }, [initializeGame]);
 
   useEffect(() => {
     if (gamePhase !== "playing" || showResult || questions.length === 0) return;
@@ -459,44 +511,34 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
     }
   }, [gamePhase, playerScore, aiScore, onGameEnd]);
 
-  const resetGame = () => {
-    const gameQuestions = getRandomQuestions(10);
-    setQuestions(gameQuestions);
-    
-    const aiAnswersList = gameQuestions.map((q) => {
-      const difficultyAccuracy = {
-        easy: 0.85,
-        medium: 0.65,
-        hard: 0.45
-      };
-      
-      const accuracy = difficultyAccuracy[q.difficulty];
-      
-      if (Math.random() < accuracy) {
-        return q.correctAnswer;
-      } else {
-        const wrongAnswers = [0, 1, 2, 3].filter((i) => i !== q.correctAnswer);
-        return wrongAnswers[Math.floor(Math.random() * wrongAnswers.length)];
-      }
-    });
-    
-    setAIAnswers(aiAnswersList);
-    setCurrentQuestionIndex(0);
-    setPlayerScore(0);
-    setAIScore(0);
-    setTimeLeft(15);
-    setSelectedAnswer(null);
-    setAIAnswer(null);
-    setShowResult(false);
-    setGamePhase("playing");
-    setPlayerAnswers([]);
+  const resetGame = async () => {
+    await initializeGame();
   };
 
-  if (questions.length === 0) {
+  if (gamePhase === "loading" || questions.length === 0) {
     return (
       <Card>
-        <CardContent className="p-8 text-center">
-          <div className="animate-pulse">Loading questions...</div>
+        <CardContent className="p-8">
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="relative">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <Zap className="h-4 w-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-medium">{loadingMessage}</p>
+              <p className="text-sm text-muted-foreground">
+                Preparing your trivia challenge...
+              </p>
+            </div>
+            <div className="w-full max-w-xs space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4 mx-auto" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
@@ -530,9 +572,15 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
               <HelpCircle className="h-5 w-5" />
               Trivia
+              {isAIGenerated && (
+                <Badge className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  AI
+                </Badge>
+              )}
               {!isPractice && (
                 <Badge variant="secondary" className="text-xs">
                   Stake: {stake} NGN

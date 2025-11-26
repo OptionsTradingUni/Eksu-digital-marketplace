@@ -24,8 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Users, Gift, Check } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const signInSchema = z.object({
@@ -192,37 +190,35 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
   if (showForgotPassword) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[450px]" data-testid="dialog-forgot-password">
+        <DialogContent className="sm:max-w-[400px] max-h-[90vh] overflow-y-auto" data-testid="dialog-forgot-password">
           <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-2 mb-1">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowForgotPassword(false)}
                 data-testid="button-back-to-signin"
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-primary/10 p-2">
-                  <Lock className="h-5 w-5 text-primary" />
-                </div>
+              <div className="rounded-full bg-primary/10 p-1.5">
+                <Lock className="h-4 w-4 text-primary" />
               </div>
             </div>
-            <DialogTitle className="text-2xl">Reset Password</DialogTitle>
-            <DialogDescription>
-              Enter your email and we'll send you a link to reset your password.
+            <DialogTitle className="text-xl">Reset Password</DialogTitle>
+            <DialogDescription className="text-sm">
+              Enter your email to receive a reset link.
             </DialogDescription>
           </DialogHeader>
 
           <Form {...forgotPasswordForm}>
-            <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPassword)} className="space-y-4 mt-4">
+            <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPassword)} className="space-y-3 mt-2">
               <FormField
                 control={forgotPasswordForm.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-sm">Email</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -257,41 +253,41 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] p-0 gap-0" data-testid="dialog-auth">
-        <div className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 border-b">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="rounded-full bg-primary p-2.5">
-              <ShoppingBag className="h-6 w-6 text-primary-foreground" />
+      <DialogContent className="sm:max-w-[440px] max-h-[90vh] overflow-y-auto p-0 gap-0" data-testid="dialog-auth">
+        <div className="bg-gradient-to-br from-primary/10 to-primary/5 p-4 border-b sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-primary p-2">
+              <ShoppingBag className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <DialogTitle className="text-2xl">EKSU Marketplace</DialogTitle>
-              <DialogDescription className="text-sm mt-1">
-                Join thousands of students trading safely on campus
+              <DialogTitle className="text-lg">EKSU Marketplace</DialogTitle>
+              <DialogDescription className="text-xs">
+                Join students trading safely on campus
               </DialogDescription>
             </div>
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="signin" data-testid="tab-signin" className="text-base">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="signin" data-testid="tab-signin">
                 Sign In
               </TabsTrigger>
-              <TabsTrigger value="signup" data-testid="tab-signup" className="text-base">
+              <TabsTrigger value="signup" data-testid="tab-signup">
                 Sign Up
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin" className="mt-0">
               <Form {...signInForm}>
-                <form onSubmit={signInForm.handleSubmit(onSignIn)} className="space-y-4">
+                <form onSubmit={signInForm.handleSubmit(onSignIn)} className="space-y-3">
                   <FormField
                     control={signInForm.control}
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel className="text-sm">Email</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -314,7 +310,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Password</FormLabel>
+                        <FormLabel className="text-sm">Password</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -336,7 +332,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     <Button
                       type="button"
                       variant="ghost"
-                      className="px-0 text-sm h-auto"
+                      className="px-0 text-xs h-auto"
                       onClick={() => setShowForgotPassword(true)}
                       data-testid="button-forgot-password"
                     >
@@ -347,7 +343,6 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                   <Button
                     type="submit"
                     className="w-full"
-                    size="lg"
                     disabled={signInMutation.isPending}
                     data-testid="button-signin-submit"
                   >
@@ -359,14 +354,14 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
 
             <TabsContent value="signup" className="mt-0">
               <Form {...signUpForm}>
-                <form onSubmit={signUpForm.handleSubmit(onSignUp)} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={signUpForm.handleSubmit(onSignUp)} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <FormField
                       control={signUpForm.control}
                       name="firstName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First Name</FormLabel>
+                          <FormLabel className="text-sm">First Name</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -388,7 +383,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                       name="lastName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last Name</FormLabel>
+                          <FormLabel className="text-sm">Last Name</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -411,7 +406,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel className="text-sm">Email</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -434,7 +429,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     name="phoneNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Phone Number (Optional)</FormLabel>
+                        <FormLabel className="text-sm">Phone <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -457,14 +452,14 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     name="role"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-base font-semibold">Choose Your Role</FormLabel>
+                        <FormLabel className="text-sm font-medium">Role</FormLabel>
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
                             value={field.value}
-                            className="grid gap-3"
+                            className="flex flex-wrap gap-2"
                           >
-                            <div>
+                            <div className="flex-1 min-w-[100px]">
                               <RadioGroupItem
                                 value="buyer"
                                 id="role-buyer"
@@ -473,25 +468,16 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                               />
                               <label
                                 htmlFor="role-buyer"
-                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
+                                className="flex items-center gap-2 rounded-md border-2 border-muted bg-popover px-3 py-2 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2 shrink-0">
-                                  <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold">Buyer</span>
-                                    {field.value === "buyer" && (
-                                      <Check className="h-4 w-4 text-primary" />
-                                    )}
-                                  </div>
-                                  <p className="text-sm text-muted-foreground mt-0.5">
-                                    Browse and purchase items from other students
-                                  </p>
-                                </div>
+                                <ShoppingCart className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <span className="text-sm font-medium">Buyer</span>
+                                {field.value === "buyer" && (
+                                  <Check className="h-3 w-3 text-primary ml-auto" />
+                                )}
                               </label>
                             </div>
-                            <div>
+                            <div className="flex-1 min-w-[100px]">
                               <RadioGroupItem
                                 value="seller"
                                 id="role-seller"
@@ -500,25 +486,16 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                               />
                               <label
                                 htmlFor="role-seller"
-                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
+                                className="flex items-center gap-2 rounded-md border-2 border-muted bg-popover px-3 py-2 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-2 shrink-0">
-                                  <Store className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold">Seller / Merchant</span>
-                                    {field.value === "seller" && (
-                                      <Check className="h-4 w-4 text-primary" />
-                                    )}
-                                  </div>
-                                  <p className="text-sm text-muted-foreground mt-0.5">
-                                    List and sell your products to campus buyers
-                                  </p>
-                                </div>
+                                <Store className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                                <span className="text-sm font-medium">Seller</span>
+                                {field.value === "seller" && (
+                                  <Check className="h-3 w-3 text-primary ml-auto" />
+                                )}
                               </label>
                             </div>
-                            <div>
+                            <div className="flex-1 min-w-[100px]">
                               <RadioGroupItem
                                 value="both"
                                 id="role-both"
@@ -527,22 +504,13 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                               />
                               <label
                                 htmlFor="role-both"
-                                className="flex items-start gap-3 rounded-md border-2 border-muted bg-popover p-4 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
+                                className="flex items-center gap-2 rounded-md border-2 border-muted bg-popover px-3 py-2 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
                               >
-                                <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-2 shrink-0">
-                                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold">Both</span>
-                                    {field.value === "both" && (
-                                      <Check className="h-4 w-4 text-primary" />
-                                    )}
-                                  </div>
-                                  <p className="text-sm text-muted-foreground mt-0.5">
-                                    Full access to buy and sell on the marketplace
-                                  </p>
-                                </div>
+                                <Users className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <span className="text-sm font-medium">Both</span>
+                                {field.value === "both" && (
+                                  <Check className="h-3 w-3 text-primary ml-auto" />
+                                )}
                               </label>
                             </div>
                           </RadioGroup>
@@ -552,75 +520,73 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     )}
                   />
 
-                  <FormField
-                    control={signUpForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              type="password"
-                              placeholder="At least 6 characters"
-                              className="pl-10"
-                              data-testid="input-signup-password"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={signUpForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">Password</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                type="password"
+                                placeholder="Min 6 chars"
+                                className="pl-10"
+                                data-testid="input-signup-password"
+                                {...field}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={signUpForm.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirm Password</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              type="password"
-                              placeholder="Re-enter your password"
-                              className="pl-10"
-                              data-testid="input-signup-confirm-password"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <FormField
+                      control={signUpForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">Confirm</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                type="password"
+                                placeholder="Re-enter"
+                                className="pl-10"
+                                data-testid="input-signup-confirm-password"
+                                {...field}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <FormField
                     control={signUpForm.control}
                     name="referralCode"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <span>Referral Code</span>
-                          <span className="text-xs text-muted-foreground font-normal">(Optional)</span>
+                        <FormLabel className="text-sm">
+                          Referral Code <span className="text-muted-foreground font-normal">(Optional)</span>
                         </FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Gift className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                              placeholder="Enter a friend's referral code"
+                              placeholder="Friend's code for bonus"
                               className="pl-10"
                               data-testid="input-signup-referral-code"
                               {...field}
                             />
                           </div>
                         </FormControl>
-                        <p className="text-xs text-muted-foreground">
-                          Have a referral code? Enter it to earn bonus rewards!
-                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -629,7 +595,6 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                   <Button
                     type="submit"
                     className="w-full"
-                    size="lg"
                     disabled={signUpMutation.isPending}
                     data-testid="button-signup-submit"
                   >
