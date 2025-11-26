@@ -586,7 +586,7 @@ export default function MyAdsPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-bold">₦5,000</p>
-                  <Badge size="sm" variant="secondary">Best Value</Badge>
+                  <Badge variant="secondary">Best Value</Badge>
                 </div>
               </div>
             </div>
