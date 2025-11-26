@@ -1,25 +1,104 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Eye, ShoppingCart, Loader2 } from "lucide-react";
+import { MapPin, Eye, ShoppingCart, Loader2, User, Heart } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import type { Product } from "@shared/schema";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Product, Watchlist } from "@shared/schema";
 import { useState } from "react";
 
 interface ProductCardProps {
-  product: Product & { seller?: { firstName?: string; isVerified?: boolean } };
+  product: Product & { seller?: { firstName?: string; isVerified?: boolean; id?: string; profileImageUrl?: string } };
 }
 
 export function ProductCard({ product }: ProductCardProps) {
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
+  const { data: wishlistItems = [] } = useQuery<Watchlist[]>({
+    queryKey: ["/api/watchlist"],
+    enabled: isAuthenticated,
+  });
+
+  const isInWishlist = wishlistItems.some(item => item.productId === product?.id);
+
+  const addToWishlistMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/watchlist", { productId: product.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      toast({
+        title: "Added to Wishlist",
+        description: `${product.title} has been added to your wishlist`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add to wishlist",
+      });
+    },
+  });
+
+  const removeFromWishlistMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/watchlist/${product.id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      toast({
+        title: "Removed from Wishlist",
+        description: `${product.title} has been removed from your wishlist`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to remove from wishlist",
+      });
+    },
+  });
+
   if (!product) return null;
+
+  const handleSellerClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sellerId = product.sellerId || product.seller?.id;
+    if (sellerId) {
+      setLocation(`/profile/${sellerId}`);
+    }
+  };
+
+  const handleWishlistToggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!isAuthenticated) {
+      toast({
+        variant: "destructive",
+        title: "Login Required",
+        description: "Please log in to add items to your wishlist",
+      });
+      return;
+    }
+
+    if (isInWishlist) {
+      removeFromWishlistMutation.mutate();
+    } else {
+      addToWishlistMutation.mutate();
+    }
+  };
   
   const images = product.images || [];
   const imageUrl = images[0] || "/placeholder-product.png";
@@ -57,6 +136,8 @@ export function ProductCard({ product }: ProductCardProps) {
     }
   };
 
+  const isWishlistLoading = addToWishlistMutation.isPending || removeFromWishlistMutation.isPending;
+
   return (
     <Link href={`/products/${product.id}`}>
       <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer">
@@ -67,12 +148,32 @@ export function ProductCard({ product }: ProductCardProps) {
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
             loading="lazy"
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleWishlistToggle}
+            disabled={isWishlistLoading}
+            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm"
+            data-testid={`button-wishlist-toggle-${product.id}`}
+          >
+            {isWishlistLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Heart 
+                className={`h-4 w-4 transition-colors ${
+                  isInWishlist 
+                    ? "fill-red-500 text-red-500" 
+                    : "text-muted-foreground"
+                }`} 
+              />
+            )}
+          </Button>
           {product.isBoosted && (
-            <Badge className="absolute top-2 right-2 bg-yellow-500 text-white">
+            <Badge className="absolute top-2 left-2 bg-yellow-500 text-white">
               Featured
             </Badge>
           )}
-          {product.condition && (
+          {product.condition && !product.isBoosted && (
             <Badge variant="secondary" className="absolute top-2 left-2">
               {product.condition}
             </Badge>
@@ -111,10 +212,22 @@ export function ProductCard({ product }: ProductCardProps) {
               <Eye className="h-3 w-3" />
               <span>{product.views || 0} views</span>
             </div>
-            {product.seller?.isVerified && (
-              <Badge variant="outline" className="text-xs">
-                Verified Seller
-              </Badge>
+            {(product.sellerId || product.seller?.id) && (
+              <button
+                onClick={handleSellerClick}
+                className="flex items-center gap-1 hover-elevate active-elevate-2 rounded px-1.5 py-0.5 transition-all"
+                data-testid={`link-seller-profile-${product.id}`}
+              >
+                <User className="h-3 w-3" />
+                <span className="text-xs">
+                  {product.seller?.firstName || "Seller"}
+                </span>
+                {product.seller?.isVerified && (
+                  <Badge variant="outline" className="text-xs ml-1 py-0 px-1">
+                    Verified
+                  </Badge>
+                )}
+              </button>
             )}
           </div>
         </CardContent>

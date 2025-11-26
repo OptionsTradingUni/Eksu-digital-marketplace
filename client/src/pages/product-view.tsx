@@ -10,9 +10,9 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot } from "lucide-react";
+import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot, Share2, Loader2, Check } from "lucide-react";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
-import type { Product, User } from "@shared/schema";
+import type { Product, User, Watchlist } from "@shared/schema";
 
 function formatJoinDate(dateStr: string | Date | null | undefined): string {
   if (!dateStr) return "Recently";
@@ -57,10 +57,18 @@ export default function ProductView() {
   const { user, isAuthenticated } = useAuth();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
 
   const { data: product, isLoading } = useQuery<Product & { seller: User }>({
     queryKey: ["/api/products", id],
   });
+
+  const { data: wishlistItems = [] } = useQuery<Watchlist[]>({
+    queryKey: ["/api/watchlist"],
+    enabled: isAuthenticated,
+  });
+
+  const isInWishlist = wishlistItems.some(item => item.productId === id);
 
   // Reset safety modal state when product/seller changes
   useEffect(() => {
@@ -126,18 +134,85 @@ export default function ProductView() {
     },
   });
 
-  const watchlistMutation = useMutation({
+  const addToWishlistMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest("POST", "/api/watchlist", { productId: id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist/full"] });
       toast({
-        title: "Added to watchlist",
-        description: "You'll be notified of price changes",
+        title: "Added to Wishlist",
+        description: "Item has been added to your wishlist",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add to wishlist",
+        variant: "destructive",
       });
     },
   });
+
+  const removeFromWishlistMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/watchlist/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist/full"] });
+      toast({
+        title: "Removed from Wishlist",
+        description: "Item has been removed from your wishlist",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove from wishlist",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleWishlistToggle = () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to add items to your wishlist",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isInWishlist) {
+      removeFromWishlistMutation.mutate();
+    } else {
+      addToWishlistMutation.mutate();
+    }
+  };
+
+  const handleShare = async () => {
+    const domain = window.location.origin;
+    const shareUrl = `${domain}/products/${id}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShowCopied(true);
+      toast({
+        title: "Link Copied",
+        description: "Product link has been copied to your clipboard",
+      });
+      setTimeout(() => setShowCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to copy link",
+        variant: "destructive",
+      });
+    }
+  };
 
   const startChat = () => {
     if (!isAuthenticated) {
@@ -254,19 +329,43 @@ export default function ProductView() {
           {/* Product Info */}
           <div className="space-y-6">
             <div>
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between mb-2 gap-2">
                 <h1 className="text-3xl font-bold" data-testid="text-product-title">
                   {product.title}
                 </h1>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => watchlistMutation.mutate()}
-                  disabled={!isAuthenticated || isOwner}
-                  data-testid="button-watchlist"
-                >
-                  <Heart className="h-5 w-5" />
-                </Button>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleShare}
+                    data-testid="button-share"
+                  >
+                    {showCopied ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Share2 className="h-5 w-5" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleWishlistToggle}
+                    disabled={isOwner || addToWishlistMutation.isPending || removeFromWishlistMutation.isPending}
+                    data-testid="button-wishlist"
+                  >
+                    {addToWishlistMutation.isPending || removeFromWishlistMutation.isPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Heart 
+                        className={`h-5 w-5 transition-colors ${
+                          isInWishlist 
+                            ? "fill-red-500 text-red-500" 
+                            : ""
+                        }`} 
+                      />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary">{product.condition}</Badge>
@@ -301,7 +400,11 @@ export default function ProductView() {
               <CardContent className="p-6">
                 {/* Seller Header */}
                 <div className="flex items-start gap-4">
-                  <div className="relative">
+                  <button
+                    onClick={() => setLocation(`/profile/${product.sellerId}`)}
+                    className="relative group hover-elevate active-elevate-2 rounded-full transition-all"
+                    data-testid="button-seller-avatar"
+                  >
                     <Avatar className="h-16 w-16 border-2 border-background">
                       <AvatarImage src={product.seller?.profileImageUrl || undefined} />
                       <AvatarFallback className="text-lg">{sellerInitials}</AvatarFallback>
@@ -316,14 +419,18 @@ export default function ProductView() {
                         />
                       ) : null;
                     })()}
-                  </div>
+                  </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-lg truncate" data-testid="text-seller-name">
+                      <button 
+                        onClick={() => setLocation(`/profile/${product.sellerId}`)}
+                        className="font-semibold text-lg truncate hover:underline"
+                        data-testid="text-seller-name"
+                      >
                         {product.seller?.firstName 
                           ? `${product.seller.firstName}${product.seller.lastName ? ` ${product.seller.lastName}` : ''}`
                           : "Seller"}
-                      </p>
+                      </button>
                       {product.seller?.isVerified && (
                         <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" data-testid="icon-seller-verified" />
                       )}

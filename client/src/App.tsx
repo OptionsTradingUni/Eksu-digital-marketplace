@@ -31,6 +31,7 @@ const AnnouncementsPage = lazy(() => import("@/pages/announcements"));
 const CheckoutPage = lazy(() => import("@/pages/checkout"));
 const ThePlugPage = lazy(() => import("@/pages/the-plug"));
 const PaymentCallbackPage = lazy(() => import("@/pages/payment-callback"));
+const WishlistPage = lazy(() => import("@/pages/wishlist"));
 
 function PageLoadingSpinner() {
   return (
@@ -101,7 +102,7 @@ function Router() {
                 <Messages />
               </ErrorBoundary>
             )} />
-            <Route path="/profile" component={() => (
+            <Route path="/profile/:userId?" component={() => (
               <ErrorBoundary>
                 <Profile />
               </ErrorBoundary>
@@ -164,6 +165,11 @@ function Router() {
             <Route path="/payment/callback" component={() => (
               <ErrorBoundary>
                 <PaymentCallbackPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/wishlist" component={() => (
+              <ErrorBoundary>
+                <WishlistPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (

@@ -44,6 +44,40 @@ import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./cha
 import { monnify, generatePaymentReference, generateDisbursementReference, isMonnifyConfigured } from "./monnify";
 import { calculatePricingFromSellerPrice, calculateMonnifyFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 
+// Module-level WebSocket connections map for broadcasting notifications
+const wsConnections = new Map<string, WebSocket>();
+
+// Helper function to broadcast a notification to a user via WebSocket
+async function broadcastNotification(userId: string, notification: any) {
+  const ws = wsConnections.get(userId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: "new_notification",
+      notification,
+    }));
+  }
+}
+
+// Helper function to create and broadcast a notification
+async function createAndBroadcastNotification(data: {
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  relatedUserId?: string;
+  relatedProductId?: string;
+}) {
+  try {
+    const notification = await storage.createNotification(data);
+    await broadcastNotification(data.userId, notification);
+    return notification;
+  } catch (error) {
+    console.error("Error creating/broadcasting notification:", error);
+    return null;
+  }
+}
+
 // Setup multer for image uploads
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -2177,7 +2211,26 @@ Happy trading!`;
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const follow = await storage.followUser(userId, req.params.id);
+      const targetUserId = req.params.id;
+      const follow = await storage.followUser(userId, targetUserId);
+      
+      // Create notification for the followed user
+      const follower = await storage.getUser(userId);
+      if (follower && targetUserId !== userId) {
+        const followerName = follower.firstName && follower.lastName 
+          ? `${follower.firstName} ${follower.lastName}` 
+          : follower.email;
+        
+        await createAndBroadcastNotification({
+          userId: targetUserId,
+          type: "follow",
+          title: "New Follower",
+          message: `${followerName} started following you`,
+          link: `/profile/${userId}`,
+          relatedUserId: userId,
+        });
+      }
+      
       res.json(follow);
     } catch (error: any) {
       console.error("Error following user:", error);
@@ -2288,6 +2341,32 @@ Happy trading!`;
       });
 
       const message = await storage.createMessage(validated);
+      
+      // Create notification for the message receiver
+      if (validated.receiverId && validated.receiverId !== userId) {
+        const sender = await storage.getUser(userId);
+        if (sender) {
+          const senderName = sender.firstName && sender.lastName 
+            ? `${sender.firstName} ${sender.lastName}` 
+            : sender.email;
+          
+          // Truncate message content for notification
+          const messagePreview = validated.content.length > 50 
+            ? validated.content.substring(0, 50) + "..." 
+            : validated.content;
+          
+          await createAndBroadcastNotification({
+            userId: validated.receiverId,
+            type: "message",
+            title: "New Message",
+            message: `${senderName}: ${messagePreview}`,
+            link: `/messages/${userId}`,
+            relatedUserId: userId,
+            relatedProductId: validated.productId || undefined,
+          });
+        }
+      }
+      
       res.json(message);
     } catch (error: any) {
       console.error("Error creating message:", error);
@@ -3425,6 +3504,24 @@ Happy trading!`;
         notes: "Order created",
       });
 
+      // Create notification for the seller about new order
+      const buyer = await storage.getUser(userId);
+      if (buyer) {
+        const buyerName = buyer.firstName && buyer.lastName 
+          ? `${buyer.firstName} ${buyer.lastName}` 
+          : buyer.email;
+        
+        await createAndBroadcastNotification({
+          userId: product.sellerId,
+          type: "order_placed",
+          title: "New Order Received",
+          message: `${buyerName} placed an order for "${product.title}" - Order #${orderNumber}`,
+          link: `/seller-dashboard`,
+          relatedUserId: userId,
+          relatedProductId: productId,
+        });
+      }
+
       res.status(201).json(order);
     } catch (error) {
       console.error("Error creating order:", error);
@@ -4546,11 +4643,8 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
   // Create HTTP server
   const httpServer = createServer(app);
 
-  // Setup WebSocket server for real-time chat
+  // Setup WebSocket server for real-time chat and notifications
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  
-  // Store active connections with user IDs
-  const connections = new Map<string, WebSocket>();
 
   wss.on("connection", (ws: WebSocket, req) => {
     let userId: string | null = null;
@@ -4587,7 +4681,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
             }
             
             userId = decoded.userId;
-            connections.set(userId, ws);
+            wsConnections.set(userId, ws);
             console.log(`WebSocket authenticated for user: ${userId}`);
             ws.send(JSON.stringify({ type: "auth_success", userId }));
           } catch (error) {
@@ -4612,12 +4706,36 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           });
           
           // Send to recipient if they're connected
-          const recipientWs = connections.get(data.receiverId);
+          const recipientWs = wsConnections.get(data.receiverId);
           if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
             recipientWs.send(JSON.stringify({
               type: "new_message",
               message: savedMessage,
             }));
+          }
+          
+          // Create notification for message receiver
+          if (data.receiverId && data.receiverId !== userId) {
+            const sender = await storage.getUser(userId);
+            if (sender) {
+              const senderName = sender.firstName && sender.lastName 
+                ? `${sender.firstName} ${sender.lastName}` 
+                : sender.email;
+              
+              const messagePreview = data.content.length > 50 
+                ? data.content.substring(0, 50) + "..." 
+                : data.content;
+              
+              await createAndBroadcastNotification({
+                userId: data.receiverId,
+                type: "message",
+                title: "New Message",
+                message: `${senderName}: ${messagePreview}`,
+                link: `/messages/${userId}`,
+                relatedUserId: userId,
+                relatedProductId: data.productId || undefined,
+              });
+            }
           }
           
           // Confirm to sender
@@ -4634,7 +4752,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
 
     ws.on("close", () => {
       if (userId) {
-        connections.delete(userId);
+        wsConnections.delete(userId);
         console.log(`WebSocket disconnected for user: ${userId}`);
       }
     });
@@ -4642,7 +4760,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     ws.on("error", (error) => {
       console.error(`WebSocket error for user ${userId}:`, error);
       if (userId) {
-        connections.delete(userId);
+        wsConnections.delete(userId);
       }
     });
   });

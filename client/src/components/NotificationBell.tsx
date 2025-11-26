@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,11 +17,92 @@ import type { Notification } from "@/../../shared/schema";
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30000,
   });
+
+  // WebSocket connection for real-time notifications
+  useEffect(() => {
+    let mounted = true;
+
+    const connectWebSocket = async () => {
+      try {
+        // Get WebSocket token
+        const tokenResponse = await fetch("/api/auth/ws-token", { credentials: "include" });
+        if (!tokenResponse.ok) {
+          console.log("Not authenticated, skipping WebSocket for notifications");
+          return;
+        }
+
+        const { token } = await tokenResponse.json();
+        if (!token || !mounted) return;
+
+        // Connect to WebSocket
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        
+        const socket = new WebSocket(wsUrl);
+        
+        socket.onopen = () => {
+          console.log("NotificationBell: WebSocket connected, authenticating...");
+          socket.send(JSON.stringify({ type: "auth", token }));
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === "auth_success") {
+              console.log("NotificationBell: WebSocket authenticated");
+            } else if (data.type === "new_notification") {
+              console.log("NotificationBell: Received new notification via WebSocket");
+              // Invalidate the notifications cache to refresh the list
+              queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+            }
+          } catch (error) {
+            console.error("Error parsing WebSocket message:", error);
+          }
+        };
+
+        socket.onclose = () => {
+          console.log("NotificationBell: WebSocket disconnected");
+          wsRef.current = null;
+          
+          // Attempt to reconnect after 5 seconds
+          if (mounted) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (mounted) connectWebSocket();
+            }, 5000);
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error("NotificationBell: WebSocket error:", error);
+        };
+
+        wsRef.current = socket;
+      } catch (error) {
+        console.error("Failed to connect WebSocket for notifications:", error);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      mounted = false;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close(1000, "Component unmounting");
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 

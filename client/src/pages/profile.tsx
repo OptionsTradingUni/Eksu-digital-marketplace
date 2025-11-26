@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -14,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,17 +50,16 @@ import {
   AtSign,
   Eye,
   EyeOff,
-  BadgeCheck,
-  Phone,
-  Mail,
-  Globe,
-  Instagram,
+  UserPlus,
+  UserMinus,
   MessageCircle
 } from "lucide-react";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
 export default function Profile() {
+  const { userId: urlUserId } = useParams<{ userId?: string }>();
+  const [, setLocation] = useLocation();
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,13 +72,23 @@ export default function Profile() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showPreviewAfterSave, setShowPreviewAfterSave] = useState(false);
 
+  const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
+
+  const { data: profileUser, isLoading: profileLoading } = useQuery<User>({
+    queryKey: ["/api/users", urlUserId],
+    enabled: !!urlUserId && !isOwnProfile,
+  });
+
+  const displayUser = isOwnProfile ? currentUser : profileUser;
+  const displayUserId = isOwnProfile ? currentUser?.id : urlUserId;
+
   const { data: followStats } = useQuery<{
     followerCount: number;
     followingCount: number;
     isFollowing: boolean;
   }>({
-    queryKey: ["/api/users", currentUser?.id, "follow-stats"],
-    enabled: !!currentUser?.id,
+    queryKey: ["/api/users", displayUserId, "follow-stats"],
+    enabled: !!displayUserId,
   });
 
   const form = useForm<UpdateProfileData>({
@@ -93,7 +103,7 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && isOwnProfile) {
       form.reset({
         firstName: currentUser.firstName || "",
         lastName: currentUser.lastName || "",
@@ -102,7 +112,7 @@ export default function Profile() {
         bio: currentUser.bio || "",
       });
     }
-  }, [currentUser, form]);
+  }, [currentUser, form, isOwnProfile]);
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
@@ -243,6 +253,46 @@ export default function Profile() {
     },
   });
 
+  const followMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/users/${urlUserId}/follow`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
+      toast({
+        title: "Followed",
+        description: "You are now following this user",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to follow user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/users/${urlUserId}/follow`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
+      toast({
+        title: "Unfollowed",
+        description: "You have unfollowed this user",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unfollow user",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -326,8 +376,8 @@ export default function Profile() {
   };
 
   const copyUserId = () => {
-    if (currentUser?.id) {
-      navigator.clipboard.writeText(currentUser.id.slice(0, 8).toUpperCase());
+    if (displayUser?.id) {
+      navigator.clipboard.writeText(displayUser.id.slice(0, 8).toUpperCase());
       setCopiedId(true);
       toast({
         title: "Copied",
@@ -337,7 +387,21 @@ export default function Profile() {
     }
   };
 
-  if (authLoading || !currentUser) {
+  const handleFollow = () => {
+    if (followStats?.isFollowing) {
+      unfollowMutation.mutate();
+    } else {
+      followMutation.mutate();
+    }
+  };
+
+  const handleMessage = () => {
+    setLocation(`/messages?user=${urlUserId}`);
+  };
+
+  const isLoading = authLoading || (!isOwnProfile && profileLoading);
+
+  if (isLoading || !displayUser) {
     return (
       <div className="min-h-screen">
         <div className="h-48 bg-gradient-to-br from-primary/20 via-primary/10 to-background" />
@@ -353,19 +417,19 @@ export default function Profile() {
     );
   }
 
-  const initials = currentUser.firstName && currentUser.lastName
-    ? `${currentUser.firstName[0]}${currentUser.lastName[0]}`
-    : currentUser.email?.[0] || "U";
+  const initials = displayUser.firstName && displayUser.lastName
+    ? `${displayUser.firstName[0]}${displayUser.lastName[0]}`
+    : displayUser.email?.[0] || "U";
 
-  const fullName = currentUser.firstName && currentUser.lastName
-    ? `${currentUser.firstName} ${currentUser.lastName}`
-    : currentUser.firstName || "User";
+  const fullName = displayUser.firstName && displayUser.lastName
+    ? `${displayUser.firstName} ${displayUser.lastName}`
+    : displayUser.firstName || "User";
 
-  const username = currentUser.email?.split("@")[0] || "user";
-  const shortId = currentUser.id?.slice(0, 8).toUpperCase() || "00000000";
+  const username = displayUser.email?.split("@")[0] || "user";
+  const shortId = displayUser.id?.slice(0, 8).toUpperCase() || "00000000";
 
-  const isSeller = currentUser.role === "seller" || currentUser.role === "both";
-  const trustScoreValue = currentUser.trustScore ? parseFloat(String(currentUser.trustScore)) : 5.0;
+  const isSeller = displayUser.role === "seller" || displayUser.role === "both";
+  const trustScoreValue = displayUser.trustScore ? parseFloat(String(displayUser.trustScore)) : 5.0;
 
   const statsData = [
     {
@@ -378,7 +442,7 @@ export default function Profile() {
     },
     {
       icon: TrendingUp,
-      value: currentUser.totalRatings || 0,
+      value: displayUser.totalRatings || 0,
       label: "Reviews",
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
@@ -395,7 +459,7 @@ export default function Profile() {
     isSeller 
       ? {
           icon: ShoppingBag,
-          value: currentUser.totalSales || 0,
+          value: displayUser.totalSales || 0,
           label: "Total Sales",
           color: "text-green-500",
           bgColor: "bg-green-500/10",
@@ -411,11 +475,11 @@ export default function Profile() {
         }
   ];
 
+  const canEdit = isOwnProfile && !isPreviewMode;
+
   return (
     <div className="min-h-screen pb-24">
-      {/* Modern Hero Section with Cover Photo */}
       <div className="relative">
-        {/* Cover Photo Area */}
         <div 
           className="relative h-44 sm:h-52 md:h-64 overflow-hidden"
           style={{
@@ -426,12 +490,10 @@ export default function Profile() {
             backgroundPosition: 'center',
           }}
         >
-          {/* Gradient Overlay - Dark wash for text readability */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-background" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
           
-          {/* Cover Photo Upload Button - Hide in preview mode */}
-          {!isPreviewMode && (
+          {canEdit && (
             <>
               <button
                 type="button"
@@ -450,7 +512,6 @@ export default function Profile() {
                 data-testid="input-cover-file"
               />
               
-              {/* Settings Dropdown - Top Right */}
               <div className="absolute top-4 right-4 z-10">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -495,8 +556,7 @@ export default function Profile() {
             </>
           )}
           
-          {/* Preview Mode Indicator - Top Right when in preview */}
-          {isPreviewMode && (
+          {isPreviewMode && isOwnProfile && (
             <div className="absolute top-4 right-4 z-10">
               <Badge variant="secondary" className="gap-1.5 bg-black/40 text-white backdrop-blur-sm border-0">
                 <Eye className="h-3 w-3" />
@@ -506,29 +566,26 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Profile Content Overlay */}
         <div className="container mx-auto px-4 max-w-4xl relative">
-          {/* Avatar positioned to overlap hero */}
           <motion.div 
             className="flex flex-col items-center -mt-20 relative z-10"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            {/* Large Avatar with Ring and Camera Button */}
             <div className="relative group">
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 300 }}
               >
                 <Avatar className="h-32 w-32 sm:h-36 sm:w-36 ring-4 ring-background shadow-2xl">
-                  <AvatarImage src={previewUrl || currentUser.profileImageUrl || undefined} />
+                  <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
                   <AvatarFallback className="text-4xl font-bold bg-gradient-to-br from-primary/20 to-primary/5">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
               </motion.div>
-              {!isPreviewMode && (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -543,17 +600,18 @@ export default function Profile() {
                   )}
                 </button>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-avatar-file"
-              />
+              {isOwnProfile && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  data-testid="input-avatar-file"
+                />
+              )}
             </div>
 
-            {/* Display Name - Large and Prominent */}
             <motion.div 
               className="mt-4 text-center"
               initial={{ opacity: 0 }}
@@ -567,7 +625,6 @@ export default function Profile() {
                 {fullName}
               </h1>
               
-              {/* Username Badge - Prominent Twitter/Instagram style */}
               <div className="flex items-center justify-center gap-2 mt-2">
                 <Badge 
                   variant="secondary" 
@@ -579,7 +636,6 @@ export default function Profile() {
                 </Badge>
               </div>
 
-              {/* User ID Badge - Unique identifier */}
               <motion.button
                 onClick={copyUserId}
                 className="flex items-center gap-1.5 mt-2 mx-auto px-3 py-1 rounded-full bg-muted/50 text-xs text-muted-foreground hover-elevate active-elevate-2 transition-all"
@@ -595,8 +651,7 @@ export default function Profile() {
                 )}
               </motion.button>
 
-              {/* Location if available */}
-              {currentUser.location && (
+              {displayUser.location && (
                 <motion.div 
                   className="flex items-center justify-center gap-1 mt-3 text-sm text-muted-foreground"
                   initial={{ opacity: 0 }}
@@ -604,11 +659,10 @@ export default function Profile() {
                   transition={{ delay: 0.2 }}
                 >
                   <MapPin className="h-4 w-4" />
-                  <span data-testid="text-profile-location">{currentUser.location}</span>
+                  <span data-testid="text-profile-location">{displayUser.location}</span>
                 </motion.div>
               )}
 
-              {/* Verification Badges Row */}
               <motion.div 
                 className="flex items-center gap-2 mt-4 flex-wrap justify-center"
                 initial={{ opacity: 0 }}
@@ -616,15 +670,15 @@ export default function Profile() {
                 transition={{ delay: 0.25 }}
               >
                 <Badge variant="outline" className="text-xs" data-testid="badge-role">
-                  {currentUser.role?.charAt(0).toUpperCase() + currentUser.role?.slice(1)}
+                  {displayUser.role?.charAt(0).toUpperCase() + displayUser.role?.slice(1)}
                 </Badge>
-                {currentUser.isVerified && (
+                {displayUser.isVerified && (
                   <Badge variant="default" className="gap-1 text-xs" data-testid="badge-verified">
                     <Shield className="h-3 w-3" />
                     Verified
                   </Badge>
                 )}
-                {currentUser.isTrustedSeller && (
+                {displayUser.isTrustedSeller && (
                   <Badge className="gap-1 text-xs bg-green-600/90 dark:bg-green-700/90" data-testid="badge-trusted-seller">
                     <UserCheck className="h-3 w-3" />
                     Trusted Seller
@@ -632,8 +686,7 @@ export default function Profile() {
                 )}
               </motion.div>
 
-              {/* Bio */}
-              {currentUser.bio && (
+              {displayUser.bio && (
                 <motion.p 
                   className="mt-4 text-muted-foreground max-w-md mx-auto text-sm leading-relaxed" 
                   data-testid="text-profile-bio"
@@ -641,67 +694,103 @@ export default function Profile() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
                 >
-                  {currentUser.bio}
+                  {displayUser.bio}
                 </motion.p>
               )}
 
-              {/* Edit/Preview Mode Toggle and Edit Button */}
               <motion.div
                 className="flex items-center justify-center gap-3 mt-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.35 }}
               >
-                {!isPreviewMode ? (
-                  <Button
-                    variant="default"
-                    onClick={() => setIsEditDialogOpen(true)}
-                    className="gap-2"
-                    data-testid="button-edit-profile-main"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit Profile
-                  </Button>
+                {isOwnProfile ? (
+                  <>
+                    {!isPreviewMode ? (
+                      <Button
+                        variant="default"
+                        onClick={() => setIsEditDialogOpen(true)}
+                        className="gap-2"
+                        data-testid="button-edit-profile-main"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Edit Profile
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsPreviewMode(false);
+                          setShowPreviewAfterSave(false);
+                        }}
+                        className="gap-2"
+                        data-testid="button-exit-preview"
+                      >
+                        <EyeOff className="h-4 w-4" />
+                        Exit Preview
+                      </Button>
+                    )}
+                    
+                    <Button
+                      variant={isPreviewMode ? "default" : "outline"}
+                      onClick={() => setIsPreviewMode(!isPreviewMode)}
+                      className="gap-2"
+                      data-testid="button-toggle-preview"
+                    >
+                      {isPreviewMode ? (
+                        <>
+                          <Eye className="h-4 w-4" />
+                          Preview Mode
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="h-4 w-4" />
+                          Preview Profile
+                        </>
+                      )}
+                    </Button>
+                  </>
                 ) : (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsPreviewMode(false);
-                      setShowPreviewAfterSave(false);
-                    }}
-                    className="gap-2"
-                    data-testid="button-exit-preview"
-                  >
-                    <EyeOff className="h-4 w-4" />
-                    Exit Preview
-                  </Button>
+                  <>
+                    <Button
+                      variant={followStats?.isFollowing ? "outline" : "default"}
+                      onClick={handleFollow}
+                      disabled={followMutation.isPending || unfollowMutation.isPending}
+                      className="gap-2"
+                      data-testid="button-follow"
+                    >
+                      {followMutation.isPending || unfollowMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : followStats?.isFollowing ? (
+                        <>
+                          <UserMinus className="h-4 w-4" />
+                          Unfollow
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4" />
+                          Follow
+                        </>
+                      )}
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      onClick={handleMessage}
+                      className="gap-2"
+                      data-testid="button-message"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Message
+                    </Button>
+                  </>
                 )}
-                
-                <Button
-                  variant={isPreviewMode ? "default" : "outline"}
-                  onClick={() => setIsPreviewMode(!isPreviewMode)}
-                  className="gap-2"
-                  data-testid="button-toggle-preview"
-                >
-                  {isPreviewMode ? (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      Preview Mode
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      Preview Profile
-                    </>
-                  )}
-                </Button>
               </motion.div>
             </motion.div>
           </motion.div>
 
-          {/* Preview Mode Banner */}
           <AnimatePresence>
-            {isPreviewMode && (
+            {isPreviewMode && isOwnProfile && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -742,9 +831,8 @@ export default function Profile() {
             )}
           </AnimatePresence>
 
-          {/* Image Upload Preview Card - Hide in preview mode */}
           <AnimatePresence>
-            {selectedFile && !isPreviewMode && (
+            {selectedFile && canEdit && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -796,7 +884,6 @@ export default function Profile() {
             )}
           </AnimatePresence>
 
-          {/* Stats Grid - Modern Cards with Animation */}
           <motion.div 
             className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8" 
             data-testid="stats-grid"
@@ -826,8 +913,7 @@ export default function Profile() {
             ))}
           </motion.div>
 
-          {/* Role Switching Section - Only show when not in preview mode */}
-          {!isPreviewMode && (
+          {isOwnProfile && !isPreviewMode && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -852,23 +938,23 @@ export default function Profile() {
                     ].map((item) => (
                       <Button
                         key={item.role}
-                        variant={currentUser.role === item.role ? "default" : "outline"}
+                        variant={currentUser?.role === item.role ? "default" : "outline"}
                         onClick={() => handleRoleChange(item.role)}
-                        disabled={roleMutation.isPending || currentUser.role === "admin"}
+                        disabled={roleMutation.isPending || currentUser?.role === "admin"}
                         className="flex flex-col gap-1.5 h-auto py-4"
                         data-testid={`button-role-${item.role}`}
                       >
                         <item.icon className="h-5 w-5" />
                         <span className="font-semibold text-sm">{item.label}</span>
                         <span className="text-[10px] opacity-80">{item.desc}</span>
-                        {roleMutation.isPending && currentUser.role !== item.role && (
+                        {roleMutation.isPending && currentUser?.role !== item.role && (
                           <Loader2 className="h-3 w-3 animate-spin" />
                         )}
                       </Button>
                     ))}
                   </div>
                   
-                  {currentUser.role === "admin" && (
+                  {currentUser?.role === "admin" && (
                     <p className="text-sm text-muted-foreground mt-3 text-center">
                       Admin accounts cannot change their role.
                     </p>
@@ -878,7 +964,6 @@ export default function Profile() {
             </motion.div>
           )}
 
-          {/* Additional Seller Stats */}
           {isSeller && followStats && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -900,12 +985,12 @@ export default function Profile() {
                       </p>
                       <p className="text-xs text-muted-foreground">Following</p>
                     </div>
-                    {currentUser.responseTime && (
+                    {displayUser.responseTime && (
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           <Clock className="h-4 w-4 text-muted-foreground" />
                           <p className="text-2xl font-bold" data-testid="text-response-time">
-                            {currentUser.responseTime}m
+                            {displayUser.responseTime}m
                           </p>
                         </div>
                         <p className="text-xs text-muted-foreground">Avg. Response</p>
@@ -913,7 +998,7 @@ export default function Profile() {
                     )}
                     <div className="text-center">
                       <p className="text-2xl font-bold">
-                        {currentUser.totalSales || 0}
+                        {displayUser.totalSales || 0}
                       </p>
                       <p className="text-xs text-muted-foreground">Completed Sales</p>
                     </div>
@@ -925,7 +1010,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>

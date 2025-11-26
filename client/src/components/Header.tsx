@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home, LifeBuoy } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home, LifeBuoy, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -126,6 +126,12 @@ export function Header() {
                       <Link href="/profile" data-testid="link-profile">
                         <User className="mr-2 h-4 w-4" />
                         Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/wishlist" data-testid="link-wishlist">
+                        <Heart className="mr-2 h-4 w-4" />
+                        Wishlist
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -295,6 +301,12 @@ export function Header() {
                         <Button variant="ghost" className="w-full justify-start">
                           <User className="mr-2 h-4 w-4" />
                           Profile
+                        </Button>
+                      </Link>
+                      <Link href="/wishlist">
+                        <Button variant="ghost" className="w-full justify-start" data-testid="link-wishlist-mobile">
+                          <Heart className="mr-2 h-4 w-4" />
+                          Wishlist
                         </Button>
                       </Link>
                       <Link href="/announcements">
