@@ -11,6 +11,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { uploadToObjectStorage, uploadMultipleToObjectStorage, objectStorageClient } from "./object-storage";
 import { z } from "zod";
 import Groq from "groq-sdk";
 import { 
@@ -117,13 +118,27 @@ async function createAndBroadcastNotification(data: {
   }
 }
 
-// Setup multer for image uploads
+// Setup multer for image uploads - use memory storage for object storage
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Memory storage for object storage uploads
 const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only images are allowed"));
+    }
+  },
+});
+
+// Disk storage fallback for local development
+const uploadDisk = multer({
   storage: multer.diskStorage({
     destination: uploadDir,
     filename: (req, file, cb) => {
@@ -131,7 +146,7 @@ const upload = multer({
       cb(null, uniqueSuffix + path.extname(file.originalname));
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
@@ -183,12 +198,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Passport.js authentication (email/password) for Render deployment
   await setupPassportAuth(app);
 
-  // Serve uploaded images
+  // Serve uploaded images from disk (legacy)
   app.use("/uploads", (req, res, next) => {
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     next();
   });
   app.use("/uploads", express.static(uploadDir));
+
+  // Serve images from object storage
+  app.get("/storage/:objectName(*)", async (req, res) => {
+    try {
+      const objectName = req.params.objectName;
+      const { ok, value, error } = await objectStorageClient.downloadAsBytes(objectName);
+      
+      if (!ok) {
+        console.error("Object storage download error:", error);
+        return res.status(404).json({ message: "Image not found" });
+      }
+      
+      const [buffer] = value;
+      const extension = objectName.split('.').pop()?.toLowerCase() || 'jpg';
+      const contentType = extension === 'png' ? 'image/png' : 
+                          extension === 'gif' ? 'image/gif' : 
+                          extension === 'webp' ? 'image/webp' : 'image/jpeg';
+      
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("Cache-Control", "public, max-age=31536000");
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error serving storage image:", error);
+      res.status(500).json({ message: "Failed to serve image" });
+    }
+  });
 
   // ==================== NEW AUTH ROUTES (Passport.js Local) ====================
   
@@ -1937,15 +1979,20 @@ Happy trading!`;
 
       const validated = validationResult.data;
 
-      // Get uploaded image paths
-      const images = (req.files as Express.Multer.File[])?.map(
-        (file) => `/uploads/${file.filename}`
-      ) || [];
-
-      // Require at least one image
-      if (images.length === 0) {
+      // Upload images to object storage
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
         return res.status(400).json({ message: "At least one product image is required" });
       }
+
+      const prefix = `products/${userId}/`;
+      const objectNames = await uploadMultipleToObjectStorage(files, prefix);
+      
+      if (objectNames.length === 0) {
+        return res.status(500).json({ message: "Failed to upload product images" });
+      }
+
+      const images = objectNames.map(name => `/storage/${name}`);
 
       const product = await storage.createProduct({
         ...validated,
@@ -1975,10 +2022,15 @@ Happy trading!`;
 
       const productData = JSON.parse(req.body.data || "{}");
       
-      // Get new uploaded image paths if any
-      const newImages = (req.files as Express.Multer.File[])?.map(
-        (file) => `/uploads/${file.filename}`
-      ) || [];
+      // Upload new images to object storage if any
+      const files = req.files as Express.Multer.File[];
+      let newImages: string[] = [];
+      
+      if (files && files.length > 0) {
+        const prefix = `products/${userId}/`;
+        const objectNames = await uploadMultipleToObjectStorage(files, prefix);
+        newImages = objectNames.map(name => `/storage/${name}`);
+      }
 
       const updateData = {
         ...productData,
@@ -2105,14 +2157,24 @@ Happy trading!`;
     }
   });
 
-  // Image upload endpoint
+  // Image upload endpoint - now uses object storage for persistence
   app.post("/api/upload", isAuthenticated, upload.single("image"), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
       }
 
-      const imageUrl = `/uploads/${req.file.filename}`;
+      const userId = getUserId(req);
+      const prefix = userId ? `profiles/${userId}/` : "uploads/";
+      
+      // Upload to object storage
+      const objectName = await uploadToObjectStorage(req.file, prefix);
+      
+      if (!objectName) {
+        return res.status(500).json({ message: "Failed to upload image to storage" });
+      }
+
+      const imageUrl = `/storage/${objectName}`;
       res.json({ url: imageUrl });
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -3030,11 +3092,13 @@ Happy trading!`;
         return res.status(400).json({ message: "Content is required" });
       }
 
-      // Handle uploaded images
+      // Upload images to object storage
       const images: string[] = [];
       if (req.files && Array.isArray(req.files)) {
-        for (const file of req.files) {
-          images.push(`/uploads/${file.filename}`);
+        const prefix = `posts/${userId}/`;
+        const objectNames = await uploadMultipleToObjectStorage(req.files as Express.Multer.File[], prefix);
+        for (const name of objectNames) {
+          images.push(`/storage/${name}`);
         }
       }
 
