@@ -43,6 +43,8 @@ import {
   monnifyPayments,
   monnifyDisbursements,
   negotiations,
+  orders,
+  orderStatusHistory,
   type User,
   type UpsertUser,
   type Product,
@@ -113,6 +115,10 @@ import {
   type InsertMonnifyDisbursement,
   type Negotiation,
   type InsertNegotiation,
+  type Order,
+  type InsertOrder,
+  type OrderStatusHistory,
+  type InsertOrderStatusHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -400,6 +406,16 @@ export interface IStorage {
   getProductNegotiations(productId: string): Promise<Negotiation[]>;
   getUserNegotiations(userId: string): Promise<Negotiation[]>;
   updateNegotiationStatus(id: string, status: string, data?: Partial<Negotiation>): Promise<Negotiation | undefined>;
+  
+  // Order operations
+  createOrder(order: InsertOrder): Promise<Order>;
+  getOrder(id: string): Promise<Order | undefined>;
+  getOrderByNumber(orderNumber: string): Promise<Order | undefined>;
+  getBuyerOrders(buyerId: string): Promise<Order[]>;
+  getSellerOrders(sellerId: string): Promise<Order[]>;
+  updateOrderStatus(orderId: string, status: string, changedBy: string, notes?: string): Promise<Order>;
+  addOrderStatusHistory(history: InsertOrderStatusHistory): Promise<OrderStatusHistory>;
+  getOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2841,6 +2857,98 @@ export class DatabaseStorage implements IStorage {
       .where(eq(negotiations.id, id))
       .returning();
     return updated;
+  }
+
+  // Order operations
+  async createOrder(order: InsertOrder): Promise<Order> {
+    const [created] = await db.insert(orders).values(order).returning();
+    return created;
+  }
+
+  async getOrder(id: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order;
+  }
+
+  async getOrderByNumber(orderNumber: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber));
+    return order;
+  }
+
+  async getBuyerOrders(buyerId: string): Promise<Order[]> {
+    return await db
+      .select()
+      .from(orders)
+      .where(eq(orders.buyerId, buyerId))
+      .orderBy(desc(orders.createdAt));
+  }
+
+  async getSellerOrders(sellerId: string): Promise<Order[]> {
+    return await db
+      .select()
+      .from(orders)
+      .where(eq(orders.sellerId, sellerId))
+      .orderBy(desc(orders.createdAt));
+  }
+
+  async updateOrderStatus(orderId: string, status: string, changedBy: string, notes?: string): Promise<Order> {
+    const currentOrder = await this.getOrder(orderId);
+    const fromStatus = currentOrder?.status || null;
+    
+    const timestampField = this.getTimestampFieldForStatus(status);
+    const updateData: any = { 
+      status, 
+      updatedAt: new Date(),
+    };
+    
+    if (timestampField) {
+      updateData[timestampField] = new Date();
+    }
+    
+    const [updated] = await db
+      .update(orders)
+      .set(updateData)
+      .where(eq(orders.id, orderId))
+      .returning();
+    
+    await this.addOrderStatusHistory({
+      orderId,
+      fromStatus,
+      toStatus: status,
+      changedBy,
+      notes,
+    });
+    
+    return updated;
+  }
+
+  private getTimestampFieldForStatus(status: string): string | null {
+    const statusTimestampMap: Record<string, string> = {
+      'paid': 'paidAt',
+      'seller_confirmed': 'sellerConfirmedAt',
+      'preparing': 'preparingAt',
+      'ready_for_pickup': 'readyAt',
+      'shipped': 'shippedAt',
+      'out_for_delivery': 'outForDeliveryAt',
+      'delivered': 'deliveredAt',
+      'buyer_confirmed': 'buyerConfirmedAt',
+      'completed': 'completedAt',
+      'cancelled': 'cancelledAt',
+    };
+    return statusTimestampMap[status] || null;
+  }
+
+  async addOrderStatusHistory(history: InsertOrderStatusHistory): Promise<OrderStatusHistory> {
+    const [created] = await db.insert(orderStatusHistory).values(history).returning();
+    return created;
+  }
+
+  async getOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]> {
+    return await db
+      .select()
+      .from(orderStatusHistory)
+      .where(eq(orderStatusHistory.orderId, orderId))
+      .orderBy(desc(orderStatusHistory.createdAt));
   }
 }
 

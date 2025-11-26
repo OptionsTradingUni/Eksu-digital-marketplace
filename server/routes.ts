@@ -37,6 +37,8 @@ import {
   updateAnnouncementSchema,
   initiateMonnifyPaymentSchema,
   insertNegotiationSchema,
+  createOrderSchema,
+  updateOrderStatusSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { monnify, generatePaymentReference, generateDisbursementReference, isMonnifyConfigured } from "./monnify";
@@ -3209,6 +3211,285 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clearing cart:", error);
       res.status(500).json({ message: "Failed to clear cart" });
+    }
+  });
+
+  // ==================== ORDER API ROUTES ====================
+
+  // Helper function to generate unique order number
+  function generateOrderNumber(): string {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `EKSU-${timestamp}-${random}`;
+  }
+
+  // Define valid status transitions
+  const validStatusTransitions: Record<string, string[]> = {
+    'pending': ['paid', 'cancelled'],
+    'paid': ['seller_confirmed', 'cancelled', 'disputed'],
+    'seller_confirmed': ['preparing', 'cancelled', 'disputed'],
+    'preparing': ['ready_for_pickup', 'cancelled', 'disputed'],
+    'ready_for_pickup': ['shipped', 'out_for_delivery', 'delivered', 'cancelled', 'disputed'],
+    'shipped': ['out_for_delivery', 'delivered', 'cancelled', 'disputed'],
+    'out_for_delivery': ['delivered', 'cancelled', 'disputed'],
+    'delivered': ['buyer_confirmed', 'disputed'],
+    'buyer_confirmed': ['completed'],
+    'completed': [],
+    'cancelled': [],
+    'disputed': ['refunded', 'completed'],
+    'refunded': [],
+  };
+
+  // Define who can make which status transitions
+  const statusTransitionPermissions: Record<string, 'buyer' | 'seller' | 'both' | 'system'> = {
+    'paid': 'system',
+    'seller_confirmed': 'seller',
+    'preparing': 'seller',
+    'ready_for_pickup': 'seller',
+    'shipped': 'seller',
+    'out_for_delivery': 'seller',
+    'delivered': 'seller',
+    'buyer_confirmed': 'buyer',
+    'completed': 'system',
+    'cancelled': 'both',
+    'disputed': 'both',
+    'refunded': 'system',
+  };
+
+  // Create a new order
+  app.post("/api/orders", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = createOrderSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validationResult.error.flatten().fieldErrors 
+        });
+      }
+
+      const { productId, deliveryMethod, deliveryAddress, deliveryLocation, deliveryNotes, negotiationId } = validationResult.data;
+
+      // Get the product with seller info
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      if (!product.isAvailable) {
+        return res.status(400).json({ message: "Product is not available" });
+      }
+
+      // Buyer cannot be the same as seller
+      if (product.sellerId === userId) {
+        return res.status(400).json({ message: "You cannot purchase your own product" });
+      }
+
+      // Calculate pricing
+      let itemPrice = product.price;
+      
+      // Check if there's an accepted negotiation for this product
+      if (negotiationId) {
+        const negotiation = await storage.getNegotiation(negotiationId);
+        if (negotiation && negotiation.status === 'accepted' && negotiation.buyerId === userId) {
+          // Use the final price from the accepted negotiation
+          itemPrice = negotiation.finalPrice || negotiation.offerPrice;
+        }
+      }
+
+      const pricing = calculatePricingFromSellerPrice(itemPrice);
+      
+      // Generate unique order number
+      const orderNumber = generateOrderNumber();
+
+      // Create the order
+      const order = await storage.createOrder({
+        orderNumber,
+        buyerId: userId,
+        sellerId: product.sellerId,
+        productId,
+        itemPrice,
+        platformFee: pricing.platformFee,
+        monnifyFee: pricing.monnifyFee,
+        deliveryFee: "0.00",
+        totalAmount: pricing.buyerTotal,
+        sellerEarnings: pricing.sellerReceives,
+        negotiationId: negotiationId || null,
+        status: "pending",
+        deliveryMethod: deliveryMethod || "campus_meetup",
+        deliveryAddress: deliveryAddress || null,
+        deliveryLocation: deliveryLocation || null,
+        deliveryNotes: deliveryNotes || null,
+      });
+
+      // Add initial status history
+      await storage.addOrderStatusHistory({
+        orderId: order.id,
+        fromStatus: null,
+        toStatus: "pending",
+        changedBy: userId,
+        notes: "Order created",
+      });
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Error creating order:", error);
+      res.status(500).json({ message: "Failed to create order" });
+    }
+  });
+
+  // Get buyer's orders
+  app.get("/api/orders/buyer", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const orders = await storage.getBuyerOrders(userId);
+      res.json(orders);
+    } catch (error) {
+      console.error("Error fetching buyer orders:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // Get seller's orders
+  app.get("/api/orders/seller", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const orders = await storage.getSellerOrders(userId);
+      res.json(orders);
+    } catch (error) {
+      console.error("Error fetching seller orders:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // Get order details
+  app.get("/api/orders/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const order = await storage.getOrder(id);
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Only buyer or seller can view the order
+      if (order.buyerId !== userId && order.sellerId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to view this order" });
+      }
+
+      res.json(order);
+    } catch (error) {
+      console.error("Error fetching order:", error);
+      res.status(500).json({ message: "Failed to fetch order" });
+    }
+  });
+
+  // Update order status
+  app.put("/api/orders/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const validationResult = updateOrderStatusSchema.safeParse({ orderId: id, ...req.body });
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validationResult.error.flatten().fieldErrors 
+        });
+      }
+
+      const { status, notes } = validationResult.data;
+
+      const order = await storage.getOrder(id);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Check if user is buyer or seller
+      const isBuyer = order.buyerId === userId;
+      const isSeller = order.sellerId === userId;
+
+      if (!isBuyer && !isSeller) {
+        return res.status(403).json({ message: "You don't have permission to update this order" });
+      }
+
+      // Validate status transition
+      const currentStatus = order.status;
+      const allowedTransitions = validStatusTransitions[currentStatus] || [];
+      
+      if (!allowedTransitions.includes(status)) {
+        return res.status(400).json({ 
+          message: `Cannot transition from '${currentStatus}' to '${status}'`,
+          allowedTransitions 
+        });
+      }
+
+      // Check permission for this status change
+      const requiredRole = statusTransitionPermissions[status];
+      if (requiredRole === 'buyer' && !isBuyer) {
+        return res.status(403).json({ message: "Only the buyer can set this status" });
+      }
+      if (requiredRole === 'seller' && !isSeller) {
+        return res.status(403).json({ message: "Only the seller can set this status" });
+      }
+      if (requiredRole === 'system') {
+        return res.status(403).json({ message: "This status can only be set by the system" });
+      }
+
+      // Update the order status
+      const updatedOrder = await storage.updateOrderStatus(id, status, userId, notes);
+
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      res.status(500).json({ message: "Failed to update order status" });
+    }
+  });
+
+  // Get order status history
+  app.get("/api/orders/:id/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const order = await storage.getOrder(id);
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Only buyer or seller can view the order history
+      if (order.buyerId !== userId && order.sellerId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to view this order history" });
+      }
+
+      const history = await storage.getOrderStatusHistory(id);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching order history:", error);
+      res.status(500).json({ message: "Failed to fetch order history" });
     }
   });
 
