@@ -543,12 +543,113 @@ export const withdrawals = pgTable("withdrawals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Order status enum
+export const orderStatusEnum = pgEnum("order_status", [
+  "pending",           // Order placed, awaiting payment
+  "paid",              // Payment confirmed
+  "seller_confirmed",  // Seller acknowledged order
+  "preparing",         // Seller preparing item
+  "ready_for_pickup",  // Item ready for pickup/delivery
+  "shipped",           // Item dispatched
+  "out_for_delivery",  // With delivery agent
+  "delivered",         // Delivered to buyer
+  "buyer_confirmed",   // Buyer confirmed receipt
+  "completed",         // Funds released to seller
+  "cancelled",         // Order cancelled
+  "disputed",          // Under dispute
+  "refunded"           // Money refunded
+]);
+
+// Delivery method enum
+export const deliveryMethodEnum = pgEnum("delivery_method", [
+  "pickup",            // Buyer picks up from seller
+  "seller_delivery",   // Seller delivers to buyer
+  "agent_delivery",    // Third-party delivery agent
+  "campus_meetup"      // Meet on campus
+]);
+
+// Orders table with comprehensive delivery tracking
+export const orders = pgTable("orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderNumber: varchar("order_number", { length: 20 }).notNull().unique(),
+  
+  // Parties involved
+  buyerId: varchar("buyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sellerId: varchar("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").references(() => products.id, { onDelete: "set null" }),
+  
+  // Pricing breakdown
+  itemPrice: decimal("item_price", { precision: 10, scale: 2 }).notNull(),
+  platformFee: decimal("platform_fee", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  monnifyFee: decimal("monnify_fee", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  sellerEarnings: decimal("seller_earnings", { precision: 10, scale: 2 }).notNull(),
+  
+  // Negotiation reference (if negotiated)
+  negotiationId: varchar("negotiation_id").references(() => negotiations.id, { onDelete: "set null" }),
+  
+  // Order status
+  status: orderStatusEnum("status").notNull().default("pending"),
+  
+  // Delivery details
+  deliveryMethod: deliveryMethodEnum("delivery_method").default("campus_meetup"),
+  deliveryAddress: text("delivery_address"),
+  deliveryLocation: varchar("delivery_location"),
+  deliveryNotes: text("delivery_notes"),
+  
+  // Timeline tracking
+  paidAt: timestamp("paid_at"),
+  sellerConfirmedAt: timestamp("seller_confirmed_at"),
+  preparingAt: timestamp("preparing_at"),
+  readyAt: timestamp("ready_at"),
+  shippedAt: timestamp("shipped_at"),
+  outForDeliveryAt: timestamp("out_for_delivery_at"),
+  deliveredAt: timestamp("delivered_at"),
+  buyerConfirmedAt: timestamp("buyer_confirmed_at"),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  
+  // Cancellation/dispute info
+  cancelledBy: varchar("cancelled_by").references(() => users.id, { onDelete: "set null" }),
+  cancellationReason: text("cancellation_reason"),
+  
+  // Payment tracking
+  paymentReference: varchar("payment_reference"),
+  escrowTransactionId: varchar("escrow_transaction_id").references(() => escrowTransactions.id, { onDelete: "set null" }),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_orders_buyer").on(table.buyerId),
+  index("idx_orders_seller").on(table.sellerId),
+  index("idx_orders_status").on(table.status),
+  index("idx_orders_created").on(table.createdAt),
+  index("idx_orders_number").on(table.orderNumber),
+]);
+
+// Order status history for tracking all status changes
+export const orderStatusHistory = pgTable("order_status_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  fromStatus: orderStatusEnum("from_status"),
+  toStatus: orderStatusEnum("to_status").notNull(),
+  changedBy: varchar("changed_by").references(() => users.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_order_status_history_order").on(table.orderId),
+  index("idx_order_status_history_created").on(table.createdAt),
+]);
+
 // Notification types
 export const notificationTypeEnum = pgEnum("notification_type", [
   "message", "sale", "purchase", "review", "follow", "product_update", 
   "announcement", "dispute", "verification_approved", "verification_rejected",
   "escrow_released", "wallet_credit", "boost_expired", "price_alert",
-  "negotiation_offer", "negotiation_accepted", "negotiation_rejected", "negotiation_countered"
+  "negotiation_offer", "negotiation_accepted", "negotiation_rejected", "negotiation_countered",
+  "order_placed", "order_confirmed", "order_shipped", "order_delivered", "order_completed", "order_cancelled"
 ]);
 
 // Notifications for real time updates
@@ -1518,3 +1619,53 @@ export type AnnouncementRead = typeof announcementReads.$inferSelect;
 export type InsertAnnouncementRead = z.infer<typeof insertAnnouncementReadSchema>;
 export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;
 export type UpdateAnnouncementInput = z.infer<typeof updateAnnouncementSchema>;
+
+// Order insert schemas
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  paidAt: true,
+  sellerConfirmedAt: true,
+  preparingAt: true,
+  readyAt: true,
+  shippedAt: true,
+  outForDeliveryAt: true,
+  deliveredAt: true,
+  buyerConfirmedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+});
+
+export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Order API schemas
+export const createOrderSchema = z.object({
+  productId: z.string().min(1, "Product ID is required"),
+  deliveryMethod: z.enum(["pickup", "seller_delivery", "agent_delivery", "campus_meetup"]).optional().default("campus_meetup"),
+  deliveryAddress: z.string().optional(),
+  deliveryLocation: z.string().optional(),
+  deliveryNotes: z.string().optional(),
+  negotiationId: z.string().optional(),
+});
+
+export const updateOrderStatusSchema = z.object({
+  orderId: z.string().min(1, "Order ID is required"),
+  status: z.enum([
+    "pending", "paid", "seller_confirmed", "preparing", "ready_for_pickup",
+    "shipped", "out_for_delivery", "delivered", "buyer_confirmed", "completed",
+    "cancelled", "disputed", "refunded"
+  ]),
+  notes: z.string().optional(),
+});
+
+// Order TypeScript types
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type OrderStatusHistory = typeof orderStatusHistory.$inferSelect;
+export type InsertOrderStatusHistory = z.infer<typeof insertOrderStatusHistorySchema>;
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
