@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -35,41 +35,137 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Gamepad2, Trophy, Users, Coins, Dice1, BookOpen, HelpCircle, Play, X, Clock, Loader2 } from "lucide-react";
+import { 
+  Gamepad2, 
+  Trophy, 
+  Users, 
+  Coins, 
+  Dice1, 
+  BookOpen, 
+  HelpCircle, 
+  Play, 
+  X, 
+  Clock, 
+  Loader2,
+  Spade,
+  Pencil,
+  Keyboard,
+  Grid3X3,
+  Heart,
+  Tag,
+  Radio,
+  Zap
+} from "lucide-react";
 import { format } from "date-fns";
 import type { Game, User, Wallet } from "@shared/schema";
 
 type GameWithPlayer = Game & { player1: User };
 
-const STAKE_AMOUNTS = ["100", "200", "500", "1000", "2000"];
+type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price";
 
-const GAME_INFO = {
+interface GameInfoType {
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  stakeAmounts: string[];
+  platformFee: number;
+  playerType: string;
+}
+
+const GAME_INFO: Record<GameType, GameInfoType> = {
   ludo: {
     name: "Ludo",
     description: "Classic board game. First to get all tokens home wins!",
     icon: Dice1,
     color: "bg-red-500/10 text-red-600 dark:text-red-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    platformFee: 5,
+    playerType: "2-4 Players",
   },
   word_battle: {
     name: "Word Battle",
     description: "Form words from letters. Highest score wins!",
     icon: BookOpen,
     color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    platformFee: 5,
+    playerType: "2 Players",
   },
   trivia: {
     name: "Trivia",
     description: "Answer questions correctly. Most correct answers wins!",
     icon: HelpCircle,
     color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    platformFee: 5,
+    playerType: "2+ Players",
+  },
+  whot: {
+    name: "Whot",
+    description: "Nigerian card game classic. Be the first to empty your hand!",
+    icon: Spade,
+    color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    stakeAmounts: ["50", "100", "150"],
+    platformFee: 15,
+    playerType: "2 Players",
+  },
+  quick_draw: {
+    name: "Quick Draw",
+    description: "Draw and guess! Like Pictionary but faster and funnier.",
+    icon: Pencil,
+    color: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+    stakeAmounts: ["50", "100", "150", "200"],
+    platformFee: 15,
+    playerType: "2-4 Players",
+  },
+  speed_typing: {
+    name: "Speed Typing",
+    description: "Type the fastest! Compete on the leaderboard for glory.",
+    icon: Keyboard,
+    color: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+    stakeAmounts: ["50"],
+    platformFee: 10,
+    playerType: "Leaderboard",
+  },
+  campus_bingo: {
+    name: "Campus Bingo",
+    description: "Live bingo experience! Mark your numbers and shout BINGO!",
+    icon: Grid3X3,
+    color: "bg-green-500/10 text-green-600 dark:text-green-400",
+    stakeAmounts: ["100"],
+    platformFee: 15,
+    playerType: "Live",
+  },
+  truth_or_dare: {
+    name: "Truth or Dare",
+    description: "The classic party game! Reveal truths or complete dares.",
+    icon: Heart,
+    color: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    stakeAmounts: ["50"],
+    platformFee: 10,
+    playerType: "Multiplayer",
+  },
+  guess_the_price: {
+    name: "Guess the Price",
+    description: "How well do you know prices? Closest guess wins!",
+    icon: Tag,
+    color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    stakeAmounts: ["50", "100", "150", "200"],
+    platformFee: 15,
+    playerType: "Multiplayer Quiz",
   },
 };
 
+const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"];
+
 export default function GamesPage() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"ludo" | "word_battle" | "trivia">("ludo");
-  const [selectedStake, setSelectedStake] = useState("100");
+  const [selectedGameType, setSelectedGameType] = useState<GameType>("ludo");
+  const currentGameInfo = GAME_INFO[selectedGameType];
+  const [selectedStake, setSelectedStake] = useState(currentGameInfo.stakeAmounts[0]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [activeGame, setActiveGame] = useState<GameWithPlayer | null>(null);
+  const [currentPlayingGame, setCurrentPlayingGame] = useState<GameWithPlayer | null>(null);
   const [gameInProgress, setGameInProgress] = useState(false);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
@@ -77,7 +173,7 @@ export default function GamesPage() {
   });
 
   const { data: availableGames, isLoading: gamesLoading } = useQuery<GameWithPlayer[]>({
-    queryKey: ["/api/games", activeTab],
+    queryKey: ["/api/games", selectedGameType],
     refetchInterval: 5000,
   });
 
@@ -124,7 +220,7 @@ export default function GamesPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/games"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-      setActiveGame(game);
+      setCurrentPlayingGame(game);
       setGameInProgress(true);
     },
     onError: (error: any) => {
@@ -179,7 +275,7 @@ export default function GamesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/games/history"] });
       setGameInProgress(false);
-      setActiveGame(null);
+      setCurrentPlayingGame(null);
     },
     onError: (error: any) => {
       toast({
@@ -204,9 +300,14 @@ export default function GamesPage() {
     }
 
     createGameMutation.mutate({
-      gameType: activeTab,
+      gameType: selectedGameType,
       stakeAmount: selectedStake,
     });
+  };
+
+  const handleGameTypeChange = (gameType: GameType) => {
+    setSelectedGameType(gameType);
+    setSelectedStake(GAME_INFO[gameType].stakeAmounts[0]);
   };
 
   const handleJoinGame = (game: GameWithPlayer) => {
@@ -234,11 +335,12 @@ export default function GamesPage() {
     }, 3000);
   };
 
-  const filteredGames = availableGames?.filter(g => g.gameType === activeTab) || [];
+  const filteredGames = availableGames?.filter(g => g.gameType === selectedGameType) || [];
   const userWaitingGames = filteredGames.filter(g => g.player1Id === user?.id);
   const otherGames = filteredGames.filter(g => g.player1Id !== user?.id);
 
-  const GameIcon = GAME_INFO[activeTab].icon;
+  const GameIcon = currentGameInfo.icon;
+  const winMultiplier = (100 - currentGameInfo.platformFee) / 100;
 
   return (
     <div className="container max-w-4xl mx-auto p-4 pb-20 space-y-6">
@@ -268,102 +370,222 @@ export default function GamesPage() {
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="ludo" className="flex items-center gap-2" data-testid="tab-ludo">
-            <Dice1 className="h-4 w-4" />
-            <span className="hidden sm:inline">Ludo</span>
-          </TabsTrigger>
-          <TabsTrigger value="word_battle" className="flex items-center gap-2" data-testid="tab-word-battle">
-            <BookOpen className="h-4 w-4" />
-            <span className="hidden sm:inline">Word Battle</span>
-          </TabsTrigger>
-          <TabsTrigger value="trivia" className="flex items-center gap-2" data-testid="tab-trivia">
-            <HelpCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">Trivia</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-muted-foreground">Select Game</h3>
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex gap-3 pb-4">
+            {ALL_GAME_TYPES.map((gameType) => {
+              const info = GAME_INFO[gameType];
+              const Icon = info.icon;
+              const isSelected = selectedGameType === gameType;
+              return (
+                <button
+                  key={gameType}
+                  onClick={() => handleGameTypeChange(gameType)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-md min-w-[100px] transition-all ${
+                    isSelected 
+                      ? `${info.color} ring-2 ring-offset-2 ring-offset-background ring-current` 
+                      : 'bg-muted/50 hover-elevate'
+                  }`}
+                  data-testid={`tab-${gameType}`}
+                >
+                  <div className={`p-2 rounded-md ${info.color}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-medium text-center whitespace-normal leading-tight">
+                    {info.name}
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {info.playerType}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
 
-        <TabsContent value={activeTab} className="space-y-6 mt-6">
-          <Card className={GAME_INFO[activeTab].color}>
-            <CardHeader className="pb-2">
+      <div className="space-y-6">
+        <Card className={currentGameInfo.color}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <CardTitle className="flex items-center gap-2">
                 <GameIcon className="h-5 w-5" />
-                {GAME_INFO[activeTab].name}
+                {currentGameInfo.name}
               </CardTitle>
-              <CardDescription className="text-inherit opacity-80">
-                {GAME_INFO[activeTab].description}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button data-testid="button-create-game">
-                    <Play className="h-4 w-4 mr-2" />
-                    Create Game
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-xs">
+                  {currentGameInfo.playerType}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {currentGameInfo.platformFee}% Fee
+                </Badge>
+              </div>
+            </div>
+            <CardDescription className="text-inherit opacity-80">
+              {currentGameInfo.description}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-3 flex-wrap">
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-create-game">
+                  <Play className="h-4 w-4 mr-2" />
+                  Create Game
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create {currentGameInfo.name} Game</DialogTitle>
+                  <DialogDescription>
+                    Select your stake amount. Winner takes {100 - currentGameInfo.platformFee}% of the total pot.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Stake Amount (NGN)</label>
+                    <Select value={selectedStake} onValueChange={setSelectedStake}>
+                      <SelectTrigger data-testid="select-stake">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentGameInfo.stakeAmounts.map((amount) => (
+                          <SelectItem key={amount} value={amount}>
+                            {parseInt(amount).toLocaleString()} NGN
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-between gap-4 text-sm">
+                    <span className="text-muted-foreground">Potential Win:</span>
+                    <span className="font-bold text-green-600">
+                      {(parseFloat(selectedStake) * 2 * winMultiplier).toLocaleString()} NGN
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-sm">
+                    <span className="text-muted-foreground">Platform Fee:</span>
+                    <span>{currentGameInfo.platformFee}%</span>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button 
+                    onClick={handleCreateGame} 
+                    disabled={createGameMutation.isPending}
+                    data-testid="button-confirm-create"
+                  >
+                    {createGameMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Coins className="h-4 w-4 mr-2" />
+                    )}
+                    Stake {parseInt(selectedStake).toLocaleString()} NGN
                   </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create {GAME_INFO[activeTab].name} Game</DialogTitle>
-                    <DialogDescription>
-                      Select your stake amount. Winner takes 95% of the total pot.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Stake Amount (NGN)</label>
-                      <Select value={selectedStake} onValueChange={setSelectedStake}>
-                        <SelectTrigger data-testid="select-stake">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STAKE_AMOUNTS.map((amount) => (
-                            <SelectItem key={amount} value={amount}>
-                              {parseInt(amount).toLocaleString()} NGN
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Potential Win:</span>
-                      <span className="font-bold text-green-600">
-                        {(parseFloat(selectedStake) * 2 * 0.95).toLocaleString()} NGN
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Platform Fee:</span>
-                      <span>5%</span>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <span className="text-sm text-muted-foreground">
+              Stakes: {currentGameInfo.stakeAmounts.map(s => `${parseInt(s).toLocaleString()}`).join(', ')} NGN
+            </span>
+          </CardContent>
+        </Card>
+
+        {userWaitingGames.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Your Waiting Games
+            </h3>
+            {userWaitingGames.map((game) => (
+              <Card key={game.id} className="border-dashed">
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={game.player1.profileImageUrl || undefined} />
+                      <AvatarFallback>
+                        {game.player1.firstName?.[0] || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">Waiting for opponent...</p>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {parseInt(game.stakeAmount).toLocaleString()} NGN
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(game.createdAt || new Date()), "MMM d, h:mm a")}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button 
-                      onClick={handleCreateGame} 
-                      disabled={createGameMutation.isPending}
-                      data-testid="button-confirm-create"
-                    >
-                      {createGameMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Coins className="h-4 w-4 mr-2" />
-                      )}
-                      Stake {parseInt(selectedStake).toLocaleString()} NGN
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
-          </Card>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" data-testid={`button-cancel-game-${game.id}`}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel Game?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Your stake of {parseInt(game.stakeAmount).toLocaleString()} NGN will be refunded to your wallet.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep Waiting</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => cancelGameMutation.mutate(game.id)}
+                          disabled={cancelGameMutation.isPending}
+                        >
+                          Cancel Game
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
-          {userWaitingGames.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Available Lobbies
+          </h3>
+          
+          {gamesLoading ? (
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Your Waiting Games
-              </h3>
-              {userWaitingGames.map((game) => (
-                <Card key={game.id} className="border-dashed">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="space-y-2 flex-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                      <Skeleton className="h-9 w-20" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : otherGames.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <GameIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground">No games available</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Be the first to create a {currentGameInfo.name} game!
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {otherGames.map((game) => (
+                <Card key={game.id} data-testid={`card-game-${game.id}`}>
                   <CardContent className="p-4 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
@@ -373,207 +595,119 @@ export default function GamesPage() {
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium">Waiting for opponent...</p>
-                        <div className="flex items-center gap-2">
+                        <p className="font-medium">
+                          {game.player1.firstName} {game.player1.lastName?.[0]}.
+                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="secondary" className="text-xs">
+                            <Coins className="h-3 w-3 mr-1" />
                             {parseInt(game.stakeAmount).toLocaleString()} NGN
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(game.createdAt || new Date()), "MMM d, h:mm a")}
+                          <span className="text-xs text-green-600 font-medium">
+                            Win: {(parseFloat(game.stakeAmount) * 2 * winMultiplier).toLocaleString()} NGN
                           </span>
                         </div>
                       </div>
                     </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" data-testid={`button-cancel-game-${game.id}`}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Cancel Game?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Your stake of {parseInt(game.stakeAmount).toLocaleString()} NGN will be refunded to your wallet.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Keep Waiting</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => cancelGameMutation.mutate(game.id)}
-                            disabled={cancelGameMutation.isPending}
-                          >
-                            Cancel Game
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button
+                      onClick={() => handleJoinGame(game)}
+                      disabled={joinGameMutation.isPending}
+                      data-testid={`button-join-game-${game.id}`}
+                    >
+                      {joinGameMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Join"
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
             </div>
           )}
+        </div>
 
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Available Lobbies
-            </h3>
-            
-            {gamesLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Card key={i}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="h-10 w-10 rounded-full" />
-                        <div className="space-y-2 flex-1">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-24" />
-                        </div>
-                        <Skeleton className="h-9 w-20" />
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Trophy className="h-4 w-4" />
+            Recent Games
+          </h3>
+          
+          {historyLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : !gameHistory?.length ? (
+            <Card>
+              <CardContent className="p-4 text-center text-muted-foreground">
+                No games played yet
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {gameHistory.slice(0, 5).map((game) => (
+                <Card key={game.id} data-testid={`card-history-${game.id}`}>
+                  <CardContent className="p-3 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-md ${GAME_INFO[game.gameType as keyof typeof GAME_INFO]?.color || "bg-muted"}`}>
+                        {(() => {
+                          const Icon = GAME_INFO[game.gameType as keyof typeof GAME_INFO]?.icon || Gamepad2;
+                          return <Icon className="h-4 w-4" />;
+                        })()}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : otherGames.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <GameIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                  <p className="text-muted-foreground">No games available</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Be the first to create a {GAME_INFO[activeTab].name} game!
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {otherGames.map((game) => (
-                  <Card key={game.id} data-testid={`card-game-${game.id}`}>
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={game.player1.profileImageUrl || undefined} />
-                          <AvatarFallback>
-                            {game.player1.firstName?.[0] || "?"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">
-                            {game.player1.firstName} {game.player1.lastName?.[0]}.
-                          </p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="secondary" className="text-xs">
-                              <Coins className="h-3 w-3 mr-1" />
-                              {parseInt(game.stakeAmount).toLocaleString()} NGN
-                            </Badge>
-                            <span className="text-xs text-green-600 font-medium">
-                              Win: {(parseFloat(game.stakeAmount) * 2 * 0.95).toLocaleString()} NGN
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => handleJoinGame(game)}
-                        disabled={joinGameMutation.isPending}
-                        data-testid={`button-join-game-${game.id}`}
-                      >
-                        {joinGameMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          "Join"
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Trophy className="h-4 w-4" />
-              Recent Games
-            </h3>
-            
-            {historyLoading ? (
-              <div className="space-y-2">
-                {[1, 2].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : !gameHistory?.length ? (
-              <Card>
-                <CardContent className="p-4 text-center text-muted-foreground">
-                  No games played yet
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {gameHistory.slice(0, 5).map((game) => (
-                  <Card key={game.id} data-testid={`card-history-${game.id}`}>
-                    <CardContent className="p-3 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-md ${GAME_INFO[game.gameType as keyof typeof GAME_INFO]?.color || "bg-muted"}`}>
-                          {(() => {
-                            const Icon = GAME_INFO[game.gameType as keyof typeof GAME_INFO]?.icon || Gamepad2;
-                            return <Icon className="h-4 w-4" />;
-                          })()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium capitalize">
-                              {game.gameType.replace("_", " ")}
-                            </span>
-                            <Badge 
-                              variant={game.status === "completed" ? "secondary" : "outline"}
-                              className="text-xs"
-                            >
-                              {game.status}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {game.createdAt && format(new Date(game.createdAt), "MMM d, h:mm a")}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {game.status === "completed" && (
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium capitalize">
+                            {game.gameType.replace(/_/g, " ")}
+                          </span>
                           <Badge 
-                            variant={game.winnerId === user?.id ? "default" : "outline"}
-                            className={game.winnerId === user?.id ? "bg-green-500" : ""}
+                            variant={game.status === "completed" ? "secondary" : "outline"}
+                            className="text-xs"
                           >
-                            {game.winnerId === user?.id ? (
-                              <>
-                                <Trophy className="h-3 w-3 mr-1" />
-                                Won
-                              </>
-                            ) : (
-                              "Lost"
-                            )}
+                            {game.status}
                           </Badge>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {parseInt(game.stakeAmount).toLocaleString()} NGN
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {game.createdAt && format(new Date(game.createdAt), "MMM d, h:mm a")}
                         </p>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+                    </div>
+                    <div className="text-right">
+                      {game.status === "completed" && (
+                        <Badge 
+                          variant={game.winnerId === user?.id ? "default" : "outline"}
+                          className={game.winnerId === user?.id ? "bg-green-500" : ""}
+                        >
+                          {game.winnerId === user?.id ? (
+                            <>
+                              <Trophy className="h-3 w-3 mr-1" />
+                              Won
+                            </>
+                          ) : (
+                            "Lost"
+                          )}
+                        </Badge>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {parseInt(game.stakeAmount).toLocaleString()} NGN
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <Dialog open={gameInProgress} onOpenChange={setGameInProgress}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <GameIcon className="h-5 w-5" />
-              {GAME_INFO[activeTab].name} in Progress
+              {currentGameInfo.name} in Progress
             </DialogTitle>
             <DialogDescription>
               Game simulation running...
@@ -589,13 +723,13 @@ export default function GamesPage() {
               Playing against opponent...<br />
               <span className="text-sm">Winner will be determined shortly</span>
             </p>
-            {activeGame && (
+            {currentPlayingGame && (
               <Button
                 variant="outline"
                 onClick={() => {
-                  const winnerId = Math.random() > 0.5 ? user?.id : activeGame.player1.id;
+                  const winnerId = Math.random() > 0.5 ? user?.id : currentPlayingGame.player1.id;
                   if (winnerId) {
-                    completeGameMutation.mutate({ gameId: activeGame.id, winnerId });
+                    completeGameMutation.mutate({ gameId: currentPlayingGame.id, winnerId });
                   }
                 }}
                 disabled={completeGameMutation.isPending}
