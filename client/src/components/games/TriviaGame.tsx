@@ -394,6 +394,35 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
+const getCategoryColor = (category: string) => {
+  switch (category) {
+    case "General Knowledge": return "bg-blue-500/20 text-blue-600 dark:text-blue-400";
+    case "Nigerian Culture": return "bg-green-500/20 text-green-600 dark:text-green-400";
+    case "Campus Life": return "bg-purple-500/20 text-purple-600 dark:text-purple-400";
+    case "Sports": return "bg-orange-500/20 text-orange-600 dark:text-orange-400";
+    case "Entertainment": return "bg-pink-500/20 text-pink-600 dark:text-pink-400";
+    default: return "bg-muted";
+  }
+};
+
+const getDifficultyColor = (difficulty: string) => {
+  switch (difficulty) {
+    case "easy": return "bg-green-500/20 text-green-600 dark:text-green-400";
+    case "medium": return "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400";
+    case "hard": return "bg-red-500/20 text-red-600 dark:text-red-400";
+    default: return "bg-muted";
+  }
+};
+
+const getDifficultyIcon = (difficulty: string) => {
+  switch (difficulty) {
+    case "easy": return Star;
+    case "medium": return Flame;
+    case "hard": return Crown;
+    default: return Star;
+  }
+};
+
 const getRandomQuestions = (count: number, category?: string): Question[] => {
   let filtered = [...QUESTIONS];
   if (category && category !== "all") {
@@ -779,36 +808,6 @@ export default function TriviaGame({ stake, onGameEnd, isPractice }: TriviaGameP
 
   const currentQuestion = questions[currentQuestionIndex];
   const winner = playerScore > aiScore ? "player" : playerScore < aiScore ? "ai" : "tie";
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case "General Knowledge": return "bg-blue-500/20 text-blue-600 dark:text-blue-400";
-      case "Nigerian Culture": return "bg-green-500/20 text-green-600 dark:text-green-400";
-      case "Campus Life": return "bg-purple-500/20 text-purple-600 dark:text-purple-400";
-      case "Sports": return "bg-orange-500/20 text-orange-600 dark:text-orange-400";
-      case "Entertainment": return "bg-pink-500/20 text-pink-600 dark:text-pink-400";
-      default: return "bg-muted";
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "easy": return "bg-green-500/20 text-green-600 dark:text-green-400";
-      case "medium": return "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400";
-      case "hard": return "bg-red-500/20 text-red-600 dark:text-red-400";
-      default: return "bg-muted";
-    }
-  };
-
-  const getDifficultyIcon = (difficulty: string) => {
-    switch (difficulty) {
-      case "easy": return Star;
-      case "medium": return Flame;
-      case "hard": return Crown;
-      default: return Star;
-    }
-  };
-
   const DifficultyIcon = getDifficultyIcon(currentQuestion.difficulty);
 
   return (
