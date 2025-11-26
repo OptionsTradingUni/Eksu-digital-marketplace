@@ -194,13 +194,23 @@ export default function Home() {
                 <Input
                   type="number"
                   min={0}
-                  max={priceRange[1]}
+                  max={DEFAULT_MAX_PRICE}
                   value={priceRange[0]}
                   onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    if (value <= priceRange[1]) {
-                      setPriceRange([value, priceRange[1]]);
-                      setIsBrokeStudentMode(false);
+                    const rawValue = e.target.value;
+                    if (rawValue === "") return;
+                    const parsed = parseInt(rawValue);
+                    if (isNaN(parsed)) return;
+                    const value = Math.max(0, Math.min(parsed, priceRange[1]));
+                    setPriceRange([value, priceRange[1]]);
+                    setIsBrokeStudentMode(false);
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < 0) {
+                      setPriceRange([0, priceRange[1]]);
+                    } else if (parsed > priceRange[1]) {
+                      setPriceRange([priceRange[1], priceRange[1]]);
                     }
                   }}
                   className="pl-6"
@@ -215,16 +225,26 @@ export default function Home() {
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
                 <Input
                   type="number"
-                  min={priceRange[0]}
+                  min={0}
                   max={DEFAULT_MAX_PRICE}
                   value={priceRange[1]}
                   onChange={(e) => {
-                    const value = parseInt(e.target.value) || DEFAULT_MAX_PRICE;
-                    if (value >= priceRange[0]) {
-                      setPriceRange([priceRange[0], value]);
-                      if (value !== BROKE_STUDENT_MAX_PRICE) {
-                        setIsBrokeStudentMode(false);
-                      }
+                    const rawValue = e.target.value;
+                    if (rawValue === "") return;
+                    const parsed = parseInt(rawValue);
+                    if (isNaN(parsed)) return;
+                    const value = Math.max(priceRange[0], Math.min(parsed, DEFAULT_MAX_PRICE));
+                    setPriceRange([priceRange[0], value]);
+                    if (value !== BROKE_STUDENT_MAX_PRICE) {
+                      setIsBrokeStudentMode(false);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (isNaN(parsed) || parsed < priceRange[0]) {
+                      setPriceRange([priceRange[0], priceRange[0]]);
+                    } else if (parsed > DEFAULT_MAX_PRICE) {
+                      setPriceRange([priceRange[0], DEFAULT_MAX_PRICE]);
                     }
                   }}
                   className="pl-6"

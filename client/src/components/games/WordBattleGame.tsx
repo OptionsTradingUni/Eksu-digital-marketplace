@@ -248,8 +248,15 @@ export default function WordBattleGame({ stake, onGameEnd, isPractice }: WordBat
   const validateWordWithAI = async (word: string): Promise<WordValidationResult> => {
     try {
       const response = await apiRequest("POST", "/api/games/validate-word", { word });
-      const data = await response.json();
-      return data as WordValidationResult;
+      const data = await response.json() as WordValidationResult;
+      if (typeof data.valid !== 'boolean') {
+        throw new Error("Invalid response format");
+      }
+      return {
+        valid: data.valid,
+        feedback: data.feedback || (data.valid ? "Word accepted!" : "Not a valid word."),
+        usedFallback: data.usedFallback ?? false
+      };
     } catch (error) {
       console.error("Error validating word:", error);
       const isValid = isValidWordLocal(word);
