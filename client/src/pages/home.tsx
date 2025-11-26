@@ -185,7 +185,54 @@ export default function Home() {
             <Badge variant="secondary" className="text-xs">Active</Badge>
           )}
         </div>
-        <div className="pt-2">
+        <div className="pt-2 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Min</Label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={priceRange[1]}
+                  value={priceRange[0]}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    if (value <= priceRange[1]) {
+                      setPriceRange([value, priceRange[1]]);
+                      setIsBrokeStudentMode(false);
+                    }
+                  }}
+                  className="pl-6"
+                  data-testid="input-min-price"
+                />
+              </div>
+            </div>
+            <span className="text-muted-foreground mt-5">-</span>
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Max</Label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
+                <Input
+                  type="number"
+                  min={priceRange[0]}
+                  max={DEFAULT_MAX_PRICE}
+                  value={priceRange[1]}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || DEFAULT_MAX_PRICE;
+                    if (value >= priceRange[0]) {
+                      setPriceRange([priceRange[0], value]);
+                      if (value !== BROKE_STUDENT_MAX_PRICE) {
+                        setIsBrokeStudentMode(false);
+                      }
+                    }
+                  }}
+                  className="pl-6"
+                  data-testid="input-max-price"
+                />
+              </div>
+            </div>
+          </div>
           <Slider
             value={priceRange}
             onValueChange={(value) => {
@@ -196,13 +243,8 @@ export default function Home() {
             }}
             max={DEFAULT_MAX_PRICE}
             step={1000}
-            className="mb-2"
             data-testid="slider-price-range"
           />
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>₦{priceRange[0].toLocaleString()}</span>
-            <span>₦{priceRange[1].toLocaleString()}</span>
-          </div>
         </div>
       </div>
 
