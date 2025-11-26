@@ -1,0 +1,80 @@
+"For all UI designs, strictly use Shadcn/UI components with Tailwind CSS.
+The design style should be 'Mobile-First Modern Marketplace'.
+Use a clean, white background with a primary color of #0099FF (Campus Blue).
+For the 'The Plug' social feed, copy the layout style of Twitter/X (minimalist cards, rounded avatars, icons at the bottom).
+For the Marketplace grid, copy the layout style of Jiji/Instagram (2-column grid for photos)."
+
+🛠️ PART 2: The Fix List (Simplified & Numbered)
+Here is the step-by-step plan to fix the broken features. Send this to your developer/agent.
+1. Fix "The Plug" (Social Feed)
+The social feed is currently not loading or posting correctly.
+1. Create the Tab: Ensure "The Plug" is a visible tab at the bottom of the screen.
+2. The Feed Logic:
+• Create a database collection called posts.
+• When the page loads, fetch the lastest posts from the database.just let it be like X. Let it be like how normal social medias are X, Facebook instagram 
+• Sort them by created_at (newest first).
+3. The Post Button:
+• Add a floating "+" button at the bottom right.
+• When clicked, open a modal to type text or upload a photo.
+• Important: If a user uploads a photo, save it to storage first, get the link, and then save the post.
+4. Voice Notes: Add a microphone icon. When held, record audio. When released, save the audio file and attach it to the post.
+2. Fix the "Welcome System" (Auto-Follow)
+New users are not following the admin automatically.
+1. Identify Admin: Hardcode your Admin User ID in the system settings (e.g., ADMIN_ID = "your_user_id_here").
+2. The Trigger: Find the exact code file where signUp happens.
+3. The Action: Immediately after a user is successfully created, run two background tasks:
+• Task A: Create a "Follow" record connecting the New User -> Admin ID.
+• Task B: Create a "Message" record from Admin ID -> New User saying: "Welcome to the family! 🔌"
+3. Fix the Wallet (Deposit & Withdrawal)
+The withdrawal system is failing because it doesn't check the account name.
+1. Deposit:
+• Integrate the/Monnify Pop-up.
+• When payment is successful, update the user's wallet_balance in the database immediately.
+2. Withdrawal (The Fix):
+• Step A: User selects Bank Name and types Account Number.
+• Step B (The Missing Link): The app MUST automatically pause and send that account number to the Paystack/Monnify API to get the Account Name (e.g., "CHRIS DOE").
+• Step C: Show this name to the user. Ask "Is this you?".
+• Step D: Only if they click "Yes", allow the withdrawal request to proceed.
+4. Rename & Fix "Campus Updates" (Admin Broadcast)
+You want to send messages to everyone about app updates.
+1. Rename: Change the text "Campus Updates" to "EKSU Marketplace Updates".
+2. Admin Panel Feature: Create a simple form in the Admin Dashboard with a text box.
+3. Broadcast Logic:
+• When Admin clicks "Send Update", the system creates a Notification record.
+• Important: Do not create 10,000 messages. Instead, create one "Global Notification" record.
+• Modify the User's Notification screen to always fetch and show the latest "Global Notification" at the top.
+5. Checkout Flow Finalization
+The checkout is stopping halfway.
+1. Cart Page: Ensure the "Checkout" button checks if the user has enough money in their wallet before proceeding.
+2. Order Creation: When they click "Confirm Payment":
+• Subtract money from Buyer.
+• Add money to a "Pending" account (not the seller yet).
+• Create an Order record with status pending_delivery.
+• Show a big green "Success" checkmark.
+📝 PART 3: Copy-Paste Instructions for Replit Agent
+If the agent is confused, paste this exact block:
+
+TASK: Fix Broken Logic in Social, Wallet, and Welcome Systems.
+
+1. SOCIAL FEED ("The Plug"):
+   - Create a 'posts' collection in the database.
+   - UI: Twitter-style feed.
+   - Allow image uploads (store file -> save URL).
+   - Allow voice note recording (store audio -> save URL).
+
+2. WELCOME AUTOMATION:
+   - Hook into the 'onSignUp' function.
+   - Automatically create a 'Follow' relationship between the new user and the Admin ID.
+   - Automatically insert a chat message from Admin ID to the new user.
+
+3. WALLET WITHDRAWAL:
+   - Implement "Account Name Resolution".
+   - User inputs Account Number -> App calls Paystack/Monnify 'resolve_account' API -> App displays Account Name -> User Confirms -> Withdrawal processes.
+   - Do not allow withdrawal without name confirmation.
+
+4. UPDATES:
+   - Rename "Campus Updates" to "EKSU Marketplace Updates".
+   - Create an Admin tool to post a "Global Notification" visible to all users.
+Let the algorithm be very brilliant and smart 
+
+No need to ask I use monify only 
