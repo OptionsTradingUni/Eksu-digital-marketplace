@@ -11,7 +11,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { uploadToObjectStorage, uploadMultipleToObjectStorage, getClient } from "./object-storage";
+import { uploadToObjectStorage, uploadMultipleToObjectStorage, uploadVideoToStorage, isCloudinaryConfigured } from "./object-storage";
 import { z } from "zod";
 import Groq from "groq-sdk";
 import { 
@@ -205,35 +205,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.use("/uploads", express.static(uploadDir));
 
-  // Serve images from object storage
+  // Legacy storage route - redirect to proper URLs
+  // With Cloudinary, images are served directly from Cloudinary URLs
+  // This route handles any legacy /storage/ URLs by returning 404
   app.get("/storage/:objectName(*)", async (req, res) => {
-    try {
-      const objectName = req.params.objectName;
-      const client = getClient();
-      if (!client) {
-        return res.status(503).json({ message: "Object storage not available" });
-      }
-      const { ok, value, error } = await client.downloadAsBytes(objectName);
-      
-      if (!ok) {
-        console.error("Object storage download error:", error);
-        return res.status(404).json({ message: "Image not found" });
-      }
-      
-      const [buffer] = value;
-      const extension = objectName.split('.').pop()?.toLowerCase() || 'jpg';
-      const contentType = extension === 'png' ? 'image/png' : 
-                          extension === 'gif' ? 'image/gif' : 
-                          extension === 'webp' ? 'image/webp' : 'image/jpeg';
-      
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      res.setHeader("Cache-Control", "public, max-age=31536000");
-      res.send(buffer);
-    } catch (error) {
-      console.error("Error serving storage image:", error);
-      res.status(500).json({ message: "Failed to serve image" });
-    }
+    res.status(404).json({ 
+      message: "Legacy storage URL - image may have been uploaded before Cloudinary migration" 
+    });
+  });
+  
+  // API route to check storage configuration status
+  app.get("/api/storage/status", (req, res) => {
+    res.json({ 
+      cloudinaryConfigured: isCloudinaryConfigured(),
+      message: isCloudinaryConfigured() 
+        ? "Cloudinary is configured for persistent image storage" 
+        : "Using disk storage (images may not persist after restart)"
+    });
   });
 
   // ==================== NEW AUTH ROUTES (Passport.js Local) ====================
