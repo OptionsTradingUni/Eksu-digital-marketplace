@@ -554,7 +554,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         purpose: validated.purpose,
         status: 'PENDING',
         paymentDescription: validated.paymentDescription || null,
-        checkoutUrl: paymentResult.checkoutUrl,
       });
 
       res.json({
@@ -612,7 +611,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amount: payment.amount,
           description: `Monnify deposit - ${payment.purpose}`,
           status: 'completed',
-          reference: payment.paymentReference,
         });
       }
 
@@ -676,7 +674,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amount: amountPaid.toString(),
           description: `Monnify deposit - ${payment.purpose}`,
           status: 'completed',
-          reference: payment.paymentReference,
         });
 
         console.log(`Monnify webhook: Credited ₦${amountPaid} to user ${payment.userId}`);
@@ -772,10 +769,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         reference,
         amount: withdrawAmount.toString(),
-        bankCode,
-        bankName,
-        accountNumber,
-        accountName,
+        destinationBankCode: bankCode,
+        destinationAccountNumber: accountNumber,
+        destinationAccountName: accountName,
         status: 'PENDING',
       });
 
@@ -789,7 +785,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: withdrawAmount.toString(),
         description: `Withdrawal to ${bankName} - ${accountNumber}`,
         status: 'pending',
-        reference,
       });
 
       // Initiate disbursement with Monnify
@@ -3288,19 +3283,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "You cannot purchase your own product" });
       }
 
-      // Calculate pricing
-      let itemPrice = product.price;
+      // Calculate pricing - convert decimal to number
+      let itemPriceNum = parseFloat(product.price as string);
       
       // Check if there's an accepted negotiation for this product
       if (negotiationId) {
         const negotiation = await storage.getNegotiation(negotiationId);
         if (negotiation && negotiation.status === 'accepted' && negotiation.buyerId === userId) {
-          // Use the final price from the accepted negotiation
-          itemPrice = negotiation.finalPrice || negotiation.offerPrice;
+          // Use the counter offer price if available, otherwise the original offer price
+          const negotiatedPrice = negotiation.counterOfferPrice || negotiation.offerPrice;
+          itemPriceNum = parseFloat(negotiatedPrice as string);
         }
       }
 
-      const pricing = calculatePricingFromSellerPrice(itemPrice);
+      const pricing = calculatePricingFromSellerPrice(itemPriceNum);
       
       // Generate unique order number
       const orderNumber = generateOrderNumber();
@@ -3311,12 +3307,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         buyerId: userId,
         sellerId: product.sellerId,
         productId,
-        itemPrice,
-        platformFee: pricing.platformFee,
-        monnifyFee: pricing.monnifyFee,
+        itemPrice: itemPriceNum.toFixed(2),
+        platformFee: pricing.platformCommission.toFixed(2),
+        monnifyFee: pricing.monnifyFee.toFixed(2),
         deliveryFee: "0.00",
-        totalAmount: pricing.buyerTotal,
-        sellerEarnings: pricing.sellerReceives,
+        totalAmount: pricing.buyerPays.toFixed(2),
+        sellerEarnings: pricing.sellerReceives.toFixed(2),
         negotiationId: negotiationId || null,
         status: "pending",
         deliveryMethod: deliveryMethod || "campus_meetup",

@@ -1707,6 +1707,106 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async getEscrowTransactionWithDetails(id: string): Promise<(EscrowTransaction & { product?: Product; buyer: User; seller: User }) | undefined> {
+    const [transaction] = await db.select().from(escrowTransactions).where(eq(escrowTransactions.id, id));
+    if (!transaction) return undefined;
+    
+    const [buyer] = await db.select().from(users).where(eq(users.id, transaction.buyerId));
+    const [seller] = await db.select().from(users).where(eq(users.id, transaction.sellerId));
+    
+    let product: Product | undefined;
+    if (transaction.productId) {
+      const [p] = await db.select().from(products).where(eq(products.id, transaction.productId));
+      product = p;
+    }
+    
+    return { ...transaction, product, buyer, seller };
+  }
+
+  async getUserPurchases(buyerId: string): Promise<(EscrowTransaction & { product?: Product; seller: User })[]> {
+    const transactions = await db
+      .select()
+      .from(escrowTransactions)
+      .where(eq(escrowTransactions.buyerId, buyerId))
+      .orderBy(desc(escrowTransactions.createdAt));
+    
+    const results: (EscrowTransaction & { product?: Product; seller: User })[] = [];
+    for (const transaction of transactions) {
+      const [seller] = await db.select().from(users).where(eq(users.id, transaction.sellerId));
+      let product: Product | undefined;
+      if (transaction.productId) {
+        const [p] = await db.select().from(products).where(eq(products.id, transaction.productId));
+        product = p;
+      }
+      results.push({ ...transaction, product, seller });
+    }
+    return results;
+  }
+
+  async getUserSales(sellerId: string): Promise<(EscrowTransaction & { product?: Product; buyer: User })[]> {
+    const transactions = await db
+      .select()
+      .from(escrowTransactions)
+      .where(eq(escrowTransactions.sellerId, sellerId))
+      .orderBy(desc(escrowTransactions.createdAt));
+    
+    const results: (EscrowTransaction & { product?: Product; buyer: User })[] = [];
+    for (const transaction of transactions) {
+      const [buyer] = await db.select().from(users).where(eq(users.id, transaction.buyerId));
+      let product: Product | undefined;
+      if (transaction.productId) {
+        const [p] = await db.select().from(products).where(eq(products.id, transaction.productId));
+        product = p;
+      }
+      results.push({ ...transaction, product, buyer });
+    }
+    return results;
+  }
+
+  async addToEscrowBalance(sellerId: string, amount: string): Promise<Wallet> {
+    const wallet = await this.getWallet(sellerId);
+    if (!wallet) throw new Error("Wallet not found");
+    
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        escrowBalance: sql`${wallets.escrowBalance} + ${amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(wallets.userId, sellerId))
+      .returning();
+    
+    return updated;
+  }
+
+  async getSellerCompletedSalesCount(sellerId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(escrowTransactions)
+      .where(and(
+        eq(escrowTransactions.sellerId, sellerId),
+        eq(escrowTransactions.status, 'released')
+      ));
+    return result[0]?.count ?? 0;
+  }
+
+  async lockSecurityDeposit(userId: string, amount: string): Promise<Wallet> {
+    const wallet = await this.getWallet(userId);
+    if (!wallet) throw new Error("Wallet not found");
+    
+    const [updated] = await db
+      .update(wallets)
+      .set({
+        balance: sql`${wallets.balance} - ${amount}`,
+        securityDepositLocked: sql`${wallets.securityDepositLocked} + ${amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(wallets.userId, userId))
+      .returning();
+    
+    return updated;
+  }
+
   // Paystack payment operations
   async createPaystackPayment(paymentData: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment> {
     const [created] = await db.insert(paystackPayments).values(paymentData).returning();
@@ -2914,7 +3014,7 @@ export class DatabaseStorage implements IStorage {
     await this.addOrderStatusHistory({
       orderId,
       fromStatus,
-      toStatus: status,
+      toStatus: status as "pending" | "paid" | "seller_confirmed" | "preparing" | "ready_for_pickup" | "shipped" | "out_for_delivery" | "delivered" | "buyer_confirmed" | "completed" | "cancelled" | "disputed" | "refunded",
       changedBy,
       notes,
     });
