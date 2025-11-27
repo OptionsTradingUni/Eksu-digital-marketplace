@@ -622,7 +622,7 @@ export default function ThePlugPage() {
                 data-testid={`post-card-${post.id}`}
               >
                 <div className="flex gap-3">
-                  <Link href={`/profile?user=${post.authorId}`}>
+                  <Link href={`/profile/${post.authorId}`}>
                     <Avatar className="h-10 w-10 flex-shrink-0 cursor-pointer hover:opacity-90 transition-opacity">
                       <AvatarImage src={post.author?.profileImageUrl || undefined} />
                       <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
@@ -634,7 +634,7 @@ export default function ThePlugPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1 flex-wrap min-w-0">
-                        <Link href={`/profile?user=${post.authorId}`}>
+                        <Link href={`/profile/${post.authorId}`}>
                           <span className="font-bold text-sm hover:underline cursor-pointer truncate">
                             {post.author?.firstName} {post.author?.lastName}
                           </span>

@@ -2039,13 +2039,11 @@ Happy trading!`;
       }
 
       const prefix = `products/${userId}/`;
-      const objectNames = await uploadMultipleToObjectStorage(files, prefix);
+      const images = await uploadMultipleToObjectStorage(files, prefix);
       
-      if (objectNames.length === 0) {
+      if (images.length === 0) {
         return res.status(500).json({ message: "Failed to upload product images" });
       }
-
-      const images = objectNames.map(name => `/storage/${name}`);
 
       const product = await storage.createProduct({
         ...validated,
@@ -2081,8 +2079,7 @@ Happy trading!`;
       
       if (files && files.length > 0) {
         const prefix = `products/${userId}/`;
-        const objectNames = await uploadMultipleToObjectStorage(files, prefix);
-        newImages = objectNames.map(name => `/storage/${name}`);
+        newImages = await uploadMultipleToObjectStorage(files, prefix);
       }
 
       // Handle images: use client-provided images (with removed ones excluded) + new uploads
@@ -2235,14 +2232,13 @@ Happy trading!`;
       const userId = getUserId(req);
       const prefix = userId ? `profiles/${userId}/` : "uploads/";
       
-      // Upload to object storage
-      const objectName = await uploadToObjectStorage(req.file, prefix);
+      // Upload to object storage - returns Cloudinary URL or local path
+      const imageUrl = await uploadToObjectStorage(req.file, prefix);
       
-      if (!objectName) {
+      if (!imageUrl) {
         return res.status(500).json({ message: "Failed to upload image to storage" });
       }
 
-      const imageUrl = `/storage/${objectName}`;
       res.json({ url: imageUrl });
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -3190,8 +3186,12 @@ Happy trading!`;
         const prefix = `posts/${userId}/`;
         
         for (const file of req.files as Express.Multer.File[]) {
-          const objectName = await uploadToObjectStorage(file, prefix);
-          const mediaUrl = `/storage/${objectName}`;
+          const mediaUrl = await uploadToObjectStorage(file, prefix);
+          
+          if (!mediaUrl) {
+            console.error("Failed to upload media file:", file.originalname);
+            continue;
+          }
           
           // Check if file is video based on mimetype
           if (file.mimetype.startsWith('video/')) {
