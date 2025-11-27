@@ -567,6 +567,8 @@ export default function VtuPage() {
     });
   };
 
+  const walletBalance = parseFloat(wallet?.balance || "0");
+
   const canPayBill = billCustomerValidated && (
     (billType === "cable" && selectedBillPackage && walletBalance >= selectedBillPackage.amount) ||
     (billType === "electricity" && parseFloat(billElectricityAmount) >= 500 && walletBalance >= parseFloat(billElectricityAmount))
@@ -600,7 +602,6 @@ export default function VtuPage() {
   }, [plans, searchQuery]);
 
   const selectedPlan = plans?.find((p) => p.id === selectedPlanId);
-  const walletBalance = parseFloat(wallet?.balance || "0");
   
   const canPurchaseData = 
     selectedPlanId && 
@@ -2200,7 +2201,7 @@ export default function VtuPage() {
                         <div className="font-medium flex flex-wrap items-center gap-2">
                           {tx.phoneNumber}
                           {getNetworkBadge(tx.network as NetworkType)}
-                          {tx.serviceType === "airtime" && (
+                          {!tx.planId && (
                             <Badge variant="outline" className="text-xs">Airtime</Badge>
                           )}
                         </div>

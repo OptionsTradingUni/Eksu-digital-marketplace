@@ -85,8 +85,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 const CONTEXT_MESSAGES: Record<string, string> = {
-  "/home": "I see you're browsing products! I can help you find items, understand categories, or get the best deals. What are you looking for?",
-  "/": "Welcome! I can help you browse products, sell items, check your wallet, or play games. What would you like to do?",
+  "/": "I see you're browsing products! I can help you find items, understand categories, or get the best deals. What are you looking for?",
   "/games": "Ready to play? We have Ludo, Word Battle, and Trivia games! You can play for fun or stake money to win. Want to know how any game works?",
   "/wallet": "Looking at your wallet? I can help with deposits, withdrawals, or explain how escrow works. What do you need?",
   "/profile": "Need to update your profile or get verified? I can guide you through student verification or NIN verification for higher trust scores.",
@@ -94,14 +93,17 @@ const CONTEXT_MESSAGES: Record<string, string> = {
   "/my-ads": "Managing your listings? I can help you boost products, edit listings, or create new ones. What would you like to do?",
   "/referrals": "Want to earn money by referring friends? Share your unique code and get N500 for each verified signup plus 2% of their trading fees!",
   "/support": "Need help? You can submit a support ticket here. For scam reports, I recommend selecting the Scam Report category for faster response.",
-  "/seller-dashboard": "Checking your seller stats? I can help you understand your analytics, manage orders, or boost slow-moving products.",
+  "/seller/dashboard": "Checking your seller stats? I can help you understand your analytics, manage orders, or boost slow-moving products.",
   "/admin": "Admin panel access! You can manage users, products, announcements, and handle disputes from here.",
+  "/the-plug": "Welcome to The Plug! This is where you can find exclusive deals and connect with verified sellers.",
+  "/checkout": "Ready to complete your purchase? I can help you with payment options and escrow protection.",
+  "/notifications": "Check your latest updates! I can help you understand any notifications you've received.",
+  "/announcements": "Stay informed with the latest campus announcements and updates!",
 };
 
 function getPageName(path: string): string {
   const pageNames: Record<string, string> = {
     "/": "Home",
-    "/home": "Home",
     "/games": "Games",
     "/wallet": "Wallet",
     "/profile": "Profile",
@@ -109,14 +111,26 @@ function getPageName(path: string): string {
     "/my-ads": "My Ads",
     "/referrals": "Referrals",
     "/support": "Support",
-    "/seller-dashboard": "Seller Dashboard",
+    "/seller/dashboard": "Seller Dashboard",
     "/admin": "Admin",
     "/notifications": "Notifications",
     "/announcements": "Announcements",
+    "/the-plug": "The Plug",
+    "/checkout": "Checkout",
+    "/wishlist": "Wishlist",
+    "/vtu": "VTU Services",
+    "/settings": "Settings",
+    "/legal": "Legal",
+    "/kyc": "KYC Verification",
+    "/stories": "Stories",
+    "/confessions": "Confessions",
+    "/communities": "Communities",
   };
   
-  if (path.startsWith("/product/")) return "Product Detail";
-  if (path.startsWith("/search")) return "Search";
+  if (path.startsWith("/products/")) return "Product Detail";
+  if (path.startsWith("/profile/")) return "Profile";
+  if (path.startsWith("/messages/")) return "Messages";
+  if (path.startsWith("/chat/")) return "Chat";
   
   return pageNames[path] || "App";
 }
@@ -252,7 +266,7 @@ export default function ChatBot() {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
           if (lastMessage?.content !== contextMessage) {
-            return [...prev, { role: "assistant", content: contextMessage }];
+            return [...prev, { id: generateMessageId(), role: "assistant", content: contextMessage }];
           }
           return prev;
         });
@@ -397,7 +411,7 @@ export default function ChatBot() {
     window.history.back();
   };
 
-  const isNotOnHome = location !== "/" && location !== "/home";
+  const isNotOnHome = location !== "/";
 
   if (!isOpen) {
     return (
@@ -562,7 +576,7 @@ export default function ChatBot() {
             <Badge
               variant="outline"
               className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
-              onClick={() => handleNavigateAction("/home", "Home")}
+              onClick={() => handleNavigateAction("/", "Home")}
               data-testid="nav-home"
             >
               <Home className="h-3 w-3" />
