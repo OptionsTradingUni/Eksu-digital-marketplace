@@ -337,4 +337,284 @@ export async function purchaseAirtime(
   }
 }
 
+// ===========================================
+// BILL PAYMENTS (Cable TV & Electricity)
+// ===========================================
+
+// Service type mapping for SMEDATA API
+const BILL_SERVICE_MAP: Record<string, { apiName: string; type: string }> = {
+  // Cable TV
+  dstv: { apiName: "dstv", type: "cable" },
+  gotv: { apiName: "gotv", type: "cable" },
+  startimes: { apiName: "startimes", type: "cable" },
+  showmax: { apiName: "showmax", type: "cable" },
+  // Electricity
+  ekedc: { apiName: "ekedc", type: "electricity" },
+  ikedc: { apiName: "ikedc", type: "electricity" },
+  aedc: { apiName: "aedc", type: "electricity" },
+  ibedc: { apiName: "ibedc", type: "electricity" },
+  phedc: { apiName: "phedc", type: "electricity" },
+  eedc: { apiName: "eedc", type: "electricity" },
+};
+
+interface CustomerValidationResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    customerName: string;
+    customerId: string;
+    accountStatus?: string;
+    dueDate?: string;
+    currentBalance?: number;
+    meterType?: string; // prepaid or postpaid for electricity
+  };
+  error?: string;
+}
+
+interface BillPackage {
+  code: string;
+  name: string;
+  amount: number;
+  validity?: string;
+}
+
+interface BillPackagesResponse {
+  success: boolean;
+  message: string;
+  packages?: BillPackage[];
+  error?: string;
+}
+
+interface BillPaymentResponse {
+  success: boolean;
+  message: string;
+  reference?: string;
+  token?: string; // For electricity prepaid
+  data?: any;
+  error?: string;
+}
+
+// Validate decoder/meter number
+export async function validateBillCustomer(
+  serviceType: string,
+  customerId: string
+): Promise<CustomerValidationResponse> {
+  if (!isSMEDataConfigured()) {
+    return {
+      success: false,
+      message: "Bill payment service is not configured. Please contact support.",
+      error: "API_NOT_CONFIGURED",
+    };
+  }
+
+  const serviceInfo = BILL_SERVICE_MAP[serviceType];
+  if (!serviceInfo) {
+    return {
+      success: false,
+      message: "Invalid service type",
+      error: "INVALID_SERVICE",
+    };
+  }
+
+  try {
+    const response = await fetch(`${SMEDATA_BASE_URL}/bills/validate`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SME_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        service: serviceInfo.apiName,
+        customer_id: customerId,
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (data.success || data.status === "success") {
+      return {
+        success: true,
+        message: "Customer validated successfully",
+        data: {
+          customerName: data.data?.customer_name || data.data?.name || "Customer",
+          customerId: customerId,
+          accountStatus: data.data?.status,
+          dueDate: data.data?.due_date,
+          currentBalance: data.data?.balance ? parseFloat(data.data.balance) : undefined,
+          meterType: data.data?.meter_type,
+        },
+      };
+    }
+
+    return {
+      success: false,
+      message: data.message || "Customer validation failed",
+      error: data.error || "VALIDATION_FAILED",
+    };
+  } catch (error: any) {
+    console.error("SMEDATA bill validation error:", error);
+    return {
+      success: false,
+      message: "Failed to validate customer. Please try again.",
+      error: error.message || "NETWORK_ERROR",
+    };
+  }
+}
+
+// Get available packages for cable TV services
+export async function getCablePackages(serviceType: string): Promise<BillPackagesResponse> {
+  if (!isSMEDataConfigured()) {
+    return {
+      success: false,
+      message: "Bill payment service is not configured.",
+      error: "API_NOT_CONFIGURED",
+    };
+  }
+
+  const serviceInfo = BILL_SERVICE_MAP[serviceType];
+  if (!serviceInfo || serviceInfo.type !== "cable") {
+    return {
+      success: false,
+      message: "Invalid cable service type",
+      error: "INVALID_SERVICE",
+    };
+  }
+
+  try {
+    const response = await fetch(`${SMEDATA_BASE_URL}/bills/packages/${serviceInfo.apiName}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${SME_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+    
+    if (data.success || data.status === "success" || data.data) {
+      const packages: BillPackage[] = (data.data || data.packages || []).map((pkg: any) => ({
+        code: pkg.code || pkg.plan_code || pkg.id,
+        name: pkg.name || pkg.plan_name || pkg.description,
+        amount: parseFloat(pkg.amount || pkg.price || "0"),
+        validity: pkg.validity || pkg.duration,
+      }));
+
+      return {
+        success: true,
+        message: "Packages retrieved successfully",
+        packages,
+      };
+    }
+
+    return {
+      success: false,
+      message: data.message || "Failed to get packages",
+      error: data.error || "FETCH_FAILED",
+    };
+  } catch (error: any) {
+    console.error("SMEDATA get packages error:", error);
+    return {
+      success: false,
+      message: "Failed to get packages. Please try again.",
+      error: error.message || "NETWORK_ERROR",
+    };
+  }
+}
+
+// Process bill payment
+export async function payBill(
+  serviceType: string,
+  customerId: string,
+  amount: number,
+  packageCode?: string
+): Promise<BillPaymentResponse> {
+  if (!isSMEDataConfigured()) {
+    return {
+      success: false,
+      message: "Bill payment service is not configured. Please contact support.",
+      error: "API_NOT_CONFIGURED",
+    };
+  }
+
+  const serviceInfo = BILL_SERVICE_MAP[serviceType];
+  if (!serviceInfo) {
+    return {
+      success: false,
+      message: "Invalid service type",
+      error: "INVALID_SERVICE",
+    };
+  }
+
+  try {
+    const requestBody: any = {
+      service: serviceInfo.apiName,
+      customer_id: customerId,
+      amount: amount,
+    };
+
+    // Add package code for cable TV
+    if (serviceInfo.type === "cable" && packageCode) {
+      requestBody.package_code = packageCode;
+    }
+
+    const response = await fetch(`${SMEDATA_BASE_URL}/bills/pay`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SME_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const data = await response.json();
+    
+    if (data.success || data.status === "success") {
+      return {
+        success: true,
+        message: data.message || "Bill payment successful",
+        reference: data.reference || data.data?.reference,
+        token: data.data?.token, // For electricity prepaid
+        data: data.data,
+      };
+    }
+
+    return {
+      success: false,
+      message: data.message || "Bill payment failed",
+      error: data.error || "PAYMENT_FAILED",
+    };
+  } catch (error: any) {
+    console.error("SMEDATA bill payment error:", error);
+    return {
+      success: false,
+      message: "Failed to process bill payment. Please try again.",
+      error: error.message || "NETWORK_ERROR",
+    };
+  }
+}
+
+// Get bill service display info
+export function getBillServiceInfo(serviceType: string): { name: string; type: string } | null {
+  const serviceNames: Record<string, string> = {
+    dstv: "DSTV",
+    gotv: "GOtv",
+    startimes: "StarTimes",
+    showmax: "Showmax",
+    ekedc: "Eko Electricity (EKEDC)",
+    ikedc: "Ikeja Electricity (IKEDC)",
+    aedc: "Abuja Electricity (AEDC)",
+    ibedc: "Ibadan Electricity (IBEDC)",
+    phedc: "Port Harcourt Electricity (PHEDC)",
+    eedc: "Enugu Electricity (EEDC)",
+  };
+
+  const info = BILL_SERVICE_MAP[serviceType];
+  if (!info) return null;
+
+  return {
+    name: serviceNames[serviceType] || serviceType.toUpperCase(),
+    type: info.type,
+  };
+}
+
 export { normalizePhoneNumber };

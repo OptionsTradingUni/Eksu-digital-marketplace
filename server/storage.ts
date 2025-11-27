@@ -52,11 +52,15 @@ import {
   userReports,
   vtuPlans,
   vtuTransactions,
+  vtuBeneficiaries,
   userSettings,
   sponsoredAds,
   platformSettings,
   kycVerifications,
   kycVerificationLogs,
+  scheduledVtuPurchases,
+  giftData,
+  billPayments,
   type User,
   type UpsertUser,
   type Product,
@@ -143,6 +147,8 @@ import {
   type InsertVtuPlan,
   type VtuTransaction,
   type InsertVtuTransaction,
+  type VtuBeneficiary,
+  type InsertVtuBeneficiary,
   type UserSettings,
   type InsertUserSettings,
   type SponsoredAd,
@@ -151,6 +157,12 @@ import {
   type KycVerification,
   type InsertKycVerification,
   type KycVerificationLog,
+  type ScheduledVtuPurchase,
+  type InsertScheduledVtuPurchase,
+  type GiftData,
+  type InsertGiftData,
+  type BillPayment,
+  type InsertBillPayment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -477,7 +489,15 @@ export interface IStorage {
   getVtuPlan(id: string): Promise<VtuPlan | undefined>;
   createVtuTransaction(data: InsertVtuTransaction): Promise<VtuTransaction>;
   updateVtuTransaction(id: string, data: Partial<VtuTransaction>): Promise<VtuTransaction>;
-  getUserVtuTransactions(userId: string): Promise<VtuTransaction[]>;
+  getUserVtuTransactions(userId: string, filters?: { status?: string; network?: string; startDate?: Date; endDate?: Date }): Promise<VtuTransaction[]>;
+  
+  // VTU Beneficiaries operations
+  getUserBeneficiaries(userId: string): Promise<VtuBeneficiary[]>;
+  getBeneficiary(id: string): Promise<VtuBeneficiary | undefined>;
+  createBeneficiary(data: InsertVtuBeneficiary): Promise<VtuBeneficiary>;
+  updateBeneficiary(id: string, data: Partial<VtuBeneficiary>): Promise<VtuBeneficiary>;
+  deleteBeneficiary(id: string): Promise<void>;
+  updateBeneficiaryUsage(id: string): Promise<void>;
   
   // User Settings operations
   getOrCreateUserSettings(userId: string): Promise<UserSettings>;
@@ -503,6 +523,24 @@ export interface IStorage {
   updateKycVerification(id: string, data: Partial<KycVerification>): Promise<KycVerification>;
   getPendingKycVerifications(): Promise<KycVerification[]>;
   createKycLog(data: { kycId: string; userId: string; action: string; result?: string; similarityScore?: number | string; reviewedBy?: string; ipAddress?: string; userAgent?: string; metadata?: any }): Promise<void>;
+  
+  // Scheduled VTU Purchases operations
+  getScheduledPurchases(userId: string): Promise<ScheduledVtuPurchase[]>;
+  getScheduledPurchase(id: string): Promise<ScheduledVtuPurchase | undefined>;
+  createScheduledPurchase(data: InsertScheduledVtuPurchase): Promise<ScheduledVtuPurchase>;
+  updateScheduledPurchase(id: string, data: Partial<ScheduledVtuPurchase>): Promise<ScheduledVtuPurchase>;
+  deleteScheduledPurchase(id: string): Promise<void>;
+  
+  // Gift Data operations
+  getGiftsByUser(userId: string): Promise<GiftData[]>;
+  getGiftByCode(code: string): Promise<GiftData | undefined>;
+  createGiftData(data: InsertGiftData): Promise<GiftData>;
+  claimGiftData(giftId: string, claimerId: string): Promise<GiftData>;
+  
+  // Bill Payment operations
+  createBillPayment(data: InsertBillPayment): Promise<BillPayment>;
+  updateBillPayment(id: string, data: Partial<BillPayment>): Promise<BillPayment>;
+  getUserBillPayments(userId: string): Promise<BillPayment[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3487,12 +3525,85 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getUserVtuTransactions(userId: string): Promise<VtuTransaction[]> {
+  async getUserVtuTransactions(userId: string, filters?: { status?: string; network?: string; startDate?: Date; endDate?: Date }): Promise<VtuTransaction[]> {
+    const conditions = [eq(vtuTransactions.userId, userId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(vtuTransactions.status, filters.status as any));
+    }
+    if (filters?.network) {
+      conditions.push(eq(vtuTransactions.network, filters.network as any));
+    }
+    if (filters?.startDate) {
+      conditions.push(sql`${vtuTransactions.createdAt} >= ${filters.startDate}`);
+    }
+    if (filters?.endDate) {
+      conditions.push(sql`${vtuTransactions.createdAt} <= ${filters.endDate}`);
+    }
+    
     return await db
       .select()
       .from(vtuTransactions)
-      .where(eq(vtuTransactions.userId, userId))
+      .where(and(...conditions))
       .orderBy(desc(vtuTransactions.createdAt));
+  }
+
+  // VTU Beneficiaries operations
+  async getUserBeneficiaries(userId: string): Promise<VtuBeneficiary[]> {
+    return await db
+      .select()
+      .from(vtuBeneficiaries)
+      .where(eq(vtuBeneficiaries.userId, userId))
+      .orderBy(desc(vtuBeneficiaries.lastUsed), desc(vtuBeneficiaries.usageCount));
+  }
+
+  async getBeneficiary(id: string): Promise<VtuBeneficiary | undefined> {
+    const [beneficiary] = await db
+      .select()
+      .from(vtuBeneficiaries)
+      .where(eq(vtuBeneficiaries.id, id));
+    return beneficiary;
+  }
+
+  async createBeneficiary(data: InsertVtuBeneficiary): Promise<VtuBeneficiary> {
+    // If this is set as default, unset other defaults first
+    if (data.isDefault) {
+      await db
+        .update(vtuBeneficiaries)
+        .set({ isDefault: false })
+        .where(eq(vtuBeneficiaries.userId, data.userId));
+    }
+    
+    const [beneficiary] = await db
+      .insert(vtuBeneficiaries)
+      .values(data)
+      .returning();
+    return beneficiary;
+  }
+
+  async updateBeneficiary(id: string, data: Partial<VtuBeneficiary>): Promise<VtuBeneficiary> {
+    const [updated] = await db
+      .update(vtuBeneficiaries)
+      .set(data)
+      .where(eq(vtuBeneficiaries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBeneficiary(id: string): Promise<void> {
+    await db
+      .delete(vtuBeneficiaries)
+      .where(eq(vtuBeneficiaries.id, id));
+  }
+
+  async updateBeneficiaryUsage(id: string): Promise<void> {
+    await db
+      .update(vtuBeneficiaries)
+      .set({ 
+        lastUsed: new Date(),
+        usageCount: sql`${vtuBeneficiaries.usageCount} + 1`
+      })
+      .where(eq(vtuBeneficiaries.id, id));
   }
 
   // User Settings operations
@@ -3734,6 +3845,108 @@ export class DatabaseStorage implements IStorage {
       userAgent: data.userAgent,
       metadata: data.metadata,
     });
+  }
+
+  // Scheduled VTU Purchases operations
+  async getScheduledPurchases(userId: string): Promise<ScheduledVtuPurchase[]> {
+    return await db
+      .select()
+      .from(scheduledVtuPurchases)
+      .where(eq(scheduledVtuPurchases.userId, userId))
+      .orderBy(desc(scheduledVtuPurchases.createdAt));
+  }
+
+  async getScheduledPurchase(id: string): Promise<ScheduledVtuPurchase | undefined> {
+    const [purchase] = await db
+      .select()
+      .from(scheduledVtuPurchases)
+      .where(eq(scheduledVtuPurchases.id, id));
+    return purchase;
+  }
+
+  async createScheduledPurchase(data: InsertScheduledVtuPurchase): Promise<ScheduledVtuPurchase> {
+    const [purchase] = await db
+      .insert(scheduledVtuPurchases)
+      .values(data)
+      .returning();
+    return purchase;
+  }
+
+  async updateScheduledPurchase(id: string, data: Partial<ScheduledVtuPurchase>): Promise<ScheduledVtuPurchase> {
+    const [updated] = await db
+      .update(scheduledVtuPurchases)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(scheduledVtuPurchases.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteScheduledPurchase(id: string): Promise<void> {
+    await db.delete(scheduledVtuPurchases).where(eq(scheduledVtuPurchases.id, id));
+  }
+
+  // Gift Data operations
+  async getGiftsByUser(userId: string): Promise<GiftData[]> {
+    return await db
+      .select()
+      .from(giftData)
+      .where(eq(giftData.senderId, userId))
+      .orderBy(desc(giftData.createdAt));
+  }
+
+  async getGiftByCode(code: string): Promise<GiftData | undefined> {
+    const [gift] = await db
+      .select()
+      .from(giftData)
+      .where(eq(giftData.giftCode, code));
+    return gift;
+  }
+
+  async createGiftData(data: InsertGiftData): Promise<GiftData> {
+    const [gift] = await db
+      .insert(giftData)
+      .values(data)
+      .returning();
+    return gift;
+  }
+
+  async claimGiftData(giftId: string, claimerId: string): Promise<GiftData> {
+    const [updated] = await db
+      .update(giftData)
+      .set({
+        status: "claimed",
+        recipientUserId: claimerId,
+        claimedAt: new Date(),
+      })
+      .where(eq(giftData.id, giftId))
+      .returning();
+    return updated;
+  }
+
+  // Bill Payment operations
+  async createBillPayment(data: InsertBillPayment): Promise<BillPayment> {
+    const [payment] = await db
+      .insert(billPayments)
+      .values(data)
+      .returning();
+    return payment;
+  }
+
+  async updateBillPayment(id: string, data: Partial<BillPayment>): Promise<BillPayment> {
+    const [updated] = await db
+      .update(billPayments)
+      .set(data)
+      .where(eq(billPayments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getUserBillPayments(userId: string): Promise<BillPayment[]> {
+    return await db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.userId, userId))
+      .orderBy(desc(billPayments.createdAt));
   }
 }
 

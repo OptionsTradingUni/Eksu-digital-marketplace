@@ -18,7 +18,10 @@ import {
   Gift,
   BarChart3,
   Home,
-  Search
+  Search,
+  ArrowLeft,
+  Trash2,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,22 +100,24 @@ function formatMessage(content: string): string {
 
 const NOTIFICATION_SOUND = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQcAQMC2qaSfkX1pUUQ0JyclKC45UVCKL0ptnLPS3My0mH5xZ19WUk5KPz84NjUzMTAwLy4sKyopJyYlJCMhIB4eHRsaGhkYFxYVFBQTEhEREA8ODg0NDAsLCgoJCQgIBwcGBgUFBQQEBAMDAwICAgIBAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQgGRQQDA0KBwUDAQECAgMFBggKDA4REhQYGx0gIycqLC4wMzU3OT0/QUNGSU1QVFhbX2NnamtvdHl+goeLj5OYnKCkqK2xtbnBxszT2d/l7PL4/wCBhYqFbA==";
 
+const INITIAL_MESSAGE: Message = {
+  role: "assistant",
+  content: "Hey! I'm your campus marketplace assistant. I sabi everything about buying, selling, wallet, games, and staying safe from scams. How I fit help you today? Tap any quick action below or ask me anything!",
+};
+
 export default function ChatBot() {
   const [location, navigate] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [hasGreetedForPage, setHasGreetedForPage] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Hey! I'm your campus marketplace assistant. I sabi everything about buying, selling, wallet, games, and staying safe from scams. How I fit help you today? Tap any quick action below or ask me anything!",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingTime, setLoadingTime] = useState(0);
   const [showPaymentWarning, setShowPaymentWarning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio(NOTIFICATION_SOUND);
@@ -124,6 +129,27 @@ export default function ChatBot() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (isLoading) {
+      setLoadingTime(0);
+      loadingTimerRef.current = setInterval(() => {
+        setLoadingTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (loadingTimerRef.current) {
+        clearInterval(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+      setLoadingTime(0);
+    }
+
+    return () => {
+      if (loadingTimerRef.current) {
+        clearInterval(loadingTimerRef.current);
+      }
+    };
+  }, [isLoading]);
 
   useEffect(() => {
     if (isOpen && location !== hasGreetedForPage && CONTEXT_MESSAGES[location]) {
@@ -234,6 +260,19 @@ export default function ChatBot() {
     }, 1000);
   };
 
+  const clearChat = () => {
+    setMessages([INITIAL_MESSAGE]);
+    setShowPaymentWarning(false);
+    setHasGreetedForPage(null);
+  };
+
+  const goHome = () => {
+    navigate("/home");
+    setIsOpen(false);
+  };
+
+  const isNotOnHome = location !== "/" && location !== "/home";
+
   if (!isOpen) {
     return (
       <Button
@@ -253,6 +292,17 @@ export default function ChatBot() {
     <Card className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[400px] h-[70vh] sm:h-[600px] max-h-[600px] shadow-2xl flex flex-col z-[9999] border-2 bg-background/95 backdrop-blur-sm" data-testid="card-chatbot">
       <div className="flex items-center justify-between gap-2 p-3 border-b bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-2">
+          {isNotOnHome && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={goHome}
+              data-testid="button-go-home"
+              aria-label="Go to home"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
           <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center">
             <MessageCircle className="h-4 w-4 text-primary-foreground" />
           </div>
@@ -265,6 +315,15 @@ export default function ChatBot() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={clearChat}
+            data-testid="button-clear-chat"
+            aria-label="Clear chat"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -320,13 +379,23 @@ export default function ChatBot() {
           {isLoading && (
             <div className="flex justify-start" data-testid="loading-indicator">
               <div className="bg-muted/80 backdrop-blur-sm rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <span className="h-2 w-2 rounded-full bg-primary animate-bounce"></span>
-                    <span className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0.15s" }}></span>
-                    <span className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0.3s" }}></span>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="h-2 w-2 rounded-full bg-primary animate-bounce"></span>
+                      <span className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0.15s" }}></span>
+                      <span className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0.3s" }}></span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">Thinking...</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">Typing...</span>
+                  {loadingTime >= 2 && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span>
+                        {loadingTime}s - {loadingTime < 5 ? "Almost there..." : loadingTime < 10 ? "Still working on it..." : "Taking a bit longer..."}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -335,67 +404,80 @@ export default function ChatBot() {
       </ScrollArea>
 
       <div className="p-3 border-t bg-background/80 backdrop-blur-sm space-y-2">
-        <div className="flex gap-1.5 flex-wrap" data-testid="quick-actions-container">
-          {QUICK_ACTIONS.map((action, index) => (
-            <Badge
-              key={index}
-              variant="secondary"
-              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1"
-              onClick={() => handleQuickAction(action)}
-              data-testid={`quick-action-${index}`}
-            >
-              <action.icon className="h-3 w-3" />
-              {action.label}
-            </Badge>
-          ))}
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1.5 pb-2" data-testid="quick-actions-container">
+            {QUICK_ACTIONS.map((action, index) => (
+              <Badge
+                key={index}
+                variant="secondary"
+                className="cursor-pointer text-xs py-1.5 px-2.5 flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                onClick={() => handleQuickAction(action)}
+                data-testid={`quick-action-${index}`}
+              >
+                <action.icon className="h-3.5 w-3.5" />
+                {action.label}
+              </Badge>
+            ))}
+          </div>
         </div>
 
-        <div className="flex gap-1 flex-wrap" data-testid="navigate-actions-container">
-          <Badge
-            variant="outline"
-            className="cursor-pointer text-xs py-0.5 px-1.5 flex items-center gap-1"
-            onClick={() => handleNavigateAction("/home", "Home")}
-            data-testid="nav-home"
-          >
-            <Home className="h-2.5 w-2.5" />
-            Home
-          </Badge>
-          <Badge
-            variant="outline"
-            className="cursor-pointer text-xs py-0.5 px-1.5 flex items-center gap-1"
-            onClick={() => handleNavigateAction("/wallet", "Wallet")}
-            data-testid="nav-wallet"
-          >
-            <Wallet className="h-2.5 w-2.5" />
-            Wallet
-          </Badge>
-          <Badge
-            variant="outline"
-            className="cursor-pointer text-xs py-0.5 px-1.5 flex items-center gap-1"
-            onClick={() => handleNavigateAction("/games", "Games")}
-            data-testid="nav-games"
-          >
-            <Gamepad2 className="h-2.5 w-2.5" />
-            Games
-          </Badge>
-          <Badge
-            variant="outline"
-            className="cursor-pointer text-xs py-0.5 px-1.5 flex items-center gap-1"
-            onClick={() => handleNavigateAction("/profile", "Profile")}
-            data-testid="nav-profile"
-          >
-            <User className="h-2.5 w-2.5" />
-            Profile
-          </Badge>
-          <Badge
-            variant="outline"
-            className="cursor-pointer text-xs py-0.5 px-1.5 flex items-center gap-1"
-            onClick={() => handleNavigateAction("/support", "Support")}
-            data-testid="nav-support"
-          >
-            <HelpCircle className="h-2.5 w-2.5" />
-            Support
-          </Badge>
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1.5 pb-1" data-testid="navigate-actions-container">
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/home", "Home")}
+              data-testid="nav-home"
+            >
+              <Home className="h-3 w-3" />
+              Home
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/wallet", "Wallet")}
+              data-testid="nav-wallet"
+            >
+              <Wallet className="h-3 w-3" />
+              Wallet
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/games", "Games")}
+              data-testid="nav-games"
+            >
+              <Gamepad2 className="h-3 w-3" />
+              Games
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/profile", "Profile")}
+              data-testid="nav-profile"
+            >
+              <User className="h-3 w-3" />
+              Profile
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/my-ads", "My Ads")}
+              data-testid="nav-my-ads"
+            >
+              <PlusCircle className="h-3 w-3" />
+              My Ads
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer text-xs py-1 px-2 flex items-center gap-1 whitespace-nowrap shrink-0"
+              onClick={() => handleNavigateAction("/support", "Support")}
+              data-testid="nav-support"
+            >
+              <HelpCircle className="h-3 w-3" />
+              Support
+            </Badge>
+          </div>
         </div>
 
         <div className="flex gap-2">

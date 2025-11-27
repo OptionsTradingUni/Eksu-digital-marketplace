@@ -4,6 +4,100 @@ const groqClient = new Groq({
   apiKey: process.env.GROQ_API_KEY || "not-set",
 });
 
+const API_TIMEOUT_MS = 10000;
+
+const CACHED_RESPONSES: Record<string, string> = {
+  "how to sell": "To sell on EKSU Marketplace:\n\n1. Tap the + button or go to My Ads page\n2. Select your product category\n3. Add clear photos (up to 5)\n4. Write a catchy title and detailed description\n5. Set your price (be competitive!)\n6. Add your location for easy pickup\n7. Post and wait for buyers!\n\nYour first listing gets FREE boost. Pro tip: Good photos and honest descriptions sell faster. No wahala!",
+
+  "what is escrow": "Escrow na secure payment system wey protect both buyer and seller!\n\nHow e work:\n1. Buyer pays - money go ESCROW (not seller directly)\n2. Seller sees payment notification\n3. Seller sends item to buyer\n4. Buyer confirms receipt\n5. Money releases to seller\n\nIf anything go wrong, money still safe for escrow. No more \"I don pay, seller disappear\" stories. Na the SAFEST way to trade on campus!",
+
+  "how to buy": "Buying on EKSU Marketplace is easy:\n\n1. Browse products on Home or use Search\n2. Tap any item to see full details\n3. Chat with seller to negotiate or ask questions\n4. Tap BUY NOW and pay through the app\n5. Your money goes to ESCROW (safe!)\n6. Collect your item from seller\n7. Confirm delivery in app\n8. Money releases to seller\n\nALWAYS use escrow - never pay outside the app!",
+
+  "how to deposit": "To add money to your wallet:\n\n1. Go to Wallet page (tap Wallet icon)\n2. Tap 'Add Money' or 'Deposit'\n3. Enter amount (minimum N100)\n4. Choose payment method:\n   - Bank Transfer\n   - Debit Card\n   - USSD\n5. Complete payment\n6. Money reflects in seconds!\n\nYour wallet is secure and you can use it for all purchases and game stakes.",
+
+  "how to withdraw": "To withdraw from your wallet:\n\n1. Go to Wallet page\n2. Tap 'Withdraw'\n3. Enter amount (minimum N500)\n4. Add your bank details (first time only)\n5. Confirm with your PIN\n6. Money arrives within 24 hours!\n\nWithdrawal fee: N50 per transaction. Make sure your bank details are correct to avoid delays.",
+
+  "report scam": "To report a scammer:\n\n1. Go to Support page\n2. Tap 'Submit Ticket'\n3. Select 'Scam Report' category\n4. Include:\n   - Scammer's username\n   - Screenshots of conversations\n   - Payment proof (if any)\n   - What happened\n5. Submit!\n\nWe investigate within 1-4 hours. You can also report from user's profile or chat. IMPORTANT: Only use escrow - we can NOT help with outside payments!",
+
+  "hello": "Hey! How far? I'm your campus marketplace assistant. I sabi everything about buying, selling, wallet, games, and staying safe. Wetin you wan know?",
+
+  "hi": "Hello! Welcome to EKSU Marketplace. I fit help you with:\n- Buying and selling items\n- Wallet (deposits, withdrawals)\n- Games (Ludo, Trivia, Word Battle)\n- Reporting scams\n- Getting verified\n\nWetin you need help with today?",
+
+  "games": "We get three FIRE games:\n\n1. LUDO - Classic board game, 2-4 players\n   Stake: N100 - N10,000\n\n2. WORD BATTLE - Make words from letters\n   Stake: N200 - N5,000\n\n3. TRIVIA - Answer quiz questions\n   Stake: N200 - N10,000\n\nYou fit play for fun (free) or stake money to win! Must be verified student to stake. Winnings go straight to wallet. Game on!",
+
+  "wallet": "Your Wallet is your money center:\n\n- Check balance anytime\n- DEPOSIT: Add money via card, transfer, or USSD\n- WITHDRAW: Send to any Nigerian bank (24hr max)\n- View all transaction history\n- Track escrow for pending orders\n\nMinimum deposit: N100\nMinimum withdrawal: N500\nWithdrawal fee: N50\n\nNeed specific help? Ask about deposit or withdraw!",
+
+  "verify": "Getting verified gives you more trust:\n\n1. STUDENT VERIFICATION (Green badge)\n   - Upload valid EKSU student ID\n   - Approval within 24 hours\n   - Required to stake in games\n\n2. NIN VERIFICATION (Blue badge)\n   - Add your NIN number\n   - Instant verification\n   - Higher trust score\n\nGo to Profile > Verification to start. Verified accounts get more buyers and can access all features!",
+
+  "help": "I fit help you with:\n\n- HOW TO SELL - List items for sale\n- HOW TO BUY - Purchase safely\n- ESCROW - Safe payment system\n- WALLET - Deposits and withdrawals\n- GAMES - Ludo, Trivia, Word Battle\n- REPORT SCAM - Stay protected\n- VERIFY - Get verified badge\n\nJust ask any question in English or Pidgin! Wetin you need?",
+
+  "referral": "Earn money by referring friends!\n\n1. Go to Referrals page\n2. Copy your unique code\n3. Share via WhatsApp, SMS, or social media\n4. You get N500 when friend verifies\n5. Friend gets N300 bonus\n\nMilestones: 5 referrals = N3,000 bonus, 10 = N7,500! Referral earnings go straight to wallet.",
+
+  "boost": "Boost makes your product appear at the TOP of listings!\n\n1. Go to My Ads\n2. Select the product you want to boost\n3. Choose boost duration (1-7 days)\n4. Pay from wallet\n5. Watch more buyers message you!\n\nBoosted items get 5-10x more views. First listing gets FREE boost!",
+};
+
+function matchCachedResponse(query: string): string | null {
+  const normalizedQuery = query.toLowerCase().trim();
+  
+  for (const [pattern, response] of Object.entries(CACHED_RESPONSES)) {
+    if (normalizedQuery.includes(pattern)) {
+      return response;
+    }
+  }
+  
+  const exactMatches: Record<string, string> = {
+    "hi": CACHED_RESPONSES["hi"],
+    "hey": CACHED_RESPONSES["hello"],
+    "hello": CACHED_RESPONSES["hello"],
+    "help": CACHED_RESPONSES["help"],
+    "?": CACHED_RESPONSES["help"],
+  };
+  
+  if (exactMatches[normalizedQuery]) {
+    return exactMatches[normalizedQuery];
+  }
+  
+  return null;
+}
+
+function isSimpleQuestion(query: string): boolean {
+  const simplePatterns = [
+    /^(hi|hey|hello|yo|sup|what'?s up)/i,
+    /^(thanks|thank you|okay|ok|cool|nice)/i,
+    /^(bye|goodbye|later|see you)/i,
+    /\?$/,
+  ];
+  
+  return query.length < 50 && simplePatterns.some(pattern => pattern.test(query));
+}
+
+async function callGroqWithTimeout(
+  messages: { role: string; content: string }[],
+  model: string,
+  timeoutMs: number
+): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const chatCompletion = await groqClient.chat.completions.create({
+      messages: messages as any,
+      model,
+      temperature: 0.7,
+      max_tokens: 600,
+    });
+
+    clearTimeout(timeoutId);
+    return chatCompletion.choices[0]?.message?.content || "";
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('API request timed out');
+    }
+    throw error;
+  }
+}
+
 const SYSTEM_PROMPT = `You are the EKSU Campus Marketplace AI Assistant - smart, helpful, and occasionally sassy when appropriate.
 
 CRITICAL FORMATTING RULES - FOLLOW THESE STRICTLY:
@@ -233,6 +327,15 @@ export async function getChatbotResponse(
   userContext?: UserContext
 ): Promise<string> {
   try {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === "user") {
+      const cachedResponse = matchCachedResponse(lastMessage.content);
+      if (cachedResponse) {
+        console.log("Returning cached response for:", lastMessage.content.substring(0, 50));
+        return cachedResponse;
+      }
+    }
+
     let contextualPrompt = SYSTEM_PROMPT;
     
     if (userContext) {
@@ -259,17 +362,35 @@ export async function getChatbotResponse(
       }
     }
 
-    const chatCompletion = await groqClient.chat.completions.create({
-      messages: [
-        { role: "system", content: contextualPrompt },
-        ...messages,
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.7,
-      max_tokens: 600,
-    });
+    const useSimpleQuestion = lastMessage && isSimpleQuestion(lastMessage.content);
+    const model = useSimpleQuestion ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
+    const timeout = useSimpleQuestion ? 5000 : API_TIMEOUT_MS;
 
-    let response = chatCompletion.choices[0]?.message?.content || "Sorry, I no fit process your message now. Try again!";
+    let response: string;
+    try {
+      response = await callGroqWithTimeout(
+        [
+          { role: "system", content: contextualPrompt },
+          ...messages,
+        ],
+        model,
+        timeout
+      );
+    } catch (timeoutError: any) {
+      console.warn("API timeout, trying faster model:", timeoutError.message);
+      response = await callGroqWithTimeout(
+        [
+          { role: "system", content: contextualPrompt },
+          ...messages,
+        ],
+        "llama-3.1-8b-instant",
+        5000
+      );
+    }
+
+    if (!response) {
+      response = "Sorry, I no fit process your message now. Try again!";
+    }
     
     response = cleanMarkdown(response);
     

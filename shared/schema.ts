@@ -80,6 +80,36 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// User photos gallery table
+export const userPhotos = pgTable("user_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  imageUrl: varchar("image_url", { length: 500 }).notNull(),
+  isProfilePhoto: boolean("is_profile_photo").default(false),
+  sortOrder: integer("sort_order").default(0),
+  caption: varchar("caption", { length: 200 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("user_photos_user_idx").on(table.userId),
+  index("user_photos_sort_idx").on(table.userId, table.sortOrder),
+]);
+
+export const insertUserPhotoSchema = createInsertSchema(userPhotos).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const addUserPhotoSchema = z.object({
+  caption: z.string().max(200).optional(),
+});
+
+export const reorderPhotosSchema = z.object({
+  photoIds: z.array(z.string()).min(1).max(6),
+});
+
+export type UserPhoto = typeof userPhotos.$inferSelect;
+export type InsertUserPhoto = z.infer<typeof insertUserPhotoSchema>;
+
 // Product categories
 export const categories = pgTable("categories", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1790,6 +1820,9 @@ export const vtuNetworkEnum = pgEnum("vtu_network", ["mtn_sme", "glo_cg", "airte
 // VTU Transaction status
 export const vtuStatusEnum = pgEnum("vtu_status", ["pending", "processing", "success", "failed", "refunded"]);
 
+// VTU Service type
+export const vtuServiceTypeEnum = pgEnum("vtu_service_type", ["data", "airtime"]);
+
 // VTU Data Plans - stores available data plans from SMEDATA.NG
 export const vtuPlans = pgTable("vtu_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1858,6 +1891,38 @@ export const purchaseAirtimeSchema = z.object({
   network: z.enum(["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]),
 });
 
+// ===========================================
+// VTU BENEFICIARIES - Saved phone numbers
+// ===========================================
+
+export const vtuBeneficiaries = pgTable("vtu_beneficiaries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  phoneNumber: varchar("phone_number", { length: 15 }).notNull(),
+  network: vtuNetworkEnum("network").notNull(),
+  isDefault: boolean("is_default").default(false),
+  lastUsed: timestamp("last_used"),
+  usageCount: integer("usage_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("vtu_beneficiaries_user_idx").on(table.userId),
+]);
+
+export const insertVtuBeneficiarySchema = createInsertSchema(vtuBeneficiaries).omit({
+  id: true,
+  createdAt: true,
+  lastUsed: true,
+  usageCount: true,
+});
+
+export const createBeneficiarySchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+  phoneNumber: z.string().min(10, "Valid phone number is required").max(15),
+  network: z.enum(["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]),
+  isDefault: z.boolean().optional(),
+});
+
 // VTU TypeScript types
 export type VtuPlan = typeof vtuPlans.$inferSelect;
 export type InsertVtuPlan = z.infer<typeof insertVtuPlanSchema>;
@@ -1865,6 +1930,107 @@ export type VtuTransaction = typeof vtuTransactions.$inferSelect;
 export type InsertVtuTransaction = z.infer<typeof insertVtuTransactionSchema>;
 export type PurchaseVtuInput = z.infer<typeof purchaseVtuSchema>;
 export type PurchaseAirtimeInput = z.infer<typeof purchaseAirtimeSchema>;
+export type VtuBeneficiary = typeof vtuBeneficiaries.$inferSelect;
+export type InsertVtuBeneficiary = z.infer<typeof insertVtuBeneficiarySchema>;
+export type CreateBeneficiaryInput = z.infer<typeof createBeneficiarySchema>;
+
+// ===========================================
+// SCHEDULED VTU PURCHASES
+// ===========================================
+
+export const scheduledPurchaseFrequencyEnum = pgEnum("scheduled_purchase_frequency", ["daily", "weekly", "monthly"]);
+export const scheduledPurchaseStatusEnum = pgEnum("scheduled_purchase_status", ["active", "paused", "cancelled"]);
+
+export const scheduledVtuPurchases = pgTable("scheduled_vtu_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  serviceType: vtuServiceTypeEnum("service_type").notNull().default("data"),
+  planId: varchar("plan_id").references(() => vtuPlans.id),
+  network: vtuNetworkEnum("network").notNull(),
+  phoneNumber: varchar("phone_number", { length: 15 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }),
+  frequency: scheduledPurchaseFrequencyEnum("frequency").notNull(),
+  dayOfWeek: integer("day_of_week"),
+  dayOfMonth: integer("day_of_month"),
+  timeOfDay: varchar("time_of_day", { length: 5 }).default("09:00"),
+  nextRunAt: timestamp("next_run_at"),
+  lastRunAt: timestamp("last_run_at"),
+  runCount: integer("run_count").default(0),
+  status: scheduledPurchaseStatusEnum("status").default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("scheduled_vtu_user_idx").on(table.userId),
+  index("scheduled_vtu_next_run_idx").on(table.nextRunAt),
+]);
+
+export const insertScheduledVtuPurchaseSchema = createInsertSchema(scheduledVtuPurchases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  runCount: true,
+  lastRunAt: true,
+});
+
+export const createScheduledPurchaseApiSchema = z.object({
+  serviceType: z.enum(["data", "airtime"]),
+  planId: z.string().optional(),
+  network: z.enum(["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]),
+  phoneNumber: z.string().min(10).max(15),
+  amount: z.number().optional(),
+  frequency: z.enum(["daily", "weekly", "monthly"]),
+  dayOfWeek: z.number().min(0).max(6).optional(),
+  dayOfMonth: z.number().min(1).max(28).optional(),
+  timeOfDay: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+});
+
+export type ScheduledVtuPurchase = typeof scheduledVtuPurchases.$inferSelect;
+export type InsertScheduledVtuPurchase = z.infer<typeof insertScheduledVtuPurchaseSchema>;
+export type CreateScheduledPurchaseInput = z.infer<typeof createScheduledPurchaseApiSchema>;
+
+// ===========================================
+// GIFT DATA FEATURE
+// ===========================================
+
+export const giftDataStatusEnum = pgEnum("gift_data_status", ["pending", "accepted", "claimed", "expired", "cancelled"]);
+
+export const giftData = pgTable("gift_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  recipientPhone: varchar("recipient_phone", { length: 15 }).notNull(),
+  recipientUserId: varchar("recipient_user_id").references(() => users.id),
+  planId: varchar("plan_id").notNull().references(() => vtuPlans.id),
+  network: vtuNetworkEnum("network").notNull(),
+  message: text("message"),
+  giftCode: varchar("gift_code", { length: 10 }).unique(),
+  status: giftDataStatusEnum("status").default("pending"),
+  expiresAt: timestamp("expires_at"),
+  claimedAt: timestamp("claimed_at"),
+  transactionId: varchar("transaction_id").references(() => vtuTransactions.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("gift_data_sender_idx").on(table.senderId),
+  index("gift_data_recipient_idx").on(table.recipientPhone),
+  index("gift_data_code_idx").on(table.giftCode),
+]);
+
+export const insertGiftDataSchema = createInsertSchema(giftData).omit({
+  id: true,
+  createdAt: true,
+  claimedAt: true,
+  transactionId: true,
+});
+
+export const createGiftDataApiSchema = z.object({
+  recipientPhone: z.string().min(10).max(15),
+  planId: z.string().min(1),
+  network: z.enum(["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]),
+  message: z.string().max(200).optional(),
+});
+
+export type GiftData = typeof giftData.$inferSelect;
+export type InsertGiftData = z.infer<typeof insertGiftDataSchema>;
+export type CreateGiftDataInput = z.infer<typeof createGiftDataApiSchema>;
 
 // ===========================================
 // USER SETTINGS SYSTEM
@@ -2097,3 +2263,63 @@ export type InsertKycVerification = z.infer<typeof insertKycVerificationSchema>;
 export type InitiateKycInput = z.infer<typeof initiateKycSchema>;
 export type ReviewKycInput = z.infer<typeof reviewKycSchema>;
 export type KycVerificationLog = typeof kycVerificationLogs.$inferSelect;
+
+// ===========================================
+// BILL PAYMENTS SYSTEM (Cable TV & Electricity)
+// ===========================================
+
+// Bill service type enum - Cable TV and Electricity providers
+export const billServiceTypeEnum = pgEnum("bill_service_type", [
+  "dstv", "gotv", "startimes", "showmax",  // Cable TV
+  "ekedc", "ikedc", "aedc", "ibedc", "phedc", "eedc"  // Electricity
+]);
+
+// Bill payments table
+export const billPayments = pgTable("bill_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  serviceType: billServiceTypeEnum("service_type").notNull(),
+  billType: varchar("bill_type", { length: 20 }).notNull(), // 'cable' or 'electricity'
+  customerId: varchar("customer_id", { length: 50 }).notNull(), // Decoder/Meter number
+  customerName: varchar("customer_name", { length: 100 }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  packageName: varchar("package_name", { length: 100 }),
+  status: vtuStatusEnum("status").notNull().default("pending"),
+  reference: varchar("reference", { length: 100 }),
+  token: varchar("token", { length: 100 }), // For electricity prepaid tokens
+  apiResponse: jsonb("api_response"),
+  errorMessage: text("error_message"),
+  walletTransactionId: varchar("wallet_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("bill_payments_user_idx").on(table.userId),
+  index("bill_payments_status_idx").on(table.status),
+  index("bill_payments_created_idx").on(table.createdAt),
+]);
+
+// Bill payment insert schema
+export const insertBillPaymentSchema = createInsertSchema(billPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Bill payment API schemas
+export const payBillSchema = z.object({
+  serviceType: z.enum(["dstv", "gotv", "startimes", "showmax", "ekedc", "ikedc", "aedc", "ibedc", "phedc", "eedc"]),
+  billType: z.enum(["cable", "electricity"]),
+  customerId: z.string().min(1, "Customer ID is required"),
+  amount: z.number().positive("Amount must be positive"),
+  packageCode: z.string().optional(),
+  packageName: z.string().optional(),
+});
+
+export const validateCustomerSchema = z.object({
+  serviceType: z.enum(["dstv", "gotv", "startimes", "showmax", "ekedc", "ikedc", "aedc", "ibedc", "phedc", "eedc"]),
+  customerId: z.string().min(1, "Customer ID is required"),
+});
+
+// Bill payment types
+export type BillPayment = typeof billPayments.$inferSelect;
+export type InsertBillPayment = z.infer<typeof insertBillPaymentSchema>;
+export type PayBillInput = z.infer<typeof payBillSchema>;
+export type ValidateCustomerInput = z.infer<typeof validateCustomerSchema>;

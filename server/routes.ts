@@ -42,15 +42,20 @@ import {
   updateOrderStatusSchema,
   purchaseVtuSchema,
   purchaseAirtimeSchema,
+  createBeneficiarySchema,
   updateUserSettingsSchema,
   requestAccountDeletionSchema,
   initiateKycSchema,
   reviewKycSchema,
+  createScheduledPurchaseApiSchema,
+  createGiftDataApiSchema,
+  payBillSchema,
+  validateCustomerSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN } from "./smedata";
+import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo } from "./smedata";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -1524,7 +1529,7 @@ Happy trading!`;
       const user = await storage.updateUserProfile(userId, { role: validated.role });
       
       // Create seller analytics if switching to seller
-      if (validated.role === 'seller' || validated.role === 'admin') {
+      if (validated.role === 'seller') {
         await storage.getOrCreateSellerAnalytics(userId);
       }
 
@@ -2076,9 +2081,9 @@ Happy trading!`;
         return res.status(401).json({ message: "User not found" });
       }
       
-      if (user.role !== "seller" && user.role !== "admin" && user.role !== "both") {
+      if (user.role !== "seller" && user.role !== "admin") {
         return res.status(403).json({ 
-          message: "Only sellers can create listings. Please update your role to 'Seller' or 'Both' in your profile settings." 
+          message: "Only sellers can create listings. Please update your role to 'Seller' in your profile settings." 
         });
       }
 
@@ -2388,13 +2393,6 @@ Happy trading!`;
       }
 
       const { role } = validationResult.data;
-      
-      // Prevent non-admins from setting admin role
-      if (role === "admin") {
-        if (!(await isAdminUser(userId))) {
-          return res.status(403).json({ message: "Cannot set admin role" });
-        }
-      }
 
       const updated = await storage.updateUserProfile(req.params.id, { role });
       const { password: _, ...safeUser } = updated;
@@ -2741,7 +2739,7 @@ Happy trading!`;
             type: "message",
             title: "New Message",
             message: `${senderName}: ${messagePreview}`,
-            link: `/messages/${userId}`,
+            link: `/messages?user=${userId}`,
             relatedUserId: userId,
             relatedProductId: validated.productId || undefined,
           });
@@ -3789,6 +3787,129 @@ Happy trading!`;
 
   // ==================== VTU API ROUTES ====================
 
+  // ==================== VTU BENEFICIARIES ====================
+
+  // Get user's saved beneficiaries
+  app.get("/api/vtu/beneficiaries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const beneficiaries = await storage.getUserBeneficiaries(userId);
+      res.json(beneficiaries);
+    } catch (error) {
+      console.error("Error fetching beneficiaries:", error);
+      res.status(500).json({ message: "Failed to fetch beneficiaries" });
+    }
+  });
+
+  // Create a new beneficiary
+  app.post("/api/vtu/beneficiaries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = createBeneficiarySchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const beneficiary = await storage.createBeneficiary({
+        userId,
+        ...validationResult.data,
+      });
+      res.json(beneficiary);
+    } catch (error) {
+      console.error("Error creating beneficiary:", error);
+      res.status(500).json({ message: "Failed to create beneficiary" });
+    }
+  });
+
+  // Update a beneficiary
+  app.put("/api/vtu/beneficiaries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const beneficiary = await storage.getBeneficiary(id);
+      
+      if (!beneficiary) {
+        return res.status(404).json({ message: "Beneficiary not found" });
+      }
+      
+      if (beneficiary.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to update this beneficiary" });
+      }
+
+      const updated = await storage.updateBeneficiary(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating beneficiary:", error);
+      res.status(500).json({ message: "Failed to update beneficiary" });
+    }
+  });
+
+  // Delete a beneficiary
+  app.delete("/api/vtu/beneficiaries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const beneficiary = await storage.getBeneficiary(id);
+      
+      if (!beneficiary) {
+        return res.status(404).json({ message: "Beneficiary not found" });
+      }
+      
+      if (beneficiary.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this beneficiary" });
+      }
+
+      await storage.deleteBeneficiary(id);
+      res.json({ success: true, message: "Beneficiary deleted" });
+    } catch (error) {
+      console.error("Error deleting beneficiary:", error);
+      res.status(500).json({ message: "Failed to delete beneficiary" });
+    }
+  });
+
+  // Get user's VTU transaction history with filters
+  app.get("/api/vtu/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { status, network, startDate, endDate } = req.query;
+      
+      const filters: { status?: string; network?: string; startDate?: Date; endDate?: Date } = {};
+      if (status && typeof status === "string") filters.status = status;
+      if (network && typeof network === "string") filters.network = network;
+      if (startDate && typeof startDate === "string") filters.startDate = new Date(startDate);
+      if (endDate && typeof endDate === "string") filters.endDate = new Date(endDate);
+
+      const transactions = await storage.getUserVtuTransactions(userId, filters);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching VTU transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
   // Get all VTU plans (optionally filter by network)
   app.get("/api/vtu/plans", async (req, res) => {
     try {
@@ -3874,7 +3995,7 @@ Happy trading!`;
         amount: `-${planPrice}`,
         status: "completed",
         description: `VTU Data Purchase: ${plan.dataAmount} for ${phoneNumber}`,
-        reference: transaction.id,
+        relatedUserId: userId,
       });
 
       // Process the actual purchase if API is configured
@@ -3913,7 +4034,7 @@ Happy trading!`;
               amount: planPrice.toString(),
               status: "completed",
               description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - ${purchaseResult.message}`,
-              reference: transaction.id,
+              relatedUserId: userId,
             });
 
             res.status(400).json({
@@ -3937,7 +4058,7 @@ Happy trading!`;
             amount: planPrice.toString(),
             status: "completed",
             description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - API Error`,
-            reference: transaction.id,
+            relatedUserId: userId,
           });
 
           console.error("VTU API error:", apiError);
@@ -3962,22 +4083,6 @@ Happy trading!`;
     } catch (error) {
       console.error("Error processing VTU purchase:", error);
       res.status(500).json({ message: "Failed to process VTU purchase" });
-    }
-  });
-
-  // Get user's VTU transactions
-  app.get("/api/vtu/transactions", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const transactions = await storage.getUserVtuTransactions(userId);
-      res.json(transactions);
-    } catch (error) {
-      console.error("Error fetching VTU transactions:", error);
-      res.status(500).json({ message: "Failed to fetch VTU transactions" });
     }
   });
 
@@ -4083,6 +4188,604 @@ Happy trading!`;
     } catch (error) {
       console.error("Error processing airtime purchase:", error);
       res.status(500).json({ message: "Failed to process airtime purchase" });
+    }
+  });
+
+  // ==================== SCHEDULED VTU PURCHASES API ROUTES ====================
+
+  // Get user's scheduled purchases
+  app.get("/api/vtu/scheduled-purchases", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const purchases = await storage.getScheduledPurchases(userId);
+      res.json(purchases);
+    } catch (error) {
+      console.error("Error fetching scheduled purchases:", error);
+      res.status(500).json({ message: "Failed to fetch scheduled purchases" });
+    }
+  });
+
+  // Create a scheduled purchase
+  app.post("/api/vtu/scheduled-purchases", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = createScheduledPurchaseApiSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors,
+        });
+      }
+
+      const { serviceType, planId, network, phoneNumber, amount, frequency, dayOfWeek, dayOfMonth, timeOfDay } = validationResult.data;
+
+      if (!isValidNigerianPhone(phoneNumber)) {
+        return res.status(400).json({ message: "Invalid Nigerian phone number" });
+      }
+
+      // Validate that data purchases have planId
+      if (serviceType === "data" && !planId) {
+        return res.status(400).json({ message: "Plan ID is required for data purchases" });
+      }
+
+      // Validate that airtime purchases have amount
+      if (serviceType === "airtime" && !amount) {
+        return res.status(400).json({ message: "Amount is required for airtime purchases" });
+      }
+
+      // Validate frequency-specific fields
+      if (frequency === "weekly" && (dayOfWeek === undefined || dayOfWeek < 0 || dayOfWeek > 6)) {
+        return res.status(400).json({ message: "Day of week (0-6) is required for weekly frequency" });
+      }
+      if (frequency === "monthly" && (dayOfMonth === undefined || dayOfMonth < 1 || dayOfMonth > 28)) {
+        return res.status(400).json({ message: "Day of month (1-28) is required for monthly frequency" });
+      }
+
+      // Calculate next run time
+      const now = new Date();
+      let nextRunAt = new Date();
+      const [hours, minutes] = (timeOfDay || "09:00").split(":").map(Number);
+      nextRunAt.setHours(hours, minutes, 0, 0);
+
+      if (frequency === "daily") {
+        if (nextRunAt <= now) {
+          nextRunAt.setDate(nextRunAt.getDate() + 1);
+        }
+      } else if (frequency === "weekly") {
+        const currentDay = now.getDay();
+        let daysUntilTarget = (dayOfWeek! - currentDay + 7) % 7;
+        if (daysUntilTarget === 0 && nextRunAt <= now) {
+          daysUntilTarget = 7;
+        }
+        nextRunAt.setDate(now.getDate() + daysUntilTarget);
+      } else if (frequency === "monthly") {
+        nextRunAt.setDate(dayOfMonth!);
+        if (nextRunAt <= now) {
+          nextRunAt.setMonth(nextRunAt.getMonth() + 1);
+        }
+      }
+
+      const purchase = await storage.createScheduledPurchase({
+        userId,
+        serviceType,
+        planId: planId || null,
+        network,
+        phoneNumber,
+        amount: amount?.toString() || null,
+        frequency,
+        dayOfWeek: dayOfWeek ?? null,
+        dayOfMonth: dayOfMonth ?? null,
+        timeOfDay: timeOfDay || "09:00",
+        nextRunAt,
+        status: "active",
+      });
+
+      res.status(201).json(purchase);
+    } catch (error) {
+      console.error("Error creating scheduled purchase:", error);
+      res.status(500).json({ message: "Failed to create scheduled purchase" });
+    }
+  });
+
+  // Update a scheduled purchase
+  app.put("/api/vtu/scheduled-purchases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const existing = await storage.getScheduledPurchase(id);
+      
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled purchase not found" });
+      }
+
+      if (existing.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to update this scheduled purchase" });
+      }
+
+      const updateData: Record<string, any> = {};
+      const { status, phoneNumber, timeOfDay, frequency, dayOfWeek, dayOfMonth } = req.body;
+
+      if (status && ["active", "paused", "cancelled"].includes(status)) {
+        updateData.status = status;
+      }
+
+      if (phoneNumber) {
+        if (!isValidNigerianPhone(phoneNumber)) {
+          return res.status(400).json({ message: "Invalid Nigerian phone number" });
+        }
+        updateData.phoneNumber = phoneNumber;
+      }
+
+      if (timeOfDay) {
+        updateData.timeOfDay = timeOfDay;
+      }
+
+      if (frequency) {
+        updateData.frequency = frequency;
+        if (frequency === "weekly" && dayOfWeek !== undefined) {
+          updateData.dayOfWeek = dayOfWeek;
+        }
+        if (frequency === "monthly" && dayOfMonth !== undefined) {
+          updateData.dayOfMonth = dayOfMonth;
+        }
+      }
+
+      const updated = await storage.updateScheduledPurchase(id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating scheduled purchase:", error);
+      res.status(500).json({ message: "Failed to update scheduled purchase" });
+    }
+  });
+
+  // Delete a scheduled purchase
+  app.delete("/api/vtu/scheduled-purchases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const existing = await storage.getScheduledPurchase(id);
+      
+      if (!existing) {
+        return res.status(404).json({ message: "Scheduled purchase not found" });
+      }
+
+      if (existing.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this scheduled purchase" });
+      }
+
+      await storage.deleteScheduledPurchase(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting scheduled purchase:", error);
+      res.status(500).json({ message: "Failed to delete scheduled purchase" });
+    }
+  });
+
+  // ==================== GIFT DATA API ROUTES ====================
+
+  // Helper function to generate random gift code
+  function generateGiftCode(): string {
+    return crypto.randomBytes(4).toString("hex").toUpperCase();
+  }
+
+  // Get user's sent gifts
+  app.get("/api/vtu/gift-data", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const gifts = await storage.getGiftsByUser(userId);
+      res.json(gifts);
+    } catch (error) {
+      console.error("Error fetching gifts:", error);
+      res.status(500).json({ message: "Failed to fetch gifts" });
+    }
+  });
+
+  // Create a gift data
+  app.post("/api/vtu/gift-data", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = createGiftDataApiSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors,
+        });
+      }
+
+      const { recipientPhone, planId, network, message } = validationResult.data;
+
+      if (!isValidNigerianPhone(recipientPhone)) {
+        return res.status(400).json({ message: "Invalid Nigerian phone number" });
+      }
+
+      // Verify the plan exists
+      const plan = await storage.getVtuPlan(planId);
+      if (!plan) {
+        return res.status(400).json({ message: "Invalid data plan" });
+      }
+
+      // Check if user has sufficient balance
+      const wallet = await storage.getOrCreateWallet(userId);
+      const planPrice = parseFloat(plan.price);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < planPrice) {
+        return res.status(400).json({
+          message: "Insufficient wallet balance",
+          required: planPrice,
+          available: walletBalance,
+        });
+      }
+
+      // Deduct from wallet
+      await storage.updateWalletBalance(userId, planPrice.toString(), "subtract");
+
+      // Create transaction record
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: "purchase",
+        amount: `-${planPrice}`,
+        status: "completed",
+        description: `Gift Data: ${plan.dataAmount} for ${recipientPhone}`,
+      });
+
+      // Generate unique gift code
+      let giftCode = generateGiftCode();
+      let existingGift = await storage.getGiftByCode(giftCode);
+      while (existingGift) {
+        giftCode = generateGiftCode();
+        existingGift = await storage.getGiftByCode(giftCode);
+      }
+
+      // Set expiry (7 days from now)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const gift = await storage.createGiftData({
+        senderId: userId,
+        recipientPhone,
+        planId,
+        network,
+        message: message || null,
+        giftCode,
+        status: "pending",
+        expiresAt,
+      });
+
+      res.status(201).json({
+        ...gift,
+        plan,
+        message: `Gift created successfully. Share the code ${giftCode} with the recipient.`,
+      });
+    } catch (error) {
+      console.error("Error creating gift:", error);
+      res.status(500).json({ message: "Failed to create gift" });
+    }
+  });
+
+  // Claim a gift using gift code
+  app.post("/api/vtu/gift-data/:code/claim", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+      const gift = await storage.getGiftByCode(code.toUpperCase());
+
+      if (!gift) {
+        return res.status(404).json({ message: "Gift code not found" });
+      }
+
+      if (gift.status === "claimed") {
+        return res.status(400).json({ message: "This gift has already been claimed" });
+      }
+
+      if (gift.status === "expired") {
+        return res.status(400).json({ message: "This gift has expired" });
+      }
+
+      if (gift.status === "cancelled") {
+        return res.status(400).json({ message: "This gift has been cancelled" });
+      }
+
+      if (gift.expiresAt && new Date(gift.expiresAt) < new Date()) {
+        // Update status to expired
+        await storage.claimGiftData(gift.id, userId);
+        return res.status(400).json({ message: "This gift has expired" });
+      }
+
+      // Verify the plan still exists
+      const plan = await storage.getVtuPlan(gift.planId);
+      if (!plan) {
+        return res.status(400).json({ message: "Data plan no longer available" });
+      }
+
+      // Process the data purchase if SME Data is configured
+      if (isSMEDataConfigured()) {
+        try {
+          const purchaseResult = await purchaseData(gift.network, gift.recipientPhone, plan.dataAmount);
+          
+          if (purchaseResult.success) {
+            // Create VTU transaction record
+            const transaction = await storage.createVtuTransaction({
+              userId: gift.senderId,
+              serviceType: "data",
+              planId: gift.planId,
+              network: gift.network,
+              phoneNumber: gift.recipientPhone,
+              amount: plan.price,
+              status: "completed",
+              reference: purchaseResult.reference,
+            });
+
+            // Update gift as claimed with transaction reference
+            const claimedGift = await storage.claimGiftData(gift.id, userId);
+
+            res.json({
+              success: true,
+              message: `Gift claimed successfully! ${plan.dataAmount} data sent to ${gift.recipientPhone}`,
+              gift: claimedGift,
+            });
+          } else {
+            res.status(400).json({
+              success: false,
+              message: purchaseResult.message || "Failed to process the gift data. Please try again.",
+            });
+          }
+        } catch (apiError: any) {
+          console.error("Gift data claim API error:", apiError);
+          res.status(500).json({
+            success: false,
+            message: "Failed to process gift due to network error. Please try again.",
+          });
+        }
+      } else {
+        // SME not configured - just mark as claimed
+        const claimedGift = await storage.claimGiftData(gift.id, userId);
+        res.json({
+          success: true,
+          message: "Gift claimed successfully! Your data will be delivered shortly.",
+          gift: claimedGift,
+        });
+      }
+    } catch (error) {
+      console.error("Error claiming gift:", error);
+      res.status(500).json({ message: "Failed to claim gift" });
+    }
+  });
+
+  // ==================== BILL PAYMENTS API ROUTES ====================
+
+  // Validate customer ID (decoder/meter number)
+  app.post("/api/bills/validate", isAuthenticated, async (req: any, res) => {
+    try {
+      const validationResult = validateCustomerSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          message: "Invalid input",
+          errors: validationResult.error.errors,
+        });
+      }
+
+      const { serviceType, customerId } = validationResult.data;
+      const result = await validateBillCustomer(serviceType, customerId);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          customerName: result.data?.customerName,
+          customerId: result.data?.customerId,
+          meterType: result.data?.meterType,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message || "Customer validation failed",
+        });
+      }
+    } catch (error) {
+      console.error("Error validating customer:", error);
+      res.status(500).json({ message: "Failed to validate customer" });
+    }
+  });
+
+  // Get available packages for cable TV services
+  app.get("/api/bills/packages/:service", async (req, res) => {
+    try {
+      const { service } = req.params;
+      const serviceInfo = getBillServiceInfo(service);
+
+      if (!serviceInfo || serviceInfo.type !== "cable") {
+        return res.status(400).json({ message: "Invalid cable service type" });
+      }
+
+      const result = await getCablePackages(service);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          packages: result.packages || [],
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message || "Failed to get packages",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching packages:", error);
+      res.status(500).json({ message: "Failed to fetch packages" });
+    }
+  });
+
+  // Process bill payment
+  app.post("/api/bills/pay", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = payBillSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          message: "Invalid input",
+          errors: validationResult.error.errors,
+        });
+      }
+
+      const { serviceType, billType, customerId, amount, packageCode, packageName } = validationResult.data;
+
+      // Get user's wallet
+      const wallet = await storage.getWalletByUserId(userId);
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet not found. Please contact support." });
+      }
+
+      // Check if user has sufficient balance
+      const walletBalance = parseFloat(wallet.balance);
+      if (walletBalance < amount) {
+        return res.status(400).json({
+          message: "Insufficient wallet balance",
+          required: amount,
+          available: walletBalance,
+        });
+      }
+
+      // Create bill payment record
+      const billPayment = await storage.createBillPayment({
+        userId,
+        serviceType: serviceType as any,
+        billType,
+        customerId,
+        amount: amount.toString(),
+        packageName: packageName || null,
+        status: "pending",
+      });
+
+      // Process with SMEDATA API
+      if (isSMEDataConfigured()) {
+        try {
+          // Update status to processing
+          await storage.updateBillPayment(billPayment.id, { status: "processing" });
+
+          // Call SMEDATA bill payment API
+          const apiResult = await payBill(serviceType, customerId, amount, packageCode);
+
+          if (apiResult.success) {
+            // Deduct from wallet
+            await storage.updateWalletBalance(userId, -amount, "bill_payment", `Bill payment: ${serviceType} - ${customerId}`);
+
+            // Create wallet transaction
+            const walletTransaction = await storage.createTransaction({
+              walletId: wallet.id,
+              type: "bill_payment",
+              amount: (-amount).toString(),
+              description: `${billType === "cable" ? "Cable TV" : "Electricity"} bill payment - ${serviceType.toUpperCase()} - ${customerId}`,
+              status: "completed",
+              reference: apiResult.reference,
+            });
+
+            // Update bill payment as successful
+            await storage.updateBillPayment(billPayment.id, {
+              status: "success",
+              reference: apiResult.reference || null,
+              token: apiResult.token || null,
+              apiResponse: apiResult.data,
+              walletTransactionId: walletTransaction.id,
+            });
+
+            res.json({
+              success: true,
+              message: apiResult.token
+                ? `Bill payment successful! Your token: ${apiResult.token}`
+                : "Bill payment successful!",
+              reference: apiResult.reference,
+              token: apiResult.token,
+              newBalance: walletBalance - amount,
+            });
+          } else {
+            // Update bill payment as failed
+            await storage.updateBillPayment(billPayment.id, {
+              status: "failed",
+              errorMessage: apiResult.message,
+              apiResponse: apiResult,
+            });
+
+            res.status(400).json({
+              success: false,
+              message: apiResult.message || "Bill payment failed. Please try again.",
+            });
+          }
+        } catch (apiError: any) {
+          console.error("Bill payment API error:", apiError);
+          await storage.updateBillPayment(billPayment.id, {
+            status: "failed",
+            errorMessage: apiError.message || "API error",
+          });
+
+          res.status(500).json({
+            success: false,
+            message: "Bill payment failed due to network error. Please try again.",
+          });
+        }
+      } else {
+        // SMEDATA not configured - simulate for testing
+        await storage.updateBillPayment(billPayment.id, {
+          status: "failed",
+          errorMessage: "Bill payment service is not configured",
+        });
+
+        res.status(503).json({
+          success: false,
+          message: "Bill payment service is currently unavailable. Please try again later.",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing bill payment:", error);
+      res.status(500).json({ message: "Failed to process bill payment" });
+    }
+  });
+
+  // Get user's bill payment history
+  app.get("/api/bills/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const payments = await storage.getUserBillPayments(userId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching bill history:", error);
+      res.status(500).json({ message: "Failed to fetch bill history" });
     }
   });
 
@@ -5931,12 +6634,12 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
 
       // Initialize Squad payment
       try {
-        const squadResponse = await squad.initiatePayment(paymentData);
+        const squadResponse = await squad.initializePayment(paymentData);
         
         res.json({
           success: true,
           kycId: kyc.id,
-          paymentUrl: squadResponse.data?.checkout_url || squadResponse.checkout_url,
+          paymentUrl: squadResponse.checkoutUrl,
           paymentReference,
           amount: 200,
           message: "Please complete the payment to proceed with KYC verification",
@@ -6130,8 +6833,12 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       let selfieUrl: string;
       try {
         if (isCloudinaryConfigured()) {
-          const uploadResult = await uploadToObjectStorage(req.file.buffer, `kyc/selfie_${userId}_${Date.now()}`);
-          selfieUrl = uploadResult.secure_url || uploadResult.url;
+          const uploadResult = await uploadToObjectStorage(req.file, `kyc/selfie_${userId}`);
+          if (uploadResult) {
+            selfieUrl = uploadResult;
+          } else {
+            selfieUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+          }
         } else {
           // Store locally as base64 for development
           selfieUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
@@ -6195,7 +6902,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         userId,
         action: "photo_comparison",
         result: autoDecision,
-        similarityScore: similarityScore.toString(),
+        similarityScore: similarityScore,
         ipAddress: req.ip,
         userAgent: req.headers["user-agent"],
         metadata: { 
@@ -6206,7 +6913,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
 
       // If auto-approved, update user's verification status
       if (status === "approved") {
-        await storage.updateUser(userId, {
+        await storage.updateUserProfile(userId, {
           ninVerified: true,
           isVerified: true,
         });
@@ -6217,7 +6924,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           userId,
           action: "auto_approved",
           result: "success",
-          similarityScore: similarityScore.toString(),
+          similarityScore: similarityScore,
           ipAddress: req.ip,
           userAgent: req.headers["user-agent"],
         });
@@ -6255,7 +6962,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           amount: "200",
           status: "completed",
           description: "KYC verification fee refund - photo mismatch",
-          reference: kyc.id,
+          relatedUserId: userId,
         });
 
         // Update KYC status to refunded
@@ -6270,7 +6977,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           userId,
           action: "auto_rejected_refunded",
           result: "refunded",
-          similarityScore: similarityScore.toString(),
+          similarityScore: similarityScore,
           ipAddress: req.ip,
           userAgent: req.headers["user-agent"],
           metadata: { refundAmount: 200 }
@@ -6348,7 +7055,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         });
 
         // Update user's verification status
-        await storage.updateUser(targetUserId, {
+        await storage.updateUserProfile(targetUserId, {
           ninVerified: true,
           isVerified: true,
         });
@@ -6360,7 +7067,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           action: "manual_approved",
           result: "success",
           reviewedBy: userId,
-          similarityScore: kyc.similarityScore || undefined,
+          similarityScore: kyc.similarityScore ? parseFloat(kyc.similarityScore) : undefined,
           metadata: { notes, adminId: userId }
         });
 
@@ -6399,7 +7106,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           amount: "200",
           status: "completed",
           description: `KYC verification fee refund - ${rejectionReason || "rejected by admin"}`,
-          reference: kycId,
+          relatedUserId: targetUserId,
         });
 
         // Update status to refunded
@@ -6414,7 +7121,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           action: "manual_rejected",
           result: "refunded",
           reviewedBy: userId,
-          similarityScore: kyc.similarityScore || undefined,
+          similarityScore: kyc.similarityScore ? parseFloat(kyc.similarityScore) : undefined,
           metadata: { notes, rejectionReason, adminId: userId, refundAmount: 200 }
         });
 
