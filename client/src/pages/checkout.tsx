@@ -593,6 +593,7 @@ function CartItemCard({ item }: { item: CartItemWithProduct }) {
           src={imageUrl}
           alt={item.product.title}
           className="h-full w-full object-cover"
+          loading="lazy"
         />
       </div>
       <div className="flex flex-1 flex-col">

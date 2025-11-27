@@ -240,6 +240,7 @@ export default function MyAdsPage() {
             src={imageUrl.startsWith("/uploads") ? imageUrl : imageUrl}
             alt={product.title}
             className="object-cover w-full h-full"
+            loading="lazy"
             data-testid={`img-product-${product.id}`}
           />
           {getStatusBadge(product)}

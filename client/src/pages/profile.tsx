@@ -121,6 +121,7 @@ function PinnedPostCard({ post }: { post: PostWithAuthor }) {
                 src={img}
                 alt=""
                 className="h-16 w-16 object-cover rounded-md"
+                loading="lazy"
               />
             ))}
           </div>
@@ -172,6 +173,7 @@ function SocialPostCard({ post }: { post: PostWithAuthor }) {
                     src={img}
                     alt=""
                     className="w-full h-24 object-cover rounded-md"
+                    loading="lazy"
                   />
                 ))}
               </div>
@@ -209,6 +211,7 @@ function ProductCard({ product }: { product: Product }) {
               src={product.images[0]}
               alt={product.title}
               className="h-20 w-20 object-cover rounded-md flex-shrink-0"
+              loading="lazy"
             />
           )}
           <div className="flex-1 min-w-0">
@@ -1285,6 +1288,7 @@ export default function Profile() {
                             src={post.images[0]} 
                             alt="" 
                             className="w-full h-full object-cover"
+                            loading="lazy"
                           />
                         )}
                         {post.videos && post.videos[0] && !post.images?.[0] && (

@@ -312,6 +312,7 @@ export default function ProductView() {
                 src={images[currentImageIndex]}
                 alt={product.title}
                 className="h-full w-full object-cover"
+                loading="lazy"
                 data-testid="img-product-main"
               />
               {images.length > 1 && (
@@ -351,6 +352,7 @@ export default function ProductView() {
                       src={img}
                       alt={`${product.title} ${idx + 1}`}
                       className="h-full w-full object-cover"
+                      loading="lazy"
                     />
                   </button>
                 ))}

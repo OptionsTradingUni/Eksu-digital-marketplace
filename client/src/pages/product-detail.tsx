@@ -301,6 +301,7 @@ export default function CreateProduct() {
                         src={preview}
                         alt={`Preview ${index + 1}`}
                         className="w-full h-full object-cover rounded-md"
+                        loading="lazy"
                       />
                       <Button
                         type="button"

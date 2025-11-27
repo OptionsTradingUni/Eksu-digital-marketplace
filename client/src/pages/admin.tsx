@@ -76,11 +76,18 @@ export default function AdminPanel() {
 
   const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
-  const [newAnnouncement, setNewAnnouncement] = useState({
+  const [newAnnouncement, setNewAnnouncement] = useState<{
+    title: string;
+    content: string;
+    category: "update" | "feature" | "alert";
+    priority: "low" | "normal" | "high";
+    isPinned: boolean;
+    isPublished: boolean;
+  }>({
     title: "",
     content: "",
-    category: "update" as const,
-    priority: "normal" as const,
+    category: "update",
+    priority: "normal",
     isPinned: false,
     isPublished: true,
   });
@@ -267,8 +274,8 @@ export default function AdminPanel() {
       setNewAnnouncement({
         title: announcement.title,
         content: announcement.content,
-        category: announcement.category as "update" | "feature" | "alert",
-        priority: announcement.priority as "low" | "normal" | "high",
+        category: (announcement.category || "update") as "update" | "feature" | "alert",
+        priority: (announcement.priority || "normal") as "low" | "normal" | "high",
         isPinned: announcement.isPinned || false,
         isPublished: announcement.isPublished || true,
       });
@@ -506,6 +513,7 @@ export default function AdminPanel() {
                                 src={product.images[0] || "/placeholder-product.png"}
                                 alt={product.title}
                                 className="h-12 w-12 rounded object-cover"
+                                loading="lazy"
                               />
                               <p className="font-medium line-clamp-1" data-testid={`text-product-title-${product.id}`}>
                                 {product.title}
@@ -975,6 +983,7 @@ export default function AdminPanel() {
                             src={selectedKyc.selfieUrl} 
                             alt="User Selfie" 
                             className="w-full h-48 object-cover cursor-pointer"
+                            loading="lazy"
                             onClick={() => setImagePreviewUrl(selectedKyc.selfieUrl)}
                           />
                         </div>
@@ -992,6 +1001,7 @@ export default function AdminPanel() {
                             src={selectedKyc.ninPhotoUrl} 
                             alt="NIN Photo" 
                             className="w-full h-48 object-cover cursor-pointer"
+                            loading="lazy"
                             onClick={() => setImagePreviewUrl(selectedKyc.ninPhotoUrl)}
                           />
                         </div>
@@ -1093,6 +1103,7 @@ export default function AdminPanel() {
                     src={imagePreviewUrl} 
                     alt="Preview" 
                     className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    loading="lazy"
                   />
                 </div>
               )}

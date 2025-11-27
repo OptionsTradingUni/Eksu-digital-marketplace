@@ -569,6 +569,7 @@ export default function KycPage() {
                     src={selfiePreview} 
                     alt="Selfie preview" 
                     className="max-w-[200px] rounded-lg"
+                    loading="lazy"
                   />
                   <Button
                     size="sm"

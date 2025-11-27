@@ -639,6 +639,7 @@ export default function KYCVerification() {
                       src={capturedImage}
                       alt="Captured selfie"
                       className="w-full h-full object-cover"
+                      loading="lazy"
                       data-testid="img-captured-selfie"
                     />
                     <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">

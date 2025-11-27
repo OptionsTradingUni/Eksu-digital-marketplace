@@ -664,6 +664,7 @@ export default function SupportPage() {
                               src={url}
                               alt={`Attachment ${index + 1}`}
                               className="h-20 w-20 object-cover rounded-md border"
+                              loading="lazy"
                             />
                             <Button
                               type="button"
@@ -818,6 +819,7 @@ export default function SupportPage() {
                                       src={url}
                                       alt={`Attachment ${index + 1}`}
                                       className="h-16 w-16 object-cover rounded-md border hover:opacity-80 transition-opacity"
+                                      loading="lazy"
                                     />
                                   </a>
                                 ))}

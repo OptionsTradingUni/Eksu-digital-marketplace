@@ -521,6 +521,7 @@ export default function ThePlugPage() {
                         src={preview.url}
                         alt={`Preview ${index + 1}`}
                         className="h-full w-full object-cover"
+                        loading="lazy"
                       />
                     )}
                   </div>

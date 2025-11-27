@@ -171,6 +171,7 @@ export default function SellerDashboard() {
                             src={product.images[0] || "/placeholder-product.png"}
                             alt={product.title}
                             className="h-12 w-12 rounded object-cover"
+                            loading="lazy"
                           />
                           <div>
                             <p className="font-medium line-clamp-1" data-testid={`text-product-title-${product.id}`}>
