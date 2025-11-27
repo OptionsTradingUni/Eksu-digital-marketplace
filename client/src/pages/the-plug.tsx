@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -41,7 +41,8 @@ import {
   Video,
   BadgeCheck,
   Plus,
-  Link2
+  Link2,
+  Bookmark
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
@@ -52,6 +53,10 @@ type PostWithAuthor = SocialPost & {
   isLiked?: boolean;
   isFollowingAuthor?: boolean;
   isReposted?: boolean;
+  isBookmarked?: boolean;
+  engagementScore?: string;
+  viewsCount?: number;
+  sharesCount?: number;
 };
 
 type Comment = {
@@ -172,10 +177,23 @@ function SellerBadge() {
   );
 }
 
+function EKSUPlugBadge({ size = "sm" }: { size?: "sm" | "md" }) {
+  const sizeClasses = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  return (
+    <div className="relative inline-flex">
+      <BadgeCheck className={`${sizeClasses} text-amber-500 fill-amber-500/20`} />
+    </div>
+  );
+}
+
+function isEKSUPlugAccount(author: User): boolean {
+  return author?.isSystemAccount === true && author?.systemAccountType === 'eksuplug';
+}
+
 export default function ThePlugPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("discover");
+  const [activeTab, setActiveTab] = useState("for_you");
   const [newPostContent, setNewPostContent] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
@@ -183,14 +201,16 @@ export default function ThePlugPage() {
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set());
+  const [bookmarkedPosts, setBookmarkedPosts] = useState<Set<string>>(new Set());
   const [optimisticFollows, setOptimisticFollows] = useState<Map<string, boolean>>(new Map());
   const [showMobileComposer, setShowMobileComposer] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharePost, setSharePost] = useState<PostWithAuthor | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const viewedPostsRef = useRef<Set<string>>(new Set());
 
   const { data: posts, isLoading } = useQuery<PostWithAuthor[]>({
-    queryKey: ["/api/social-posts", activeTab === "following" ? { following: true } : {}],
+    queryKey: ["/api/feed", { type: activeTab }],
   });
 
   const { data: sponsoredAds = [] } = useQuery<SponsoredAd[]>({
@@ -223,7 +243,7 @@ export default function ThePlugPage() {
       setSelectedMedia([]);
       setMediaPreviews([]);
       setShowMobileComposer(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
     onError: () => {
       toast({ title: "Failed to create post", variant: "destructive" });
@@ -247,7 +267,7 @@ export default function ThePlugPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
   });
 
@@ -273,7 +293,7 @@ export default function ThePlugPage() {
       } else {
         toast({ title: "Removed repost" });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
   });
 
@@ -285,7 +305,7 @@ export default function ThePlugPage() {
     onSuccess: (_, variables) => {
       setCommentText((prev) => ({ ...prev, [variables.postId]: "" }));
       queryClient.invalidateQueries({ queryKey: ["/api/social-posts", variables.postId, "comments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
   });
 
@@ -296,7 +316,7 @@ export default function ThePlugPage() {
     },
     onSuccess: () => {
       toast({ title: "Post deleted" });
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
   });
 
@@ -324,7 +344,7 @@ export default function ThePlugPage() {
         toast({ title: "Unfollowed" });
       }
       setOptimisticFollows(new Map());
-      queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
     onError: (error: any, { userId }) => {
       setOptimisticFollows(prev => {
@@ -333,6 +353,47 @@ export default function ThePlugPage() {
         return newMap;
       });
       toast({ title: error.message || "Failed to update follow status", variant: "destructive" });
+    },
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      const response = await apiRequest("POST", `/api/social-posts/${postId}/bookmark`);
+      return response.json();
+    },
+    onMutate: (postId) => {
+      setBookmarkedPosts(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(postId)) {
+          newSet.delete(postId);
+        } else {
+          newSet.add(postId);
+        }
+        return newSet;
+      });
+    },
+    onSuccess: (data) => {
+      if (data.action === "bookmarked") {
+        toast({ title: "Added to bookmarks" });
+      } else {
+        toast({ title: "Removed from bookmarks" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
+    },
+  });
+
+  const trackViewMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      await apiRequest("POST", `/api/social-posts/${postId}/view`);
+    },
+  });
+
+  const trackShareMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      await apiRequest("POST", `/api/social-posts/${postId}/share`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
     },
   });
 
@@ -370,6 +431,7 @@ export default function ThePlugPage() {
   };
 
   const handleShare = (post: PostWithAuthor) => {
+    trackShareMutation.mutate(post.id);
     setSharePost(post);
     setShareDialogOpen(true);
   };
@@ -393,6 +455,17 @@ export default function ThePlugPage() {
   const isPostReposted = (post: PostWithAuthor) => {
     return repostedPosts.has(post.id) || post.isReposted;
   };
+
+  const isPostBookmarked = (post: PostWithAuthor) => {
+    return bookmarkedPosts.has(post.id) || post.isBookmarked;
+  };
+
+  const trackPostView = useCallback((postId: string) => {
+    if (!viewedPostsRef.current.has(postId)) {
+      viewedPostsRef.current.add(postId);
+      trackViewMutation.mutate(postId);
+    }
+  }, [trackViewMutation]);
 
   const isUserFollowed = (authorId: string, post: PostWithAuthor) => {
     if (optimisticFollows.has(authorId)) {
@@ -561,9 +634,9 @@ export default function ThePlugPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="w-full h-12 p-0 bg-transparent border-b rounded-none">
               <TabsTrigger 
-                value="discover" 
+                value="for_you" 
                 className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent transition-all"
-                data-testid="tab-discover"
+                data-testid="tab-for-you"
               >
                 <Compass className="h-4 w-4 mr-2" />
                 <span className="font-semibold">For You</span>
@@ -630,6 +703,22 @@ export default function ThePlugPage() {
                   )}
                   <motion.article
                 key={post.id}
+                ref={(el) => {
+                  if (el && !viewedPostsRef.current.has(post.id)) {
+                    const observer = new IntersectionObserver(
+                      (entries) => {
+                        entries.forEach((entry) => {
+                          if (entry.isIntersecting) {
+                            trackPostView(post.id);
+                            observer.disconnect();
+                          }
+                        });
+                      },
+                      { threshold: 0.5 }
+                    );
+                    observer.observe(el);
+                  }
+                }}
                 variants={{
                   hidden: { opacity: 0 },
                   visible: { opacity: 1 }
@@ -652,18 +741,30 @@ export default function ThePlugPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1 flex-wrap min-w-0">
                         <Link href={`/profile/${post.authorId}`}>
-                          <span className="font-bold text-sm hover:underline cursor-pointer truncate">
+                          <span className={`font-bold text-sm hover:underline cursor-pointer truncate ${isEKSUPlugAccount(post.author) ? 'text-amber-600 dark:text-amber-400' : ''}`}>
                             {post.author?.firstName} {post.author?.lastName}
                           </span>
                         </Link>
-                        {post.author?.isVerified && <VerifiedBadge />}
-                        {(post.author?.role === "seller" || post.author?.role === "both") && (
+                        {isEKSUPlugAccount(post.author) ? (
+                          <EKSUPlugBadge />
+                        ) : post.author?.isVerified ? (
+                          <VerifiedBadge />
+                        ) : null}
+                        {(post.author?.role === "seller" || post.author?.role === "both") && !isEKSUPlugAccount(post.author) && (
                           <SellerBadge />
                         )}
                         <span className="text-muted-foreground text-sm">·</span>
                         <span className="text-muted-foreground text-sm">
                           {formatDistanceToNow(new Date(post.createdAt!), { addSuffix: false })}
                         </span>
+                        {(post.viewsCount ?? 0) > 0 && (
+                          <>
+                            <span className="text-muted-foreground text-sm">·</span>
+                            <span className="text-muted-foreground text-sm">
+                              {formatEngagement(post.viewsCount || 0)} views
+                            </span>
+                          </>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -757,6 +858,21 @@ export default function ThePlugPage() {
                           <span className="text-sm tabular-nums">{formatEngagement(post.likesCount || 0)}</span>
                         </Button>
                       </motion.div>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => bookmarkMutation.mutate(post.id)}
+                        disabled={bookmarkMutation.isPending}
+                        className={`h-8 px-2 gap-1 rounded-full group ${
+                          isPostBookmarked(post)
+                            ? "text-primary"
+                            : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        }`}
+                        data-testid={`button-bookmark-${post.id}`}
+                      >
+                        <Bookmark className={`h-[18px] w-[18px] ${isPostBookmarked(post) ? "fill-current" : "group-hover:text-primary"}`} />
+                      </Button>
 
                       <Button
                         variant="ghost"

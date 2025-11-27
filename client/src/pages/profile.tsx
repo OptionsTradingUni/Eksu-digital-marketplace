@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { updateUserProfileSchema, type User } from "@shared/schema";
+import { updateUserProfileSchema, type User, type SocialPost, type Product } from "@shared/schema";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -55,7 +56,13 @@ import {
   MessageCircle,
   Ban,
   Flag,
-  AlertTriangle
+  AlertTriangle,
+  BadgeCheck,
+  Calendar,
+  Heart,
+  Image,
+  Pin,
+  FileText
 } from "lucide-react";
 import {
   AlertDialog,
@@ -75,8 +82,154 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
+
+function formatCount(count: number): string {
+  if (count >= 1000000) {
+    return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (count >= 1000) {
+    return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return count.toString();
+}
+
+function formatJoinDate(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  const d = new Date(date);
+  return format(d, "MMMM yyyy");
+}
+
+type PostWithAuthor = SocialPost & { author: User };
+
+function PinnedPostCard({ post }: { post: PostWithAuthor }) {
+  return (
+    <Card className="mb-3 border-l-2 border-l-primary/50">
+      <CardContent className="pt-4 pb-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Pin className="h-3 w-3" />
+          <span>Pinned</span>
+        </div>
+        <p className="text-sm line-clamp-3">{post.content}</p>
+        {post.images && post.images.length > 0 && (
+          <div className="flex gap-2 mt-2">
+            {post.images.slice(0, 4).map((img, i) => (
+              <img
+                key={i}
+                src={img}
+                alt=""
+                className="h-16 w-16 object-cover rounded-md"
+              />
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Heart className="h-3 w-3" />
+            {formatCount(post.likesCount || 0)}
+          </span>
+          <span className="flex items-center gap-1">
+            <MessageCircle className="h-3 w-3" />
+            {formatCount(post.commentsCount || 0)}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SocialPostCard({ post }: { post: PostWithAuthor }) {
+  const [, setLocation] = useLocation();
+  
+  return (
+    <Card className="mb-3 hover-elevate cursor-pointer" onClick={() => setLocation(`/the-plug`)}>
+      <CardContent className="pt-4 pb-3">
+        <div className="flex items-start gap-3">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={post.author?.profileImageUrl || undefined} />
+            <AvatarFallback>
+              {post.author?.firstName?.[0] || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-sm">{post.author?.firstName} {post.author?.lastName}</span>
+              {post.author?.isVerified && (
+                <BadgeCheck className="h-4 w-4 text-primary" />
+              )}
+              <span className="text-muted-foreground text-xs">
+                @{post.author?.username || post.author?.email?.split("@")[0]}
+              </span>
+            </div>
+            <p className="text-sm mt-1 line-clamp-4">{post.content}</p>
+            {post.images && post.images.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {post.images.slice(0, 4).map((img, i) => (
+                  <img
+                    key={i}
+                    src={img}
+                    alt=""
+                    className="w-full h-24 object-cover rounded-md"
+                  />
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Heart className="h-3 w-3" />
+                {formatCount(post.likesCount || 0)}
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageCircle className="h-3 w-3" />
+                {formatCount(post.commentsCount || 0)}
+              </span>
+              <span className="flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                {formatCount(post.viewsCount || 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProductCard({ product }: { product: Product }) {
+  const [, setLocation] = useLocation();
+  
+  return (
+    <Card className="mb-3 hover-elevate cursor-pointer" onClick={() => setLocation(`/product/${product.id}`)}>
+      <CardContent className="pt-4 pb-3">
+        <div className="flex gap-3">
+          {product.images && product.images.length > 0 && (
+            <img
+              src={product.images[0]}
+              alt={product.title}
+              className="h-20 w-20 object-cover rounded-md flex-shrink-0"
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-sm line-clamp-2">{product.title}</h4>
+            <p className="text-lg font-bold text-primary mt-1">
+              ₦{Number(product.price).toLocaleString()}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant="secondary" className="text-xs">
+                {product.condition}
+              </Badge>
+              {product.isSold && (
+                <Badge variant="destructive" className="text-xs">Sold</Badge>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Profile() {
   const { userId: urlUserId } = useParams<{ userId?: string }>();
@@ -96,6 +249,9 @@ export default function Profile() {
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reportDescription, setReportDescription] = useState("");
+  const [activeTab, setActiveTab] = useState("posts");
+  const [usernameInput, setUsernameInput] = useState("");
+  const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
 
   const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
 
@@ -114,6 +270,21 @@ export default function Profile() {
   }>({
     queryKey: ["/api/users", displayUserId, "follow-stats"],
     enabled: !!displayUserId,
+  });
+
+  const { data: pinnedPosts, isLoading: pinnedLoading } = useQuery<PostWithAuthor[]>({
+    queryKey: ["/api/users", displayUserId, "pinned-posts"],
+    enabled: !!displayUserId,
+  });
+
+  const { data: userPosts, isLoading: postsLoading } = useQuery<PostWithAuthor[]>({
+    queryKey: ["/api/social-posts", { authorId: displayUserId }],
+    enabled: !!displayUserId,
+  });
+
+  const { data: userProducts, isLoading: productsLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products", { sellerId: displayUserId }],
+    enabled: !!displayUserId && (displayUser?.role === "seller" || displayUser?.role === "both" || displayUser?.role === "admin"),
   });
 
   const form = useForm<UpdateProfileData>({
@@ -136,10 +307,10 @@ export default function Profile() {
         location: currentUser.location || "",
         bio: currentUser.bio || "",
       });
+      setUsernameInput(currentUser.username || "");
     }
   }, [currentUser, form, isOwnProfile]);
 
-  // Load cover photo from database when user data loads
   useEffect(() => {
     if (displayUser?.coverImageUrl) {
       setCoverPhoto(displayUser.coverImageUrl);
@@ -196,6 +367,28 @@ export default function Profile() {
       toast({
         title: "Error",
         description: "Failed to update profile",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateUsernameMutation = useMutation({
+    mutationFn: async (username: string) => {
+      return await apiRequest("PATCH", `/api/users/me/username`, { username });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "Username Updated",
+        description: "Your username has been updated successfully.",
+      });
+      setIsUpdatingUsername(false);
+    },
+    onError: (error: Error) => {
+      const message = error.message.includes("taken") ? "Username is already taken" : "Failed to update username";
+      toast({
+        title: "Error",
+        description: message,
         variant: "destructive",
       });
     },
@@ -471,10 +664,7 @@ export default function Profile() {
       return;
     }
 
-    // Set local preview while uploading
     setCoverPhoto(URL.createObjectURL(file));
-    
-    // Upload the cover photo to persist it
     uploadCoverMutation.mutate(file);
   };
 
@@ -525,18 +715,37 @@ export default function Profile() {
     setLocation(`/messages?user=${urlUserId}`);
   };
 
+  const handleUpdateUsername = () => {
+    if (usernameInput.length >= 3 && usernameInput.length <= 20) {
+      updateUsernameMutation.mutate(usernameInput);
+    } else {
+      toast({
+        title: "Invalid Username",
+        description: "Username must be between 3 and 20 characters",
+        variant: "destructive",
+      });
+    }
+  };
+
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
 
   if (isLoading || !displayUser) {
     return (
       <div className="min-h-screen">
-        <div className="h-48 bg-gradient-to-br from-primary/20 via-primary/10 to-background" />
+        <div className="relative" style={{ aspectRatio: '16/5' }}>
+          <Skeleton className="absolute inset-0" />
+        </div>
         <div className="container mx-auto px-4 -mt-16 max-w-4xl">
           <div className="space-y-6">
-            <Skeleton className="h-32 w-32 rounded-full mx-auto" />
-            <Skeleton className="h-8 w-48 mx-auto" />
-            <Skeleton className="h-32" />
-            <Skeleton className="h-64" />
+            <div className="flex items-end gap-4">
+              <Skeleton className="h-32 w-32 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </div>
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-64 w-full" />
           </div>
         </div>
       </div>
@@ -551,67 +760,29 @@ export default function Profile() {
     ? `${displayUser.firstName} ${displayUser.lastName}`
     : displayUser.firstName || "User";
 
-  const username = displayUser.email?.split("@")[0] || "user";
+  const username = displayUser.username || displayUser.email?.split("@")[0] || "user";
   const shortId = displayUser.id?.slice(0, 8).toUpperCase() || "00000000";
 
-  const isSeller = displayUser.role === "seller" || displayUser.role === "both";
-  const trustScoreValue = displayUser.trustScore ? parseFloat(String(displayUser.trustScore)) : 5.0;
-
-  const statsData = [
-    {
-      icon: Star,
-      value: trustScoreValue.toFixed(1),
-      label: "Trust Score",
-      color: "text-yellow-500",
-      bgColor: "bg-yellow-500/10",
-      testId: "text-trust-score"
-    },
-    {
-      icon: TrendingUp,
-      value: displayUser.totalRatings || 0,
-      label: "Reviews",
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      testId: "text-reviews-count"
-    },
-    {
-      icon: Users,
-      value: followStats?.followerCount || 0,
-      label: "Followers",
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-      testId: "text-follower-count"
-    },
-    isSeller 
-      ? {
-          icon: ShoppingBag,
-          value: displayUser.totalSales || 0,
-          label: "Total Sales",
-          color: "text-green-500",
-          bgColor: "bg-green-500/10",
-          testId: "text-total-sales"
-        }
-      : {
-          icon: Users,
-          value: followStats?.followingCount || 0,
-          label: "Following",
-          color: "text-indigo-500",
-          bgColor: "bg-indigo-500/10",
-          testId: "text-following-count"
-        }
-  ];
+  const isSeller = displayUser.role === "seller" || displayUser.role === "both" || displayUser.role === "admin";
+  const isSystemAccount = displayUser.isSystemAccount === true;
+  const isVerified = displayUser.isVerified || displayUser.ninVerified || isSystemAccount;
 
   const canEdit = isOwnProfile && !isPreviewMode;
+
+  const mediaPosts = userPosts?.filter(p => (p.images && p.images.length > 0) || (p.videos && p.videos.length > 0)) || [];
 
   return (
     <div className="min-h-screen pb-24">
       <div className="relative">
         <div 
-          className="relative h-44 sm:h-52 md:h-64 overflow-hidden"
+          className={`relative w-full overflow-hidden ${isSystemAccount ? 'bg-gradient-to-br from-yellow-500/30 via-amber-400/20 to-background' : ''}`}
           style={{
+            aspectRatio: '16/5',
             backgroundImage: coverPhoto 
               ? `url(${coverPhoto})` 
-              : 'linear-gradient(135deg, hsl(var(--primary)/0.3) 0%, hsl(var(--primary)/0.1) 50%, hsl(var(--background)) 100%)',
+              : isSystemAccount
+                ? undefined
+                : 'linear-gradient(135deg, hsl(var(--primary)/0.3) 0%, hsl(var(--primary)/0.1) 50%, hsl(var(--background)) 100%)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}
@@ -624,10 +795,12 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={() => coverInputRef.current?.click()}
-                className="absolute top-4 left-4 p-2 rounded-full bg-black/40 text-white backdrop-blur-sm hover-elevate active-elevate-2 transition-all"
+                className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group"
                 data-testid="button-change-cover"
               >
-                <ImagePlus className="h-4 w-4" />
+                <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="h-6 w-6" />
+                </div>
               </button>
               <input
                 ref={coverInputRef}
@@ -637,48 +810,6 @@ export default function Profile() {
                 className="hidden"
                 data-testid="input-cover-file"
               />
-              
-              <div className="absolute top-4 right-4 z-10">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="bg-black/40 text-white backdrop-blur-sm border-0"
-                      data-testid="button-settings-menu"
-                    >
-                      <MoreHorizontal className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem 
-                      onClick={() => setIsEditDialogOpen(true)}
-                      className="cursor-pointer"
-                      data-testid="menu-item-edit-profile"
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => coverInputRef.current?.click()}
-                      className="cursor-pointer"
-                      data-testid="menu-item-change-cover"
-                    >
-                      <ImagePlus className="mr-2 h-4 w-4" />
-                      Change Cover
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={copyUserId}
-                      className="cursor-pointer"
-                      data-testid="menu-item-copy-id"
-                    >
-                      {copiedId ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                      Copy User ID
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
             </>
           )}
           
@@ -693,40 +824,30 @@ export default function Profile() {
         </div>
 
         <div className="container mx-auto px-4 max-w-4xl relative">
-          <motion.div 
-            className="flex flex-col items-center -mt-20 relative z-10"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <div className="relative group">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <Avatar className="h-32 w-32 sm:h-36 sm:w-36 ring-4 ring-background shadow-2xl">
-                  <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
-                  <AvatarFallback className="text-4xl font-bold bg-gradient-to-br from-primary/20 to-primary/5">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-              </motion.div>
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-1 right-1 p-2.5 rounded-full bg-primary text-primary-foreground shadow-lg hover-elevate active-elevate-2 transition-all"
-                  data-testid="button-change-avatar"
-                  disabled={uploadImageMutation.isPending}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-16 md:-mt-20 relative z-10">
+            <div className="flex items-end gap-4">
+              <div className="relative group">
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300 }}
                 >
-                  {uploadImageMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                  <Avatar className={`h-28 w-28 md:h-36 md:w-36 ring-4 ring-background shadow-2xl ${isSystemAccount ? 'ring-yellow-500/50' : ''}`}>
+                    <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
+                    <AvatarFallback className={`text-3xl md:text-4xl font-bold ${isSystemAccount ? 'bg-gradient-to-br from-yellow-500/30 to-amber-400/20' : 'bg-gradient-to-br from-primary/20 to-primary/5'}`}>
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                </motion.div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute bottom-1 right-1 p-2 rounded-full bg-background border shadow-md hover-elevate active-elevate-2 transition-all"
+                    data-testid="button-change-avatar"
+                  >
                     <Camera className="h-4 w-4" />
-                  )}
-                </button>
-              )}
-              {isOwnProfile && (
+                  </button>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -735,239 +856,213 @@ export default function Profile() {
                   className="hidden"
                   data-testid="input-avatar-file"
                 />
-              )}
+              </div>
+              
+              <div className="pb-2 sm:pb-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl md:text-2xl font-bold" data-testid="text-display-name">
+                    {fullName}
+                  </h1>
+                  {isVerified && (
+                    <BadgeCheck 
+                      className={`h-5 w-5 md:h-6 md:w-6 ${isSystemAccount ? 'text-yellow-500' : 'text-primary'}`} 
+                      data-testid="icon-verified"
+                    />
+                  )}
+                </div>
+                
+                {isSystemAccount && (
+                  <Badge className="mt-1 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30">
+                    Official Account
+                  </Badge>
+                )}
+                
+                {displayUser.username ? (
+                  <p className="text-muted-foreground text-sm md:text-base" data-testid="text-username">
+                    @{displayUser.username}
+                  </p>
+                ) : isOwnProfile ? (
+                  <button
+                    onClick={() => {
+                      setIsUpdatingUsername(true);
+                      setIsEditDialogOpen(true);
+                    }}
+                    className="text-primary text-sm hover:underline flex items-center gap-1"
+                    data-testid="button-add-username"
+                  >
+                    <AtSign className="h-3 w-3" />
+                    Add username
+                  </button>
+                ) : (
+                  <p className="text-muted-foreground text-sm" data-testid="text-username-fallback">
+                    @{displayUser.email?.split("@")[0]}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <motion.div 
-              className="mt-4 text-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <h1 
-                className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text" 
-                data-testid="text-profile-fullname"
-              >
-                {fullName}
-              </h1>
-              
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <Badge 
-                  variant="secondary" 
-                  className="text-sm font-medium gap-1 px-3"
-                  data-testid="badge-username"
-                >
-                  <AtSign className="h-3.5 w-3.5" />
-                  {username}
-                </Badge>
-              </div>
-
-              <motion.button
-                onClick={copyUserId}
-                className="flex items-center gap-1.5 mt-2 mx-auto px-3 py-1 rounded-full bg-muted/50 text-xs text-muted-foreground hover-elevate active-elevate-2 transition-all"
-                data-testid="button-user-id"
-                whileTap={{ scale: 0.98 }}
-              >
-                <Hash className="h-3 w-3" />
-                <span className="font-mono">{shortId}</span>
-                {copiedId ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </motion.button>
-
-              {displayUser.location && (
-                <motion.div 
-                  className="flex items-center justify-center gap-1 mt-3 text-sm text-muted-foreground"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <MapPin className="h-4 w-4" />
-                  <span data-testid="text-profile-location">{displayUser.location}</span>
-                </motion.div>
-              )}
-
-              <motion.div 
-                className="flex items-center gap-2 mt-4 flex-wrap justify-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.25 }}
-              >
-                <Badge variant="outline" className="text-xs" data-testid="badge-role">
-                  {displayUser.role?.charAt(0).toUpperCase() + displayUser.role?.slice(1)}
-                </Badge>
-                {displayUser.isVerified && (
-                  <Badge variant="default" className="gap-1 text-xs" data-testid="badge-verified">
-                    <Shield className="h-3 w-3" />
-                    Verified
-                  </Badge>
-                )}
-                {displayUser.isTrustedSeller && (
-                  <Badge className="gap-1 text-xs bg-green-600/90 dark:bg-green-700/90" data-testid="badge-trusted-seller">
-                    <UserCheck className="h-3 w-3" />
-                    Trusted Seller
-                  </Badge>
-                )}
-              </motion.div>
-
-              {displayUser.bio && (
-                <motion.p 
-                  className="mt-4 text-muted-foreground max-w-md mx-auto text-sm leading-relaxed" 
-                  data-testid="text-profile-bio"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  {displayUser.bio}
-                </motion.p>
-              )}
-
-              <motion.div
-                className="flex items-center justify-center gap-3 mt-6"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35 }}
-              >
-                {isOwnProfile ? (
-                  <>
-                    {!isPreviewMode ? (
-                      <Button
-                        variant="default"
-                        onClick={() => setIsEditDialogOpen(true)}
-                        className="gap-2"
-                        data-testid="button-edit-profile-main"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit Profile
+            <div className="flex items-center gap-2 pb-2 sm:pb-4">
+              {isOwnProfile ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsEditDialogOpen(true)}
+                    data-testid="button-edit-profile"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" data-testid="button-settings-menu">
+                        <MoreHorizontal className="h-5 w-5" />
                       </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem 
+                        onClick={copyUserId}
+                        className="cursor-pointer"
+                        data-testid="menu-item-copy-id"
+                      >
+                        {copiedId ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                        Copy User ID
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => setLocation("/settings")}
+                        className="cursor-pointer"
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant={followStats?.isFollowing ? "outline" : "default"}
+                    onClick={handleFollow}
+                    disabled={followMutation.isPending || unfollowMutation.isPending}
+                    data-testid="button-follow"
+                  >
+                    {followMutation.isPending || unfollowMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : followStats?.isFollowing ? (
+                      <>
+                        <UserMinus className="h-4 w-4 mr-2" />
+                        Unfollow
+                      </>
                     ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setIsPreviewMode(false);
-                          setShowPreviewAfterSave(false);
-                        }}
-                        className="gap-2"
-                        data-testid="button-exit-preview"
-                      >
-                        <EyeOff className="h-4 w-4" />
-                        Exit Preview
-                      </Button>
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Follow
+                      </>
                     )}
-                    
-                    <Button
-                      variant={isPreviewMode ? "default" : "outline"}
-                      onClick={() => setIsPreviewMode(!isPreviewMode)}
-                      className="gap-2"
-                      data-testid="button-toggle-preview"
-                    >
-                      {isPreviewMode ? (
-                        <>
-                          <Eye className="h-4 w-4" />
-                          Preview Mode
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-4 w-4" />
-                          Preview Profile
-                        </>
-                      )}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant={followStats?.isFollowing ? "outline" : "default"}
-                      onClick={handleFollow}
-                      disabled={followMutation.isPending || unfollowMutation.isPending}
-                      className="gap-2"
-                      data-testid="button-follow"
-                    >
-                      {followMutation.isPending || unfollowMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : followStats?.isFollowing ? (
-                        <>
-                          <UserMinus className="h-4 w-4" />
-                          Unfollow
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4" />
-                          Follow
-                        </>
-                      )}
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      onClick={handleMessage}
-                      className="gap-2"
-                      data-testid="button-message"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      Message
-                    </Button>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          data-testid="button-user-actions-menu"
-                        >
-                          <MoreHorizontal className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem 
-                          onClick={() => setIsBlockDialogOpen(true)}
-                          className="cursor-pointer text-destructive focus:text-destructive"
-                          data-testid="menu-item-block-user"
-                        >
-                          <Ban className="mr-2 h-4 w-4" />
-                          Block User
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => setIsReportDialogOpen(true)}
-                          className="cursor-pointer text-destructive focus:text-destructive"
-                          data-testid="menu-item-report-user"
-                        >
-                          <Flag className="mr-2 h-4 w-4" />
-                          Report User
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
-              </motion.div>
-            </motion.div>
+                  </Button>
+                  <Button variant="outline" onClick={handleMessage} data-testid="button-message">
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Message
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" data-testid="button-more-actions">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem 
+                        onClick={copyUserId}
+                        className="cursor-pointer"
+                      >
+                        {copiedId ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                        Copy User ID
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => setIsBlockDialogOpen(true)}
+                        className="cursor-pointer text-destructive"
+                      >
+                        <Ban className="mr-2 h-4 w-4" />
+                        Block
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => setIsReportDialogOpen(true)}
+                        className="cursor-pointer text-destructive"
+                      >
+                        <Flag className="mr-2 h-4 w-4" />
+                        Report
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
+          </div>
+
+          <motion.div 
+            className="mt-6 space-y-3"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            {displayUser.bio && (
+              <p className="text-sm md:text-base" data-testid="text-bio">
+                {displayUser.bio}
+              </p>
+            )}
+            
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              {displayUser.location && (
+                <span className="flex items-center gap-1" data-testid="text-location">
+                  <MapPin className="h-4 w-4" />
+                  {displayUser.location}
+                </span>
+              )}
+              
+              {displayUser.createdAt && (
+                <span className="flex items-center gap-1" data-testid="text-join-date">
+                  <Calendar className="h-4 w-4" />
+                  Joined {formatJoinDate(displayUser.createdAt)}
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-4 text-sm">
+              <button 
+                className="hover:underline"
+                onClick={() => {}}
+                data-testid="button-following-count"
+              >
+                <span className="font-semibold">{formatCount(followStats?.followingCount || 0)}</span>
+                <span className="text-muted-foreground ml-1">Following</span>
+              </button>
+              <button 
+                className="hover:underline"
+                onClick={() => {}}
+                data-testid="button-follower-count"
+              >
+                <span className="font-semibold">{formatCount(followStats?.followerCount || 0)}</span>
+                <span className="text-muted-foreground ml-1">Followers</span>
+              </button>
+            </div>
           </motion.div>
 
           <AnimatePresence>
-            {isPreviewMode && isOwnProfile && (
+            {showPreviewAfterSave && isOwnProfile && (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="mt-6"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4"
               >
                 <Card className="bg-primary/5 border-primary/20">
-                  <CardContent className="py-4">
+                  <CardContent className="pt-4 pb-4">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-primary/10">
-                          <Eye className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm" data-testid="text-preview-banner-title">
-                            {showPreviewAfterSave ? "Profile Updated Successfully!" : "Preview Mode"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            This is how your profile appears to other users
-                          </p>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Eye className="h-5 w-5 text-primary" />
+                        <span className="text-sm">
+                          Preview mode: See how others view your profile
+                        </span>
                       </div>
                       <Button
                         variant="outline"
@@ -995,7 +1090,7 @@ export default function Profile() {
                 exit={{ opacity: 0, y: -20 }}
                 className="mt-4"
               >
-                <Card className="max-w-md mx-auto">
+                <Card className="max-w-md">
                   <CardContent className="pt-4">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
@@ -1040,40 +1135,182 @@ export default function Profile() {
             )}
           </AnimatePresence>
 
-          <motion.div 
-            className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8" 
-            data-testid="stats-grid"
+          {pinnedPosts && pinnedPosts.length > 0 && (
+            <motion.div
+              className="mt-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              {pinnedPosts.map(post => (
+                <PinnedPostCard key={post.id} post={post} />
+              ))}
+            </motion.div>
+          )}
+
+          <motion.div
+            className="mt-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
+            transition={{ delay: 0.3 }}
           >
-            {statsData.map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35 + index * 0.05 }}
-              >
-                <Card className="overflow-visible hover-elevate transition-all border-0 bg-gradient-to-br from-card to-card/50">
-                  <CardContent className="pt-5 pb-4 text-center">
-                    <div className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${stat.bgColor} mb-2`}>
-                      <stat.icon className={`h-5 w-5 ${stat.color}`} />
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-auto">
+                <TabsTrigger 
+                  value="posts" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+                  data-testid="tab-posts"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Posts
+                </TabsTrigger>
+                {isSeller && (
+                  <TabsTrigger 
+                    value="selling" 
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+                    data-testid="tab-selling"
+                  >
+                    <Store className="h-4 w-4 mr-2" />
+                    Selling
+                  </TabsTrigger>
+                )}
+                {isOwnProfile && (
+                  <TabsTrigger 
+                    value="likes" 
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+                    data-testid="tab-likes"
+                  >
+                    <Heart className="h-4 w-4 mr-2" />
+                    Likes
+                  </TabsTrigger>
+                )}
+                <TabsTrigger 
+                  value="media" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+                  data-testid="tab-media"
+                >
+                  <Image className="h-4 w-4 mr-2" />
+                  Media
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="posts" className="mt-4">
+                {postsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <Skeleton key={i} className="h-32 w-full" />
+                    ))}
+                  </div>
+                ) : userPosts && userPosts.length > 0 ? (
+                  <div>
+                    {userPosts.map(post => (
+                      <SocialPostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No posts yet</p>
+                    {isOwnProfile && (
+                      <Button 
+                        variant="outline" 
+                        className="mt-4"
+                        onClick={() => setLocation("/the-plug")}
+                      >
+                        Create your first post
+                      </Button>
+                    )}
+                  </Card>
+                )}
+              </TabsContent>
+
+              {isSeller && (
+                <TabsContent value="selling" className="mt-4">
+                  {productsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map(i => (
+                        <Skeleton key={i} className="h-24 w-full" />
+                      ))}
                     </div>
-                    <p className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid={stat.testId}>
-                      {stat.value}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                  ) : userProducts && userProducts.length > 0 ? (
+                    <div>
+                      {userProducts.map(product => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                  ) : (
+                    <Card className="p-8 text-center">
+                      <Store className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No products listed</p>
+                      {isOwnProfile && (
+                        <Button 
+                          variant="outline" 
+                          className="mt-4"
+                          onClick={() => setLocation("/seller-dashboard")}
+                        >
+                          List a product
+                        </Button>
+                      )}
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
+
+              {isOwnProfile && (
+                <TabsContent value="likes" className="mt-4">
+                  <Card className="p-8 text-center">
+                    <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Posts you've liked will appear here</p>
+                  </Card>
+                </TabsContent>
+              )}
+
+              <TabsContent value="media" className="mt-4">
+                {postsLoading ? (
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                      <Skeleton key={i} className="aspect-square" />
+                    ))}
+                  </div>
+                ) : mediaPosts.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-1">
+                    {mediaPosts.map(post => (
+                      <div 
+                        key={post.id} 
+                        className="aspect-square overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setLocation("/the-plug")}
+                      >
+                        {post.images && post.images[0] && (
+                          <img 
+                            src={post.images[0]} 
+                            alt="" 
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        {post.videos && post.videos[0] && !post.images?.[0] && (
+                          <video 
+                            src={post.videos[0]} 
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <Image className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No media posts yet</p>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
           </motion.div>
 
           {isOwnProfile && !isPreviewMode && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.4 }}
             >
               <Card className="mt-6 border-2 border-primary/10 bg-gradient-to-br from-primary/5 via-transparent to-transparent">
                 <CardHeader className="pb-3">
@@ -1119,50 +1356,6 @@ export default function Profile() {
               </Card>
             </motion.div>
           )}
-
-          {isSeller && followStats && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.55 }}
-            >
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Store className="h-5 w-5" />
-                    Seller Performance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold" data-testid="text-following-count-alt">
-                        {followStats.followingCount}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Following</p>
-                    </div>
-                    {displayUser.responseTime && (
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <p className="text-2xl font-bold" data-testid="text-response-time">
-                            {displayUser.responseTime}m
-                          </p>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Avg. Response</p>
-                      </div>
-                    )}
-                    <div className="text-center">
-                      <p className="text-2xl font-bold">
-                        {displayUser.totalSales || 0}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Completed Sales</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
         </div>
       </div>
 
@@ -1179,6 +1372,40 @@ export default function Profile() {
               onSubmit={form.handleSubmit((data) => updateMutation.mutate(data))}
               className="space-y-4"
             >
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="username"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                      placeholder="username"
+                      className="pl-9"
+                      maxLength={20}
+                      data-testid="input-username"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUpdateUsername}
+                    disabled={updateUsernameMutation.isPending || usernameInput === currentUser?.username}
+                    data-testid="button-update-username"
+                  >
+                    {updateUsernameMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Update"
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  3-20 characters. Letters, numbers, and underscores only.
+                </p>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
