@@ -1,0 +1,26 @@
+1. Why is the site showing welcome to render?is there a way to solve it 
+2. The plug and profile picture still not working check the photos 
+3. Set up live payments and not test payments please , it's not all working 
+4. When I click back to merchant site I got to not found in .replit.app biggest it 
+4. ⁠all categories add more to categories in filters and other sides  , list all of it 
+7. ⁠I’m not getting notifications whether someone followed, messaged or added 
+8. ⁠if someone messages or made an order and other things , notifications in a written up message should be sent to both sellers and buyers and sellers can reply via the email too and it reflect on chat message too and also create a .md for this so I know how to go about setting it up maybe a email.md
+9. ⁠whenever I add a profile picture whether it’s a product or profile it gets deleted , messages are not saved 
+10. ⁠Follow button isn’t working too 
+11. ⁠if I click on their profile anywhere I see their profile and click it should take me there it either take it to mine or not responsive 
+Would be an option to add or disguise a discount by seller the best way and to strike through a price and add a new one 
+14. ⁠in social post the plug I want you to improve the look it’s somehow make it sharp and nice improve the UI also 
+15. ⁠let seller be able to add many pictures in her profile and edit how it’s arranged so it’s not abnormal 
+16. ⁠add more things to add so the profile looks like a standard one and not too empty 
+17. ⁠increase number of characters in messages in normal message and comments etc and ability to write as you want , good formatting like normal WhatsApp , add more emojis and let all these things be fast 
+18. ⁠is welcome message sending working? By a account from and for the website which could also be used to post in the plug and automatically followed by users . It follows no one unless I want to , also a email and password for it generated too 
+28. ⁠nudity photos or words not allowed, it would be deleted and warning sent by system message to the user if it persist account get banned or suspended immediately
+
+Instead of replit cuz I’m not deploying in reply can’t I use my database for storage in the object storage stuff and it will work
+Here is my database url no need for privacy use it 
+postgresql://neondb_owner:npg_4Eswfa6SyHgC@ep-ancient-dust-agz33a36.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require
+CLOUDINARY_API_KEY, 523318715747195
+CLOUDINARY_API_SECRET, 5ADwkAztfcfHaQREf4KrNuZninU
+CLOUDINARY_CLOUD_NAME, dlzix4zp9
+The account that messages new users isn't set up yet and for those that have joined before coding it it checks and send too 
+Send code to email too during verification and it works 
