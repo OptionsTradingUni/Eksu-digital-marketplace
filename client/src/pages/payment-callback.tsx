@@ -39,7 +39,7 @@ export default function PaymentCallbackPage() {
 
   const searchParams = new URLSearchParams(searchString);
   const paymentReference = searchParams.get("paymentReference") || searchParams.get("reference");
-  const transactionReference = searchParams.get("transactionReference");
+  const transactionReference = searchParams.get("transactionReference") || searchParams.get("transaction_ref");
 
   const reference = paymentReference || transactionReference;
 
@@ -71,7 +71,7 @@ export default function PaymentCallbackPage() {
       }
 
       try {
-        const res = await fetch(`/api/monnify/verify/${reference}`, {
+        const res = await fetch(`/api/squad/verify/${reference}`, {
           credentials: "include",
         });
 
@@ -82,7 +82,7 @@ export default function PaymentCallbackPage() {
 
         const result: PaymentVerificationResult = await res.json();
 
-        if (result.status === "PAID") {
+        if (result.status === "success") {
           setStatus("creating_orders");
           
           const pendingCheckoutStr = localStorage.getItem("pendingCheckout");
@@ -134,7 +134,7 @@ export default function PaymentCallbackPage() {
               description: `Your wallet has been credited with ₦${result.amountPaid.toLocaleString()}`,
             });
           }
-        } else if (result.status === "PENDING") {
+        } else if (result.status === "pending") {
           setStatus("verifying");
           setTimeout(verifyPayment, 3000);
         } else {

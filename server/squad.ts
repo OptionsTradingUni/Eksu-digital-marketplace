@@ -121,35 +121,60 @@ export async function initializePayment(
   };
 }
 
+// Raw response from Squad API (snake_case)
+interface SquadTransactionResponse {
+  transaction_amount: number;
+  transaction_ref: string;
+  email: string;
+  transaction_status: string;
+  transaction_currency_id: string;
+  created_at: string;
+  transaction_type: string;
+  merchant_name: string;
+  merchant_business_name: string | null;
+  gateway_transaction_ref: string;
+  recurring: string | null;
+  merchant_email: string;
+  plan_code: string | null;
+}
+
+// Normalized TypeScript interface (camelCase)
 export interface TransactionStatus {
   transactionRef: string;
   transactionStatus: 'success' | 'pending' | 'failed' | 'abandoned';
   transactionAmount: number;
   transactionCurrencyId: string;
-  customerEmail: string;
-  customerName: string;
-  merchantAmount: number;
-  merchantFee: number;
-  gatewayRef: string;
+  email: string;
   createdAt: string;
-  paymentInformation?: {
-    paymentType: string;
-    bankCode?: string;
-    accountNumber?: string;
-  };
-  metadata?: Record<string, any>;
+  transactionType: string;
+  merchantName: string;
+  gatewayTransactionRef: string;
 }
 
 /**
  * Verify a transaction by its reference
+ * Note: Squad returns amounts in the currency unit (naira), not kobo
  */
 export async function verifyTransaction(
   transactionRef: string
 ): Promise<TransactionStatus> {
-  return squadRequest<TransactionStatus>(
+  const raw = await squadRequest<SquadTransactionResponse>(
     `/transaction/verify/${transactionRef}`,
     'GET'
   );
+  
+  // Normalize snake_case response to camelCase
+  return {
+    transactionRef: raw.transaction_ref,
+    transactionStatus: raw.transaction_status.toLowerCase() as TransactionStatus['transactionStatus'],
+    transactionAmount: raw.transaction_amount,
+    transactionCurrencyId: raw.transaction_currency_id,
+    email: raw.email,
+    createdAt: raw.created_at,
+    transactionType: raw.transaction_type,
+    merchantName: raw.merchant_name,
+    gatewayTransactionRef: raw.gateway_transaction_ref,
+  };
 }
 
 export interface CreateVirtualAccountRequest {

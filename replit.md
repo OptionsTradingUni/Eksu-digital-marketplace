@@ -41,7 +41,7 @@ The EKSU Campus Marketplace is built with a modern full-stack architecture.
 - **Role Switcher:** Users can dynamically switch between buyer, seller, and admin modes.
 - **Login Streak Rewards:** Daily rewards for consistent platform engagement.
 - **System Account (Campus Hub):** An official marketplace account that auto-follows new users, sends welcome messages, and can post announcements in "The Plug" social feed. Regular users cannot follow back or message this account.
-- **Monnify Payment Integration:** Comprehensive payment processing (Card, Bank Transfer, USSD) with fee calculation, seller payouts, and bank verification.
+- **Squad/Habari Payment Integration:** Comprehensive payment processing (Card, Bank Transfer, USSD) with instant settlement (T+0) for bank transfers, fee calculation, seller payouts, and bank verification. Payment callbacks handled via `/payment/callback` route.
 - **Order Management System:** 11 delivery statuses with full audit trail, role-based permissions, unique order numbers, delivery method selection, and escrow integration.
 - **Security:** Role-based access control, user verification, trust scores, reporting mechanisms, admin moderation, session management, and HTTPS enforcement. Admin/Support roles are managed via environment variables and database flags.
 
@@ -54,7 +54,7 @@ The EKSU Campus Marketplace is built with a modern full-stack architecture.
 
 - **PostgreSQL:** Primary database.
 - **Groq API:** For the AI Chatbot (`llama-3.3-70b-versatile`).
-- **Monnify API:** Payment gateway for transactions, payouts, and bank verification.
+- **Squad/Habari API:** Payment gateway for transactions, payouts, and bank verification. Environment variables: `SQUAD_SECRET_KEY`, `SQUAD_PUBLIC_KEY`.
 - **Passport.js:** Authentication middleware.
 - **Drizzle ORM:** Database interaction.
 - **Socket.io-like WebSocket:** Real-time communication.

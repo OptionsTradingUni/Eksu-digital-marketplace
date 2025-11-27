@@ -774,21 +774,21 @@ Happy trading!`;
 
       const paymentResult = await squad.initializePayment({
         amount,
+        email: user.email,
         customerName: `${user.firstName} ${user.lastName}`,
-        customerEmail: user.email,
-        paymentReference,
-        paymentDescription: validated.paymentDescription || `${validated.purpose} - EKSU Marketplace`,
-        redirectUrl,
+        transactionRef: paymentReference,
+        callbackUrl: redirectUrl,
         metadata: {
           userId,
           purpose: validated.purpose,
+          paymentDescription: validated.paymentDescription || `${validated.purpose} - EKSU Marketplace`,
         },
       });
 
       // Store payment record in database
       await storage.createSquadPayment({
         userId,
-        transactionReference: paymentResult.transactionReference,
+        transactionReference: paymentResult.transactionRef,
         amount: amount.toString(),
         purpose: validated.purpose,
         status: 'pending',
@@ -797,7 +797,7 @@ Happy trading!`;
 
       res.json({
         checkoutUrl: paymentResult.checkoutUrl,
-        transactionReference: paymentResult.transactionReference,
+        transactionReference: paymentResult.transactionRef,
         paymentReference,
       });
     } catch (error) {
@@ -833,14 +833,14 @@ Happy trading!`;
       const transactionStatus = await squad.verifyTransaction(reference);
 
       // Update payment status in database
-      const paidAt = transactionStatus.paymentStatus === 'success' && transactionStatus.paidOn
-        ? new Date(transactionStatus.paidOn)
+      const paidAt = transactionStatus.transactionStatus === 'success' && transactionStatus.createdAt
+        ? new Date(transactionStatus.createdAt)
         : undefined;
       
-      await storage.updateSquadPaymentStatus(reference, transactionStatus.paymentStatus, paidAt);
+      await storage.updateSquadPaymentStatus(reference, transactionStatus.transactionStatus, paidAt);
 
       // If payment is successful, credit wallet
-      if (transactionStatus.paymentStatus === 'success' && payment.status !== 'success') {
+      if (transactionStatus.transactionStatus === 'success' && payment.status !== 'success') {
         const wallet = await storage.getOrCreateWallet(userId);
         await storage.updateWalletBalance(userId, payment.amount, 'add');
         
@@ -854,10 +854,10 @@ Happy trading!`;
       }
 
       res.json({
-        status: transactionStatus.paymentStatus,
-        amountPaid: transactionStatus.amountPaid,
-        paymentMethod: transactionStatus.paymentMethod,
-        paidOn: transactionStatus.paidOn,
+        status: transactionStatus.transactionStatus,
+        amountPaid: transactionStatus.transactionAmount,
+        paymentMethod: transactionStatus.transactionType || 'unknown',
+        paidOn: transactionStatus.createdAt,
       });
     } catch (error) {
       console.error("Error verifying Squad payment:", error);
@@ -1069,15 +1069,15 @@ Happy trading!`;
         // Update transfer status
         await storage.updateSquadTransferStatus(
           reference,
-          transferResult.status,
+          transferResult.transactionStatus,
           undefined,
-          transferResult.status === 'success' ? new Date() : undefined
+          transferResult.transactionStatus === 'success' ? new Date() : undefined
         );
 
         res.json({
           message: "Withdrawal initiated successfully",
           reference,
-          status: transferResult.status,
+          status: transferResult.transactionStatus,
         });
       } catch (transferError) {
         // Refund wallet if transfer fails
