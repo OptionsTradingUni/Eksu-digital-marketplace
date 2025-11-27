@@ -1426,6 +1426,12 @@ export default function Messages() {
                     Verified
                   </Badge>
                 )}
+                {disappearingSettings && disappearingSettings.duration > 0 && (
+                  <Badge variant="secondary" className="text-xs gap-1" data-testid="badge-disappearing">
+                    <Timer className="h-3 w-3" />
+                    {DISAPPEARING_DURATIONS.find(d => d.seconds === disappearingSettings.duration)?.label || "On"}
+                  </Badge>
+                )}
                 <span className="text-xs text-muted-foreground" data-testid="text-chat-status">
                   {selectedUser && onlineUserIds.has(selectedUser) ? "Online" : "Offline"}
                 </span>

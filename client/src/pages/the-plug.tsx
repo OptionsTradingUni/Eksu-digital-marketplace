@@ -1071,7 +1071,11 @@ export default function ThePlugPage() {
       </motion.button>
 
       <Dialog open={showMobileComposer} onOpenChange={setShowMobileComposer}>
-        <DialogContent className="sm:max-w-[500px] p-0">
+        <DialogContent 
+          className="sm:max-w-[500px] p-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader className="p-4 border-b">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-lg font-bold">New Post</DialogTitle>

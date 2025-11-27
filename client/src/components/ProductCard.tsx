@@ -214,17 +214,17 @@ export function ProductCard({ product }: ProductCardProps) {
             </Badge>
           )}
         </div>
-        <CardContent className="p-4">
-          <h3 className="font-semibold line-clamp-2 mb-2" data-testid={`text-product-title-${product.id}`}>
+        <CardContent className="p-3">
+          <h3 className="font-semibold line-clamp-2 text-sm mb-1.5" data-testid={`text-product-title-${product.id}`}>
             {product.title}
           </h3>
-          <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex flex-col">
-              <p className={`text-2xl font-bold ${isOnSale ? "text-red-500 dark:text-red-400" : "text-primary"}`} data-testid={`text-product-price-${product.id}`}>
+              <p className={`text-lg font-bold ${isOnSale ? "text-red-500 dark:text-red-400" : "text-foreground"}`} data-testid={`text-product-price-${product.id}`}>
                 ₦{price.toLocaleString()}
               </p>
               {isOnSale && originalPrice && (
-                <p className="text-sm text-muted-foreground line-through" data-testid={`text-product-original-price-${product.id}`}>
+                <p className="text-xs text-muted-foreground line-through" data-testid={`text-product-original-price-${product.id}`}>
                   ₦{originalPrice.toLocaleString()}
                 </p>
               )}
@@ -243,16 +243,15 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-2">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
             {product.location && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <MapPin className="h-3 w-3" />
-                <span>{product.location}</span>
+                <span className="truncate max-w-[80px]">{product.location}</span>
               </div>
             )}
             {distanceDisplay && (
-              <Badge variant="secondary" className="text-xs py-0 px-1.5" data-testid={`badge-distance-${product.id}`}>
-                <MapPin className="h-3 w-3 mr-1" />
+              <Badge variant="secondary" className="text-[10px] py-0 px-1" data-testid={`badge-distance-${product.id}`}>
                 {distanceDisplay}
               </Badge>
             )}
