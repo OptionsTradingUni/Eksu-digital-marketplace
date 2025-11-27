@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle, Share2, Briefcase, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NotificationBell from "@/components/NotificationBell";
@@ -13,6 +13,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
@@ -113,6 +117,8 @@ export function Header() {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    
+                    {/* Main Actions - Always visible */}
                     <DropdownMenuItem asChild>
                       <Link href="/profile" data-testid="link-my-profile">
                         <User className="mr-2 h-4 w-4" />
@@ -131,66 +137,106 @@ export function Header() {
                         My Ads
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/vtu" data-testid="link-vtu-data">
-                        <Smartphone className="mr-2 h-4 w-4" />
-                        VTU Data
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/settings" data-testid="link-settings">
-                        <Settings className="mr-2 h-4 w-4" />
-                        Settings
-                      </Link>
-                    </DropdownMenuItem>
+                    
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/referrals" data-testid="link-referrals">
-                        <Users className="mr-2 h-4 w-4" />
-                        Referrals
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/notifications" data-testid="link-notifications">
-                        <Bell className="mr-2 h-4 w-4" />
-                        Notifications
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/wishlist" data-testid="link-wishlist">
-                        <Heart className="mr-2 h-4 w-4" />
-                        Wishlist
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/the-plug?tab=bookmarks" data-testid="link-bookmarks">
-                        <Bookmark className="mr-2 h-4 w-4" />
-                        Saved Posts
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/communities" data-testid="link-communities">
-                        <UsersRound className="mr-2 h-4 w-4" />
-                        Communities
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/confessions" data-testid="link-confessions">
-                        <MessageCircle className="mr-2 h-4 w-4" />
-                        Confessions
-                      </Link>
-                    </DropdownMenuItem>
+                    
+                    {/* Social - Collapsible submenu */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger data-testid="submenu-social">
+                        <Share2 className="mr-2 h-4 w-4" />
+                        Social
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem asChild>
+                            <Link href="/the-plug?tab=bookmarks" data-testid="link-bookmarks">
+                              <Bookmark className="mr-2 h-4 w-4" />
+                              Saved Posts
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/communities" data-testid="link-communities">
+                              <UsersRound className="mr-2 h-4 w-4" />
+                              Communities
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/confessions" data-testid="link-confessions">
+                              <MessageCircle className="mr-2 h-4 w-4" />
+                              Confessions
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                    
+                    {/* Services - Collapsible submenu */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger data-testid="submenu-services">
+                        <Briefcase className="mr-2 h-4 w-4" />
+                        Services
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem asChild>
+                            <Link href="/vtu" data-testid="link-vtu-data">
+                              <Smartphone className="mr-2 h-4 w-4" />
+                              VTU Data
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/referrals" data-testid="link-referrals">
+                              <Users className="mr-2 h-4 w-4" />
+                              Referrals
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                    
+                    {/* Account - Collapsible submenu */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger data-testid="submenu-account">
+                        <UserCog className="mr-2 h-4 w-4" />
+                        Account
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuPortal>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem asChild>
+                            <Link href="/settings" data-testid="link-settings">
+                              <Settings className="mr-2 h-4 w-4" />
+                              Settings
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/notifications" data-testid="link-notifications">
+                              <Bell className="mr-2 h-4 w-4" />
+                              Notifications
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/wishlist" data-testid="link-wishlist">
+                              <Heart className="mr-2 h-4 w-4" />
+                              Wishlist
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/kyc" data-testid="link-kyc-verify">
+                              <Shield className="mr-2 h-4 w-4" />
+                              Verify Identity
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuPortal>
+                    </DropdownMenuSub>
+                    
                     <DropdownMenuSeparator />
+                    
+                    {/* Other - Always visible */}
                     <DropdownMenuItem asChild>
                       <Link href="/support" data-testid="link-support">
                         <HelpCircle className="mr-2 h-4 w-4" />
                         Help & Support
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/kyc" data-testid="link-kyc-verify">
-                        <Shield className="mr-2 h-4 w-4" />
-                        Verify Identity
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -199,15 +245,23 @@ export function Header() {
                         Legal & Privacy
                       </Link>
                     </DropdownMenuItem>
+                    
+                    {/* Admin Panel - Visible for admins only */}
                     {isAdmin && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin" data-testid="link-admin-panel">
-                          <Settings className="mr-2 h-4 w-4" />
-                          Admin Panel
-                        </Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin" data-testid="link-admin-panel">
+                            <Settings className="mr-2 h-4 w-4" />
+                            Admin Panel
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
+                    
                     <DropdownMenuSeparator />
+                    
+                    {/* Theme Toggle */}
                     <DropdownMenuItem
                       onClick={toggleTheme}
                       className="cursor-pointer"
@@ -225,6 +279,8 @@ export function Header() {
                         </>
                       )}
                     </DropdownMenuItem>
+                    
+                    {/* Logout */}
                     <DropdownMenuItem 
                       onClick={async () => {
                         try {

@@ -42,7 +42,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import { UserActionsMenu } from "@/components/UserActionsMenu";
 import type { Message, User, MessageReaction, ArchivedConversation, DisappearingMessageSetting } from "@shared/schema";
-import { useSearch, useParams } from "wouter";
+import { useSearch, useParams, useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 
 type WebSocketStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -263,6 +263,43 @@ function MessageReactions({
   );
 }
 
+// Helper function to parse message content and extract Cloudinary URLs
+const CLOUDINARY_URL_REGEX = /(https?:\/\/res\.cloudinary\.com\/[^\s]+)/g;
+
+function parseMessageContent(content: string): Array<{ type: 'text' | 'image'; value: string }> {
+  const parts: Array<{ type: 'text' | 'image'; value: string }> = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = CLOUDINARY_URL_REGEX.exec(content)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      const text = content.substring(lastIndex, match.index).trim();
+      if (text) {
+        parts.push({ type: 'text', value: text });
+      }
+    }
+    // Add the Cloudinary URL as an image
+    parts.push({ type: 'image', value: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add any remaining text after the last URL
+  if (lastIndex < content.length) {
+    const text = content.substring(lastIndex).trim();
+    if (text) {
+      parts.push({ type: 'text', value: text });
+    }
+  }
+
+  // If no URLs found, return the original content as text
+  if (parts.length === 0 && content) {
+    parts.push({ type: 'text', value: content });
+  }
+
+  return parts;
+}
+
 // Chat bubble component with reactions and blue checkmarks
 function ChatBubble({ 
   message, 
@@ -346,14 +383,36 @@ function ChatBubble({
             </div>
           )}
           
-          {/* Message content */}
+          {/* Message content with inline Cloudinary images */}
           {message.content && (
-            <p 
-              className={`text-sm whitespace-pre-wrap break-words ${message.imageUrl ? 'px-2 pb-1' : ''}`}
+            <div 
+              className={`text-sm ${message.imageUrl ? 'px-2 pb-1' : ''}`}
               data-testid={`text-message-content-${message.id}`}
             >
-              {message.content}
-            </p>
+              {parseMessageContent(message.content).map((part, index) => {
+                if (part.type === 'image') {
+                  return (
+                    <img
+                      key={index}
+                      src={part.value}
+                      alt="Shared image"
+                      className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer my-1"
+                      onClick={() => window.open(part.value, '_blank')}
+                      loading="lazy"
+                      data-testid={`inline-image-${message.id}-${index}`}
+                    />
+                  );
+                }
+                return (
+                  <p 
+                    key={index} 
+                    className="whitespace-pre-wrap break-words"
+                  >
+                    {part.value}
+                  </p>
+                );
+              })}
+            </div>
           )}
           
           {/* Timestamp and read status */}
@@ -632,6 +691,7 @@ export default function Messages() {
   // Support both URL param (/messages/:userId or /chat/:userId) and query param (?user=...)
   const preselectedUserId = urlUserId || queryUserId;
   const isMobile = useIsMobile();
+  const [, navigate] = useLocation();
   
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
@@ -1401,25 +1461,33 @@ export default function Messages() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             )}
-            <div className="relative">
-              <Avatar>
-                <AvatarImage src={selectedThread?.user.profileImageUrl || undefined} />
-                <AvatarFallback>
-                  {selectedThread?.user.firstName?.[0] || selectedThread?.user.email?.[0]}
-                </AvatarFallback>
-              </Avatar>
-              {/* Online indicator */}
-              <span
-                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                  selectedUser && onlineUserIds.has(selectedUser) ? "bg-green-500" : "bg-muted-foreground/50"
-                }`}
-                data-testid="status-chat-online"
-              />
-            </div>
+            <button
+              onClick={() => selectedUser && navigate(`/profile/${selectedUser}`)}
+              className="flex items-center gap-3 cursor-pointer hover-elevate rounded-lg p-1 -m-1"
+              data-testid="button-view-seller-profile"
+            >
+              <div className="relative">
+                <Avatar>
+                  <AvatarImage src={selectedThread?.user.profileImageUrl || undefined} />
+                  <AvatarFallback>
+                    {selectedThread?.user.firstName?.[0] || selectedThread?.user.email?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Online indicator */}
+                <span
+                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
+                    selectedUser && onlineUserIds.has(selectedUser) ? "bg-green-500" : "bg-muted-foreground/50"
+                  }`}
+                  data-testid="status-chat-online"
+                />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold" data-testid="text-chat-user-name">
+                  {selectedThread?.user.firstName || selectedThread?.user.email}
+                </p>
+              </div>
+            </button>
             <div className="flex-1">
-              <p className="font-semibold" data-testid="text-chat-user-name">
-                {selectedThread?.user.firstName || selectedThread?.user.email}
-              </p>
               <div className="flex items-center gap-2 flex-wrap">
                 {selectedThread?.user.isVerified && (
                   <Badge variant="outline" className="text-xs" data-testid="badge-verified">
@@ -1587,6 +1655,13 @@ export default function Messages() {
                   className="min-h-[40px] max-h-[120px] resize-none pr-10"
                   rows={1}
                   data-testid="input-message"
+                  inputMode="text"
+                  enterKeyHint="send"
+                  onFocus={(e) => {
+                    setTimeout(() => {
+                      e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 300);
+                  }}
                 />
                 
                 {/* Emoji picker */}

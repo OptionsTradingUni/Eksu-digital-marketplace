@@ -417,7 +417,7 @@ export default function ChatBot() {
     return (
       <Button
         size="lg"
-        className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 rounded-full shadow-2xl z-[9999] bg-primary border-2 border-primary-foreground/10 h-14 w-14"
+        className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 rounded-full shadow-2xl z-[9999] bg-primary border-2 border-primary-foreground/10 h-14 w-14"
         onClick={() => setIsOpen(true)}
         data-testid="button-open-chatbot"
         aria-label="Open chat assistant"
@@ -429,7 +429,7 @@ export default function ChatBot() {
   }
 
   return (
-    <Card className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[400px] h-[70vh] sm:h-[600px] max-h-[600px] shadow-2xl flex flex-col z-[9999] border-2 bg-background/95 backdrop-blur-sm" data-testid="card-chatbot">
+    <Card className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[400px] h-[70vh] sm:h-[600px] max-h-[600px] shadow-2xl flex flex-col z-[9999] border-2 bg-background/95 backdrop-blur-sm" data-testid="card-chatbot">
       <div className="flex items-center justify-between gap-2 p-3 border-b bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           {isNotOnHome && (
