@@ -3560,6 +3560,333 @@ Happy trading!`;
     }
   });
 
+  // ========== BOOKMARK ENDPOINTS ==========
+  
+  // Bookmark a post
+  app.post("/api/social-posts/:id/bookmark", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const postId = req.params.id;
+      const isBookmarked = await storage.isPostBookmarked(userId, postId);
+      
+      if (isBookmarked) {
+        await storage.unbookmarkPost(userId, postId);
+        res.json({ success: true, action: "unbookmarked" });
+      } else {
+        await storage.bookmarkPost(userId, postId);
+        res.json({ success: true, action: "bookmarked" });
+      }
+    } catch (error) {
+      console.error("Error toggling bookmark:", error);
+      res.status(500).json({ message: "Failed to toggle bookmark" });
+    }
+  });
+  
+  // Get user's bookmarks
+  app.get("/api/users/me/bookmarks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const bookmarks = await storage.getUserBookmarks(userId);
+      res.json(bookmarks);
+    } catch (error) {
+      console.error("Error fetching bookmarks:", error);
+      res.status(500).json({ message: "Failed to fetch bookmarks" });
+    }
+  });
+
+  // ========== SMART FEED ALGORITHM ENDPOINTS ==========
+  
+  // Get enhanced feed with algorithm
+  app.get("/api/feed", async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const feedType = req.query.type === 'following' ? 'following' : 'for_you';
+      
+      const posts = await storage.getSocialPostsWithAlgorithm({
+        userId: userId || undefined,
+        feedType: feedType as 'for_you' | 'following'
+      });
+      
+      // If logged in, also check bookmark status
+      if (userId) {
+        const postsWithBookmarks = await Promise.all(posts.map(async (post) => ({
+          ...post,
+          isBookmarked: await storage.isPostBookmarked(userId, post.id)
+        })));
+        res.json(postsWithBookmarks);
+      } else {
+        res.json(posts.map(p => ({ ...p, isBookmarked: false })));
+      }
+    } catch (error) {
+      console.error("Error fetching feed:", error);
+      res.status(500).json({ message: "Failed to fetch feed" });
+    }
+  });
+  
+  // Track post view
+  app.post("/api/social-posts/:id/view", async (req, res) => {
+    try {
+      const postId = req.params.id;
+      await storage.incrementPostViews(postId);
+      await storage.updatePostEngagementScore(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error tracking view:", error);
+      res.status(500).json({ message: "Failed to track view" });
+    }
+  });
+  
+  // Track post share
+  app.post("/api/social-posts/:id/share", async (req: any, res) => {
+    try {
+      const postId = req.params.id;
+      await storage.incrementPostShares(postId);
+      await storage.updatePostEngagementScore(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error tracking share:", error);
+      res.status(500).json({ message: "Failed to track share" });
+    }
+  });
+
+  // ========== POST PIN ENDPOINTS ==========
+  
+  // Pin a post
+  app.post("/api/social-posts/:id/pin", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const postId = req.params.id;
+      const post = await storage.getSocialPostById(postId);
+      
+      if (!post || post.authorId !== userId) {
+        return res.status(403).json({ message: "You can only pin your own posts" });
+      }
+      
+      await storage.pinPost(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error pinning post:", error);
+      res.status(500).json({ message: "Failed to pin post" });
+    }
+  });
+  
+  // Unpin a post
+  app.delete("/api/social-posts/:id/pin", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const postId = req.params.id;
+      const post = await storage.getSocialPostById(postId);
+      
+      if (!post || post.authorId !== userId) {
+        return res.status(403).json({ message: "You can only unpin your own posts" });
+      }
+      
+      await storage.unpinPost(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unpinning post:", error);
+      res.status(500).json({ message: "Failed to unpin post" });
+    }
+  });
+  
+  // Get user's pinned posts
+  app.get("/api/users/:id/pinned-posts", async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const pinnedPosts = await storage.getUserPinnedPosts(userId);
+      res.json(pinnedPosts);
+    } catch (error) {
+      console.error("Error fetching pinned posts:", error);
+      res.status(500).json({ message: "Failed to fetch pinned posts" });
+    }
+  });
+
+  // ========== USERNAME AND PROFILE ENDPOINTS ==========
+  
+  // Get user by username
+  app.get("/api/users/username/:username", async (req, res) => {
+    try {
+      const username = req.params.username;
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Return safe user data (no password)
+      const { password, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error fetching user by username:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+  
+  // Update username
+  app.patch("/api/users/me/username", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { username } = req.body;
+      if (!username || username.length < 3 || username.length > 20) {
+        return res.status(400).json({ message: "Username must be 3-20 characters" });
+      }
+      
+      // Check if username is taken
+      const existing = await storage.getUserByUsername(username);
+      if (existing && existing.id !== userId) {
+        return res.status(409).json({ message: "Username already taken" });
+      }
+      
+      const user = await storage.updateUsername(userId, username);
+      const { password, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating username:", error);
+      res.status(500).json({ message: "Failed to update username" });
+    }
+  });
+
+  // ========== EKSUPLUG SYSTEM ACCOUNT ENDPOINTS ==========
+  
+  // Get or create EKSUPlug system account
+  app.get("/api/system/eksuplug", async (req, res) => {
+    try {
+      let eksuplug = await storage.getSystemAccount("eksuplug");
+      
+      if (!eksuplug) {
+        // Create the @EKSUPlug system account
+        eksuplug = await storage.createSystemAccount({
+          email: "eksuplug@system.local",
+          username: "eksuplug",
+          firstName: "EKSU",
+          lastName: "Plug",
+          type: "eksuplug",
+          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
+          profileImageUrl: "/eksu-plug-avatar.png"
+        });
+      }
+      
+      const { password, ...safeUser } = eksuplug;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error getting EKSUPlug account:", error);
+      res.status(500).json({ message: "Failed to get EKSUPlug account" });
+    }
+  });
+  
+  // Post as EKSUPlug (Admin only)
+  app.post("/api/system/eksuplug/post", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Check if user is admin
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can post as EKSUPlug" });
+      }
+      
+      // Get or create EKSUPlug account
+      let eksuplug = await storage.getSystemAccount("eksuplug");
+      if (!eksuplug) {
+        eksuplug = await storage.createSystemAccount({
+          email: "eksuplug@system.local",
+          username: "eksuplug",
+          firstName: "EKSU",
+          lastName: "Plug",
+          type: "eksuplug",
+          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
+        });
+      }
+      
+      const { content, images, videos, replyRestriction } = req.body;
+      
+      // Extract hashtags from content
+      const hashtags = (content.match(/#\w+/g) || []).map((h: string) => h.slice(1).toLowerCase());
+      
+      // Extract mentions from content
+      const mentionMatches = content.match(/@\w+/g) || [];
+      const mentionedUsernames = mentionMatches.map((m: string) => m.slice(1).toLowerCase());
+      const mentionedUserIds: string[] = [];
+      
+      for (const username of mentionedUsernames) {
+        const user = await storage.getUserByUsername(username);
+        if (user) mentionedUserIds.push(user.id);
+      }
+      
+      const post = await storage.createSocialPostWithOptions({
+        authorId: eksuplug.id,
+        content,
+        images: images || [],
+        videos: videos || [],
+        replyRestriction: replyRestriction || 'everyone',
+        mentionedUserIds,
+        hashtags,
+        isFromSystemAccount: true
+      });
+      
+      res.json(post);
+    } catch (error) {
+      console.error("Error posting as EKSUPlug:", error);
+      res.status(500).json({ message: "Failed to post as EKSUPlug" });
+    }
+  });
+  
+  // Auto-follow EKSUPlug on user registration (called internally)
+  app.post("/api/system/eksuplug/auto-follow", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get EKSUPlug account
+      let eksuplug = await storage.getSystemAccount("eksuplug");
+      if (!eksuplug) {
+        eksuplug = await storage.createSystemAccount({
+          email: "eksuplug@system.local",
+          username: "eksuplug", 
+          firstName: "EKSU",
+          lastName: "Plug",
+          type: "eksuplug",
+          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
+        });
+      }
+      
+      // Check if already following
+      const isFollowing = await storage.isFollowing(userId, eksuplug.id);
+      if (!isFollowing) {
+        await storage.followUser(userId, eksuplug.id);
+      }
+      
+      res.json({ success: true, following: true });
+    } catch (error) {
+      console.error("Error auto-following EKSUPlug:", error);
+      res.status(500).json({ message: "Failed to auto-follow EKSUPlug" });
+    }
+  });
+
   // Admin Metrics Routes - Database & Memory Monitoring
   app.get("/api/admin/metrics/tables", isAuthenticated, async (req: any, res) => {
     try {

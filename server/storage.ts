@@ -437,6 +437,7 @@ export interface IStorage {
   
   // Social post operations ("The Plug")
   getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean })[]>;
+  getSocialPostById(postId: string): Promise<SocialPost | undefined>;
   createSocialPost(post: { authorId: string; content: string; images?: string[]; videos?: string[] }): Promise<SocialPost>;
   getSocialPost(id: string): Promise<(SocialPost & { author: User }) | undefined>;
   likeSocialPost(postId: string, userId: string): Promise<SocialPostLike>;
@@ -2942,6 +2943,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Social post operations ("The Plug")
+  async getSocialPostById(postId: string): Promise<SocialPost | undefined> {
+    const [post] = await db.select().from(socialPosts).where(eq(socialPosts.id, postId));
+    return post;
+  }
+
   async getSocialPosts(options?: { authorId?: string; followingOnly?: boolean; userId?: string }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean })[]> {
     let query = db
       .select()
