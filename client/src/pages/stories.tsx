@@ -556,21 +556,49 @@ function CreateStoryModal({
   const [fontStyle, setFontStyle] = useState("sans-serif");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/stories", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
+      setIsUploading(true);
+      setUploadProgress(0);
+      
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+        
+        xhr.addEventListener("load", () => {
+          setIsUploading(false);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            try {
+              const error = JSON.parse(xhr.responseText);
+              reject(new Error(error.message || "Failed to create story"));
+            } catch {
+              reject(new Error("Failed to create story"));
+            }
+          }
+        });
+        
+        xhr.addEventListener("error", () => {
+          setIsUploading(false);
+          reject(new Error("Network error occurred"));
+        });
+        
+        xhr.open("POST", "/api/stories");
+        xhr.withCredentials = true;
+        xhr.send(formData);
       });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create story");
-      }
-      return response.json();
     },
     onSuccess: () => {
       toast({ title: "Story posted!" });
@@ -590,6 +618,8 @@ function CreateStoryModal({
     setFontStyle("sans-serif");
     setMediaFile(null);
     setMediaPreview(null);
+    setUploadProgress(0);
+    setIsUploading(false);
     onClose();
   };
   
@@ -633,15 +663,19 @@ function CreateStoryModal({
     
     createMutation.mutate(formData);
   };
+  
+  const canSubmit = storyType === "text" 
+    ? textContent.trim().length > 0 
+    : !!mediaFile;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-md p-0 overflow-hidden">
-        <DialogHeader className="p-4 border-b">
+      <DialogContent className="max-w-md p-0 flex flex-col max-h-[85vh] overflow-hidden">
+        <DialogHeader className="p-4 border-b shrink-0">
           <DialogTitle>Create Story</DialogTitle>
         </DialogHeader>
         
-        <div className="p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           <div className="flex gap-2 mb-4">
             <Button
               variant={storyType === "text" ? "default" : "outline"}
@@ -694,7 +728,7 @@ function CreateStoryModal({
           {storyType === "text" ? (
             <>
               <div 
-                className="aspect-[9/16] rounded-lg mb-4 flex items-center justify-center p-4"
+                className="aspect-[9/16] max-h-[40vh] rounded-lg mb-4 flex items-center justify-center p-4"
                 style={{ backgroundColor }}
               >
                 <Textarea
@@ -710,7 +744,7 @@ function CreateStoryModal({
               
               <div className="mb-4">
                 <p className="text-sm text-muted-foreground mb-2">Background Color</p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {BACKGROUND_COLORS.map(color => (
                     <button
                       key={color}
@@ -725,7 +759,7 @@ function CreateStoryModal({
               
               <div className="mb-4">
                 <p className="text-sm text-muted-foreground mb-2">Font Style</p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {FONT_STYLES.map(font => (
                     <Button
                       key={font.value}
@@ -742,13 +776,17 @@ function CreateStoryModal({
               </div>
             </>
           ) : (
-            <div className="aspect-[9/16] rounded-lg mb-4 bg-muted flex items-center justify-center overflow-hidden">
+            <div 
+              className="aspect-[9/16] max-h-[40vh] rounded-lg mb-4 bg-muted flex items-center justify-center overflow-hidden cursor-pointer"
+              onClick={() => !mediaPreview && fileInputRef.current?.click()}
+            >
               {mediaPreview ? (
                 storyType === "video" ? (
                   <video 
                     src={mediaPreview} 
                     className="w-full h-full object-contain" 
                     controls
+                    playsInline
                     data-testid="preview-video"
                   />
                 ) : (
@@ -760,21 +798,58 @@ function CreateStoryModal({
                   />
                 )
               ) : (
-                <div className="text-center text-muted-foreground">
+                <div className="text-center text-muted-foreground p-4">
                   <ImageIcon className="w-12 h-12 mx-auto mb-2" />
-                  <p>Click to select media</p>
+                  <p>Tap to select media</p>
                 </div>
               )}
+            </div>
+          )}
+          
+          {mediaPreview && (storyType === "image" || storyType === "video") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full mb-4"
+              data-testid="button-change-media"
+            >
+              <ImageIcon className="w-4 h-4 mr-2" />
+              Change Media
+            </Button>
+          )}
+        </div>
+        
+        <div className="shrink-0 p-4 border-t bg-background sticky bottom-0 z-10">
+          {isUploading && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-sm text-muted-foreground mb-1">
+                <span>Uploading...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} className="h-2" data-testid="upload-progress" />
             </div>
           )}
           
           <Button
             className="w-full"
             onClick={handleSubmit}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || isUploading || !canSubmit}
             data-testid="button-post-story"
           >
-            {createMutation.isPending ? "Posting..." : "Post Story"}
+            {isUploading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Uploading {uploadProgress}%
+              </>
+            ) : createMutation.isPending ? (
+              "Posting..."
+            ) : (
+              "Post Story"
+            )}
           </Button>
         </div>
       </DialogContent>

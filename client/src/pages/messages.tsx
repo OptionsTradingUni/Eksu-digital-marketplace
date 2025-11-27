@@ -1190,7 +1190,7 @@ export default function Messages() {
 
   // Thread list content
   const ThreadListContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b">
         <h2 className="font-semibold text-lg mb-3" data-testid="text-messages-title">Messages</h2>
@@ -1289,7 +1289,7 @@ export default function Messages() {
 
   // Chat content
   const ChatContent = (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
       {selectedUser ? (
         <>
           {/* Chat Header */}
@@ -1382,7 +1382,7 @@ export default function Messages() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
             {messagesLoading ? (
               <div className="space-y-4">
                 {[...Array(5)].map((_, i) => (
@@ -1418,15 +1418,37 @@ export default function Messages() {
             )}
           </div>
 
-          {/* Input Area */}
-          <form onSubmit={handleSend} className="p-4 border-t">
+          {/* Input Area - sticky at bottom with safe area padding */}
+          <form 
+            onSubmit={handleSend} 
+            className="p-4 border-t bg-background shrink-0"
+            style={{
+              paddingBottom: isMobile ? 'max(1rem, env(safe-area-inset-bottom, 0px))' : '1rem'
+            }}
+          >
             <div className="flex items-end gap-2">
               {/* Attachment button */}
+              <input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    toast({
+                      title: "File selected",
+                      description: `${file.name} ready to upload`,
+                    });
+                  }
+                }}
+              />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="shrink-0"
+                onClick={() => document.getElementById('file-upload')?.click()}
                 data-testid="button-attachment"
               >
                 <Paperclip className="h-5 w-5" />
@@ -1487,7 +1509,13 @@ export default function Messages() {
   if (isMobile) {
     return (
       <>
-        <div className="h-[calc(100vh-4rem)] flex flex-col">
+        <div 
+          className="flex flex-col pb-16"
+          style={{
+            height: 'calc(100dvh - 4rem)',
+            paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))'
+          }}
+        >
           {showMobileChat ? (
             ChatContent
           ) : (
@@ -1511,7 +1539,10 @@ export default function Messages() {
   // Desktop layout
   return (
     <>
-      <div className="h-[calc(100vh-4rem)] flex">
+      <div 
+        className="flex"
+        style={{ height: 'calc(100dvh - 4rem)' }}
+      >
         {/* Threads List */}
         <div className="w-80 border-r flex flex-col">
           {ThreadListContent}
