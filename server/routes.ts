@@ -36,14 +36,14 @@ import {
   resetPasswordSchema,
   createAnnouncementSchema,
   updateAnnouncementSchema,
-  initiateMonnifyPaymentSchema,
+  initiateSquadPaymentSchema,
   insertNegotiationSchema,
   createOrderSchema,
   updateOrderStatusSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
-import { monnify, generatePaymentReference, generateDisbursementReference, isMonnifyConfigured } from "./monnify";
-import { calculatePricingFromSellerPrice, calculateMonnifyFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
+import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
+import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -742,17 +742,17 @@ Happy trading!`;
     }
   });
 
-  // ==================== MONNIFY PAYMENT ROUTES ====================
+  // ==================== SQUAD PAYMENT ROUTES ====================
 
-  // Check if Monnify is configured
-  app.get('/api/monnify/status', (req, res) => {
-    res.json({ configured: isMonnifyConfigured() });
+  // Check if Squad is configured
+  app.get('/api/squad/status', (req, res) => {
+    res.json({ configured: isSquadConfigured() });
   });
 
-  // Initialize a Monnify payment
-  app.post('/api/monnify/initialize', isAuthenticated, async (req: any, res) => {
+  // Initialize a Squad payment
+  app.post('/api/squad/initialize', isAuthenticated, async (req: any, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
@@ -762,7 +762,7 @@ Happy trading!`;
         return res.status(404).json({ message: "User not found" });
       }
 
-      const validated = initiateMonnifyPaymentSchema.parse(req.body);
+      const validated = initiateSquadPaymentSchema.parse(req.body);
       const amount = parseFloat(validated.amount);
 
       if (amount < 100) {
@@ -772,7 +772,7 @@ Happy trading!`;
       const paymentReference = generatePaymentReference();
       const redirectUrl = `${process.env.APP_URL || 'https://eksu-marketplace.replit.app'}/payment/callback`;
 
-      const paymentResult = await monnify.initializePayment({
+      const paymentResult = await squad.initializePayment({
         amount,
         customerName: `${user.firstName} ${user.lastName}`,
         customerEmail: user.email,
@@ -786,13 +786,12 @@ Happy trading!`;
       });
 
       // Store payment record in database
-      await storage.createMonnifyPayment({
+      await storage.createSquadPayment({
         userId,
         transactionReference: paymentResult.transactionReference,
-        paymentReference,
         amount: amount.toString(),
         purpose: validated.purpose,
-        status: 'PENDING',
+        status: 'pending',
         paymentDescription: validated.paymentDescription || null,
       });
 
@@ -805,15 +804,15 @@ Happy trading!`;
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid input", errors: error.errors });
       }
-      console.error("Error initializing Monnify payment:", error);
+      console.error("Error initializing Squad payment:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to initialize payment" });
     }
   });
 
-  // Verify a Monnify payment by reference
-  app.get('/api/monnify/verify/:reference', isAuthenticated, async (req: any, res) => {
+  // Verify a Squad payment by reference
+  app.get('/api/squad/verify/:reference', isAuthenticated, async (req: any, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
@@ -821,7 +820,7 @@ Happy trading!`;
       const userId = req.user.id;
 
       // Get payment from database
-      const payment = await storage.getMonnifyPaymentByReference(reference);
+      const payment = await storage.getSquadPaymentByReference(reference);
       if (!payment) {
         return res.status(404).json({ message: "Payment not found" });
       }
@@ -830,18 +829,18 @@ Happy trading!`;
         return res.status(403).json({ message: "Not authorized to verify this payment" });
       }
 
-      // Verify with Monnify
-      const transactionStatus = await monnify.verifyTransaction(reference);
+      // Verify with Squad
+      const transactionStatus = await squad.verifyTransaction(reference);
 
       // Update payment status in database
-      const paidAt = transactionStatus.paymentStatus === 'PAID' && transactionStatus.paidOn
+      const paidAt = transactionStatus.paymentStatus === 'success' && transactionStatus.paidOn
         ? new Date(transactionStatus.paidOn)
         : undefined;
       
-      await storage.updateMonnifyPaymentStatus(reference, transactionStatus.paymentStatus, paidAt);
+      await storage.updateSquadPaymentStatus(reference, transactionStatus.paymentStatus, paidAt);
 
       // If payment is successful, credit wallet
-      if (transactionStatus.paymentStatus === 'PAID' && payment.status !== 'PAID') {
+      if (transactionStatus.paymentStatus === 'success' && payment.status !== 'success') {
         const wallet = await storage.getOrCreateWallet(userId);
         await storage.updateWalletBalance(userId, payment.amount, 'add');
         
@@ -849,7 +848,7 @@ Happy trading!`;
           walletId: wallet.id,
           type: 'deposit',
           amount: payment.amount,
-          description: `Monnify deposit - ${payment.purpose}`,
+          description: `Squad deposit - ${payment.purpose}`,
           status: 'completed',
         });
       }
@@ -861,31 +860,31 @@ Happy trading!`;
         paidOn: transactionStatus.paidOn,
       });
     } catch (error) {
-      console.error("Error verifying Monnify payment:", error);
+      console.error("Error verifying Squad payment:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to verify payment" });
     }
   });
 
-  // Get user's Monnify payments
-  app.get('/api/monnify/payments', isAuthenticated, async (req: any, res) => {
+  // Get user's Squad payments
+  app.get('/api/squad/payments', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const payments = await storage.getUserMonnifyPayments(userId);
+      const payments = await storage.getUserSquadPayments(userId);
       res.json(payments);
     } catch (error) {
-      console.error("Error fetching Monnify payments:", error);
+      console.error("Error fetching Squad payments:", error);
       res.status(500).json({ message: "Failed to fetch payments" });
     }
   });
 
-  // Monnify webhook handler (no auth - verified by signature)
-  app.post('/api/monnify/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  // Squad webhook handler (no auth - verified by signature)
+  app.post('/api/squad/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
-      const signature = req.headers['monnify-signature'] as string;
+      const signature = req.headers['squad-signature'] as string;
       const payload = req.body.toString();
 
-      if (!signature || !monnify.verifyWebhookSignature(payload, signature)) {
-        console.error("Invalid Monnify webhook signature");
+      if (!signature || !squad.verifyWebhookSignature(payload, signature)) {
+        console.error("Invalid Squad webhook signature");
         return res.status(401).json({ message: "Invalid signature" });
       }
 
@@ -893,18 +892,18 @@ Happy trading!`;
       const { transactionReference, paymentStatus, amountPaid, paidOn } = webhookData;
 
       // Find payment in database
-      const payment = await storage.getMonnifyPaymentByReference(transactionReference);
+      const payment = await storage.getSquadPaymentByReference(transactionReference);
       if (!payment) {
-        console.error(`Monnify webhook: Payment not found for reference ${transactionReference}`);
+        console.error(`Squad webhook: Payment not found for reference ${transactionReference}`);
         return res.status(404).json({ message: "Payment not found" });
       }
 
       // Update payment status
-      const paidAtDate = paymentStatus === 'PAID' && paidOn ? new Date(paidOn) : undefined;
-      await storage.updateMonnifyPaymentStatus(transactionReference, paymentStatus, paidAtDate);
+      const paidAtDate = paymentStatus === 'success' && paidOn ? new Date(paidOn) : undefined;
+      await storage.updateSquadPaymentStatus(transactionReference, paymentStatus, paidAtDate);
 
       // Credit wallet if payment is successful
-      if (paymentStatus === 'PAID' && payment.status !== 'PAID') {
+      if (paymentStatus === 'success' && payment.status !== 'success') {
         const wallet = await storage.getOrCreateWallet(payment.userId);
         await storage.updateWalletBalance(payment.userId, amountPaid.toString(), 'add');
         
@@ -912,28 +911,28 @@ Happy trading!`;
           walletId: wallet.id,
           type: 'deposit',
           amount: amountPaid.toString(),
-          description: `Monnify deposit - ${payment.purpose}`,
+          description: `Squad deposit - ${payment.purpose}`,
           status: 'completed',
         });
 
-        console.log(`Monnify webhook: Credited ₦${amountPaid} to user ${payment.userId}`);
+        console.log(`Squad webhook: Credited ₦${amountPaid} to user ${payment.userId}`);
       }
 
       res.json({ message: "Webhook processed successfully" });
     } catch (error) {
-      console.error("Error processing Monnify webhook:", error);
+      console.error("Error processing Squad webhook:", error);
       res.status(500).json({ message: "Failed to process webhook" });
     }
   });
 
   // Get list of banks
-  app.get('/api/monnify/banks', async (req, res) => {
+  app.get('/api/squad/banks', async (req, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
-      const banks = await monnify.getBankList();
+      const banks = await squad.getBankList();
       res.json(banks);
     } catch (error) {
       console.error("Error fetching bank list:", error);
@@ -942,9 +941,9 @@ Happy trading!`;
   });
 
   // Verify bank account (POST - legacy)
-  app.post('/api/monnify/verify-bank', isAuthenticated, async (req: any, res) => {
+  app.post('/api/squad/verify-bank', isAuthenticated, async (req: any, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
@@ -954,7 +953,7 @@ Happy trading!`;
         return res.status(400).json({ message: "Account number and bank code are required" });
       }
 
-      const accountDetails = await monnify.verifyBankAccount(accountNumber, bankCode);
+      const accountDetails = await squad.verifyBankAccount(accountNumber, bankCode);
       res.json(accountDetails);
     } catch (error) {
       console.error("Error verifying bank account:", error);
@@ -963,9 +962,9 @@ Happy trading!`;
   });
 
   // Verify bank account (GET with query params)
-  app.get('/api/monnify/verify-account', isAuthenticated, async (req: any, res) => {
+  app.get('/api/squad/verify-account', isAuthenticated, async (req: any, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
@@ -983,7 +982,7 @@ Happy trading!`;
         return res.status(400).json({ message: "Bank code is required" });
       }
 
-      const accountDetails = await monnify.verifyBankAccount(accountNumber, bankCode);
+      const accountDetails = await squad.verifyBankAccount(accountNumber, bankCode);
       res.json(accountDetails);
     } catch (error) {
       console.error("Error verifying bank account:", error);
@@ -991,10 +990,10 @@ Happy trading!`;
     }
   });
 
-  // Initiate withdrawal via Monnify disbursement
-  app.post('/api/monnify/withdraw', isAuthenticated, async (req: any, res) => {
+  // Initiate withdrawal via Squad transfer
+  app.post('/api/squad/withdraw', isAuthenticated, async (req: any, res) => {
     try {
-      if (!isMonnifyConfigured()) {
+      if (!isSquadConfigured()) {
         return res.status(503).json({ message: "Payment service is not configured" });
       }
 
@@ -1030,18 +1029,18 @@ Happy trading!`;
         return res.status(400).json({ message: withdrawalCheck.reason });
       }
 
-      // Generate disbursement reference
-      const reference = generateDisbursementReference();
+      // Generate transfer reference
+      const reference = generateTransferReference();
 
-      // Create disbursement record
-      await storage.createMonnifyDisbursement({
+      // Create transfer record
+      await storage.createSquadTransfer({
         userId,
-        reference,
+        transactionReference: reference,
         amount: withdrawAmount.toString(),
         destinationBankCode: bankCode,
         destinationAccountNumber: accountNumber,
         destinationAccountName: accountName,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       // Deduct from wallet first
@@ -1056,38 +1055,39 @@ Happy trading!`;
         status: 'pending',
       });
 
-      // Initiate disbursement with Monnify
+      // Initiate transfer with Squad
       try {
-        const disbursementResult = await monnify.initiateDisbursement({
+        const transferResult = await squad.initiateTransfer({
           amount: withdrawAmount,
-          reference,
-          narration: `EKSU Marketplace withdrawal - ${user.firstName} ${user.lastName}`,
-          destinationBankCode: bankCode,
-          destinationAccountNumber: accountNumber,
+          transactionReference: reference,
+          remark: `EKSU Marketplace withdrawal - ${user.firstName} ${user.lastName}`,
+          bankCode,
+          accountNumber,
+          accountName,
         });
 
-        // Update disbursement status
-        await storage.updateMonnifyDisbursementStatus(
+        // Update transfer status
+        await storage.updateSquadTransferStatus(
           reference,
-          disbursementResult.status,
+          transferResult.status,
           undefined,
-          disbursementResult.status === 'SUCCESS' ? new Date() : undefined
+          transferResult.status === 'success' ? new Date() : undefined
         );
 
         res.json({
           message: "Withdrawal initiated successfully",
           reference,
-          status: disbursementResult.status,
+          status: transferResult.status,
         });
-      } catch (disbursementError) {
-        // Refund wallet if disbursement fails
+      } catch (transferError) {
+        // Refund wallet if transfer fails
         await storage.updateWalletBalance(userId, withdrawAmount.toString(), 'add');
-        await storage.updateMonnifyDisbursementStatus(reference, 'FAILED', String(disbursementError));
+        await storage.updateSquadTransferStatus(reference, 'failed', String(transferError));
         
-        throw disbursementError;
+        throw transferError;
       }
     } catch (error) {
-      console.error("Error processing Monnify withdrawal:", error);
+      console.error("Error processing Squad withdrawal:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to process withdrawal" });
     }
   });
@@ -3788,7 +3788,7 @@ Happy trading!`;
         productId,
         itemPrice: itemPriceNum.toFixed(2),
         platformFee: pricing.platformCommission.toFixed(2),
-        monnifyFee: pricing.monnifyFee.toFixed(2),
+        paymentFee: pricing.paymentFee.toFixed(2),
         deliveryFee: "0.00",
         totalAmount: pricing.buyerPays.toFixed(2),
         sellerEarnings: pricing.sellerReceives.toFixed(2),

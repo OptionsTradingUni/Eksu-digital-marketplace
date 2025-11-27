@@ -207,7 +207,7 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
   "welcome_bonus", "referral_bonus", "login_reward", "deposit", "sale", "purchase", 
   "boost_payment", "featured_payment", "escrow_hold", "escrow_release", "escrow_fee",
   "refund", "withdrawal", "agent_commission", "platform_fee", "security_deposit_lock",
-  "security_deposit_unlock", "negotiation_accepted", "monnify_fee"
+  "security_deposit_unlock", "negotiation_accepted", "payment_fee"
 ]);
 
 // Wallet transactions
@@ -456,50 +456,51 @@ export const escrowTransactions = pgTable("escrow_transactions", {
 export const paystackPayments = pgTable("paystack_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  reference: varchar("reference").notNull().unique(), // Paystack reference
+  reference: varchar("reference").notNull().unique(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 3 }).default("NGN"),
-  status: varchar("status", { length: 20 }).notNull(), // success, failed, pending
-  channel: varchar("channel", { length: 20 }), // card, bank_transfer, ussd, etc
+  status: varchar("status", { length: 20 }).notNull(),
+  channel: varchar("channel", { length: 20 }),
   paidAt: timestamp("paid_at"),
-  metadata: jsonb("metadata"), // Additional Paystack data
-  purpose: varchar("purpose", { length: 50 }), // wallet_deposit, withdrawal, boost_payment, etc
+  metadata: jsonb("metadata"),
+  purpose: varchar("purpose", { length: 50 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Monnify payment records (primary payment provider)
-export const monnifyPayments = pgTable("monnify_payments", {
+// Squad payment records (primary payment provider - Habari)
+export const squadPayments = pgTable("squad_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  transactionReference: varchar("transaction_reference").notNull().unique(), // Monnify transaction reference
-  paymentReference: varchar("payment_reference"), // Monnify payment reference
+  transactionReference: varchar("transaction_reference").notNull().unique(),
+  gatewayReference: varchar("gateway_reference"),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"), // Monnify transaction fee
+  merchantAmount: decimal("merchant_amount", { precision: 10, scale: 2 }),
+  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"),
   currency: varchar("currency", { length: 3 }).default("NGN"),
-  status: varchar("status", { length: 20 }).notNull().default("pending"), // PENDING, PAID, FAILED, EXPIRED
-  paymentMethod: varchar("payment_method", { length: 30 }), // CARD, ACCOUNT_TRANSFER, USSD, PHONE_NUMBER
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, success, failed, abandoned
+  paymentMethod: varchar("payment_method", { length: 30 }), // transfer, card, ussd, bank
   paymentDescription: text("payment_description"),
   paidAt: timestamp("paid_at"),
-  metadata: jsonb("metadata"), // Additional Monnify data
-  purpose: varchar("purpose", { length: 50 }), // wallet_deposit, withdrawal, boost_payment, etc
+  metadata: jsonb("metadata"),
+  purpose: varchar("purpose", { length: 50 }), // wallet_deposit, checkout_payment, boost_payment, etc
   customerEmail: varchar("customer_email"),
   customerName: varchar("customer_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Monnify disbursement records (for instant payouts to sellers/withdrawals)
-export const monnifyDisbursements = pgTable("monnify_disbursements", {
+// Squad transfer records (for payouts to sellers/withdrawals)
+export const squadTransfers = pgTable("squad_transfers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  reference: varchar("reference").notNull().unique(), // Unique reference for the disbursement
+  transactionReference: varchar("transaction_reference").notNull().unique(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"), // Monnify disbursement fee
+  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"),
   destinationBankCode: varchar("destination_bank_code").notNull(),
   destinationAccountNumber: varchar("destination_account_number").notNull(),
   destinationAccountName: varchar("destination_account_name"),
-  status: varchar("status", { length: 20 }).notNull().default("pending"), // PENDING, SUCCESS, FAILED
-  narration: text("narration"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, success, failed
+  remark: text("remark"),
   responseMessage: text("response_message"),
   responseCode: varchar("response_code", { length: 10 }),
   completedAt: timestamp("completed_at"),
@@ -525,7 +526,7 @@ export const negotiations = pgTable("negotiations", {
   sellerMessage: text("seller_message"), // Optional response message
   // Calculated fee breakdown (populated when offer is made/updated)
   calculatedPlatformFee: decimal("calculated_platform_fee", { precision: 10, scale: 2 }),
-  calculatedMonnifyFee: decimal("calculated_monnify_fee", { precision: 10, scale: 2 }),
+  calculatedPaymentFee: decimal("calculated_payment_fee", { precision: 10, scale: 2 }),
   calculatedSellerProfit: decimal("calculated_seller_profit", { precision: 10, scale: 2 }),
   expiresAt: timestamp("expires_at"), // Negotiation expiry (e.g., 24 hours)
   acceptedAt: timestamp("accepted_at"),
@@ -544,14 +545,14 @@ export const withdrawals = pgTable("withdrawals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  bankCode: varchar("bank_code"), // Bank code for Monnify disbursement
+  bankCode: varchar("bank_code"),
   bankName: varchar("bank_name").notNull(),
   accountNumber: varchar("account_number").notNull(),
   accountName: varchar("account_name").notNull(),
   status: varchar("status", { length: 20 }).default("pending"), // pending, processing, completed, failed
-  paystackReference: varchar("paystack_reference"), // Legacy - keeping for backward compatibility
-  monnifyReference: varchar("monnify_reference"), // Monnify disbursement reference
-  monnifyDisbursementId: varchar("monnify_disbursement_id").references(() => monnifyDisbursements.id, { onDelete: "set null" }),
+  paystackReference: varchar("paystack_reference"), // Legacy
+  squadReference: varchar("squad_reference"), // Squad transfer reference
+  squadTransferId: varchar("squad_transfer_id").references(() => squadTransfers.id, { onDelete: "set null" }),
   processedAt: timestamp("processed_at"),
   failureReason: text("failure_reason"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -595,7 +596,7 @@ export const orders = pgTable("orders", {
   // Pricing breakdown
   itemPrice: decimal("item_price", { precision: 10, scale: 2 }).notNull(),
   platformFee: decimal("platform_fee", { precision: 10, scale: 2 }).notNull().default("0.00"),
-  monnifyFee: decimal("monnify_fee", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  paymentFee: decimal("payment_fee", { precision: 10, scale: 2 }).notNull().default("0.00"),
   deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   sellerEarnings: decimal("seller_earnings", { precision: 10, scale: 2 }).notNull(),
@@ -1206,14 +1207,14 @@ export const insertPaystackPaymentSchema = createInsertSchema(paystackPayments).
   createdAt: true,
 });
 
-// Monnify insert schemas
-export const insertMonnifyPaymentSchema = createInsertSchema(monnifyPayments).omit({
+// Squad insert schemas
+export const insertSquadPaymentSchema = createInsertSchema(squadPayments).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertMonnifyDisbursementSchema = createInsertSchema(monnifyDisbursements).omit({
+export const insertSquadTransferSchema = createInsertSchema(squadTransfers).omit({
   id: true,
   createdAt: true,
 });
@@ -1314,10 +1315,10 @@ export const respondToNegotiationSchema = z.object({
   message: z.string().max(500).optional(),
 });
 
-// Monnify payment initialization schema
-export const initiateMonnifyPaymentSchema = z.object({
+// Squad payment initialization schema
+export const initiateSquadPaymentSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
-  purpose: z.enum(["wallet_deposit", "boost_payment", "featured_payment", "escrow_payment"]),
+  purpose: z.enum(["wallet_deposit", "boost_payment", "featured_payment", "escrow_payment", "checkout_payment"]),
   paymentDescription: z.string().max(200).optional(),
 });
 
@@ -1334,11 +1335,11 @@ export const reviewVerificationSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-// Monnify types
-export type MonnifyPayment = typeof monnifyPayments.$inferSelect;
-export type InsertMonnifyPayment = z.infer<typeof insertMonnifyPaymentSchema>;
-export type MonnifyDisbursement = typeof monnifyDisbursements.$inferSelect;
-export type InsertMonnifyDisbursement = z.infer<typeof insertMonnifyDisbursementSchema>;
+// Squad types
+export type SquadPayment = typeof squadPayments.$inferSelect;
+export type InsertSquadPayment = z.infer<typeof insertSquadPaymentSchema>;
+export type SquadTransfer = typeof squadTransfers.$inferSelect;
+export type InsertSquadTransfer = z.infer<typeof insertSquadTransferSchema>;
 
 // Negotiation types
 export type Negotiation = typeof negotiations.$inferSelect;

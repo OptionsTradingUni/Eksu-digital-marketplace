@@ -42,8 +42,8 @@ import {
   socialPostLikes,
   socialPostComments,
   socialPostReposts,
-  monnifyPayments,
-  monnifyDisbursements,
+  squadPayments,
+  squadTransfers,
   negotiations,
   orders,
   orderStatusHistory,
@@ -113,10 +113,10 @@ import {
   type SocialPostComment,
   type InsertSocialPostComment,
   type SocialPostRepost,
-  type MonnifyPayment,
-  type InsertMonnifyPayment,
-  type MonnifyDisbursement,
-  type InsertMonnifyDisbursement,
+  type SquadPayment,
+  type InsertSquadPayment,
+  type SquadTransfer,
+  type InsertSquadTransfer,
   type Negotiation,
   type InsertNegotiation,
   type Order,
@@ -402,17 +402,17 @@ export interface IStorage {
   isPostReposted(postId: string, userId: string): Promise<boolean>;
   getPostReposts(postId: string): Promise<(SocialPostRepost & { reposter: User })[]>;
   
-  // Monnify payment operations
-  createMonnifyPayment(payment: InsertMonnifyPayment): Promise<MonnifyPayment>;
-  getMonnifyPayment(id: string): Promise<MonnifyPayment | undefined>;
-  getMonnifyPaymentByReference(transactionReference: string): Promise<MonnifyPayment | undefined>;
-  updateMonnifyPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<MonnifyPayment | undefined>;
-  getUserMonnifyPayments(userId: string): Promise<MonnifyPayment[]>;
+  // Squad payment operations
+  createSquadPayment(payment: InsertSquadPayment): Promise<SquadPayment>;
+  getSquadPayment(id: string): Promise<SquadPayment | undefined>;
+  getSquadPaymentByReference(transactionReference: string): Promise<SquadPayment | undefined>;
+  updateSquadPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<SquadPayment | undefined>;
+  getUserSquadPayments(userId: string): Promise<SquadPayment[]>;
   
-  // Monnify disbursement operations
-  createMonnifyDisbursement(disbursement: InsertMonnifyDisbursement): Promise<MonnifyDisbursement>;
-  getMonnifyDisbursementByReference(reference: string): Promise<MonnifyDisbursement | undefined>;
-  updateMonnifyDisbursementStatus(reference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<MonnifyDisbursement | undefined>;
+  // Squad transfer operations
+  createSquadTransfer(transfer: InsertSquadTransfer): Promise<SquadTransfer>;
+  getSquadTransferByReference(transactionReference: string): Promise<SquadTransfer | undefined>;
+  updateSquadTransferStatus(transactionReference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<SquadTransfer | undefined>;
   
   // Negotiation operations
   createNegotiation(negotiation: InsertNegotiation): Promise<Negotiation>;
@@ -3067,55 +3067,55 @@ export class DatabaseStorage implements IStorage {
       }));
   }
 
-  // Monnify payment operations
-  async createMonnifyPayment(payment: InsertMonnifyPayment): Promise<MonnifyPayment> {
-    const [created] = await db.insert(monnifyPayments).values(payment).returning();
+  // Squad payment operations
+  async createSquadPayment(payment: InsertSquadPayment): Promise<SquadPayment> {
+    const [created] = await db.insert(squadPayments).values(payment).returning();
     return created;
   }
 
-  async getMonnifyPayment(id: string): Promise<MonnifyPayment | undefined> {
-    const [payment] = await db.select().from(monnifyPayments).where(eq(monnifyPayments.id, id));
+  async getSquadPayment(id: string): Promise<SquadPayment | undefined> {
+    const [payment] = await db.select().from(squadPayments).where(eq(squadPayments.id, id));
     return payment;
   }
 
-  async getMonnifyPaymentByReference(transactionReference: string): Promise<MonnifyPayment | undefined> {
-    const [payment] = await db.select().from(monnifyPayments).where(eq(monnifyPayments.transactionReference, transactionReference));
+  async getSquadPaymentByReference(transactionReference: string): Promise<SquadPayment | undefined> {
+    const [payment] = await db.select().from(squadPayments).where(eq(squadPayments.transactionReference, transactionReference));
     return payment;
   }
 
-  async updateMonnifyPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<MonnifyPayment | undefined> {
+  async updateSquadPaymentStatus(transactionReference: string, status: string, paidAt?: Date): Promise<SquadPayment | undefined> {
     const updateData: any = { status, updatedAt: new Date() };
     if (paidAt) {
       updateData.paidAt = paidAt;
     }
     const [updated] = await db
-      .update(monnifyPayments)
+      .update(squadPayments)
       .set(updateData)
-      .where(eq(monnifyPayments.transactionReference, transactionReference))
+      .where(eq(squadPayments.transactionReference, transactionReference))
       .returning();
     return updated;
   }
 
-  async getUserMonnifyPayments(userId: string): Promise<MonnifyPayment[]> {
+  async getUserSquadPayments(userId: string): Promise<SquadPayment[]> {
     return await db
       .select()
-      .from(monnifyPayments)
-      .where(eq(monnifyPayments.userId, userId))
-      .orderBy(desc(monnifyPayments.createdAt));
+      .from(squadPayments)
+      .where(eq(squadPayments.userId, userId))
+      .orderBy(desc(squadPayments.createdAt));
   }
 
-  // Monnify disbursement operations
-  async createMonnifyDisbursement(disbursement: InsertMonnifyDisbursement): Promise<MonnifyDisbursement> {
-    const [created] = await db.insert(monnifyDisbursements).values(disbursement).returning();
+  // Squad transfer operations
+  async createSquadTransfer(transfer: InsertSquadTransfer): Promise<SquadTransfer> {
+    const [created] = await db.insert(squadTransfers).values(transfer).returning();
     return created;
   }
 
-  async getMonnifyDisbursementByReference(reference: string): Promise<MonnifyDisbursement | undefined> {
-    const [disbursement] = await db.select().from(monnifyDisbursements).where(eq(monnifyDisbursements.reference, reference));
-    return disbursement;
+  async getSquadTransferByReference(transactionReference: string): Promise<SquadTransfer | undefined> {
+    const [transfer] = await db.select().from(squadTransfers).where(eq(squadTransfers.transactionReference, transactionReference));
+    return transfer;
   }
 
-  async updateMonnifyDisbursementStatus(reference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<MonnifyDisbursement | undefined> {
+  async updateSquadTransferStatus(transactionReference: string, status: string, responseMessage?: string, completedAt?: Date): Promise<SquadTransfer | undefined> {
     const updateData: any = { status };
     if (responseMessage) {
       updateData.responseMessage = responseMessage;
@@ -3124,9 +3124,9 @@ export class DatabaseStorage implements IStorage {
       updateData.completedAt = completedAt;
     }
     const [updated] = await db
-      .update(monnifyDisbursements)
+      .update(squadTransfers)
       .set(updateData)
-      .where(eq(monnifyDisbursements.reference, reference))
+      .where(eq(squadTransfers.transactionReference, transactionReference))
       .returning();
     return updated;
   }
