@@ -106,6 +106,16 @@ function Router() {
                 <Messages />
               </ErrorBoundary>
             )} />
+            <Route path="/messages/:userId" component={() => (
+              <ErrorBoundary>
+                <Messages />
+              </ErrorBoundary>
+            )} />
+            <Route path="/chat/:userId" component={() => (
+              <ErrorBoundary>
+                <Messages />
+              </ErrorBoundary>
+            )} />
             <Route path="/profile/:userId?" component={() => (
               <ErrorBoundary>
                 <Profile />

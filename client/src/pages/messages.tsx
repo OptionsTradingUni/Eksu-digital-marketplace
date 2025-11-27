@@ -28,7 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import { UserActionsMenu } from "@/components/UserActionsMenu";
 import type { Message, User } from "@shared/schema";
-import { useSearch } from "wouter";
+import { useSearch, useParams } from "wouter";
 
 type WebSocketStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -333,9 +333,12 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
 export default function Messages() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
+  const { userId: urlUserId } = useParams<{ userId?: string }>();
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
-  const preselectedUserId = searchParams.get("user");
+  const queryUserId = searchParams.get("user");
+  // Support both URL param (/messages/:userId or /chat/:userId) and query param (?user=...)
+  const preselectedUserId = urlUserId || queryUserId;
   const isMobile = useIsMobile();
   
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
