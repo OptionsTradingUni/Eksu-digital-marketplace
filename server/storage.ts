@@ -512,10 +512,13 @@ export interface IStorage {
   getUserBookmarks(userId: string): Promise<(PostBookmark & { post: SocialPost; author: User })[]>;
   
   // Smart feed algorithm operations  
-  getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following' }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string })[]>;
+  getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following'; userLat?: number; userLng?: number }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string; authorDistance?: number | null })[]>;
   updatePostEngagementScore(postId: string): Promise<void>;
   incrementPostViews(postId: string): Promise<void>;
   incrementPostShares(postId: string): Promise<void>;
+  
+  // User location operations
+  updateUserLocation(userId: string, latitude: string, longitude: string): Promise<User>;
   
   // Username and system account operations
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -3422,9 +3425,15 @@ export class DatabaseStorage implements IStorage {
       }));
   }
 
-  // Smart feed algorithm operations
-  async getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following' }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string })[]> {
+  // Smart feed algorithm operations with location-based ranking
+  // "Fear-based" algorithm: Campus users first, then by distance, then by engagement
+  async getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following'; userLat?: number; userLng?: number }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string; authorDistance?: number | null })[]> {
     const feedType = options?.feedType || 'for_you';
+    
+    // EKSU Campus coordinates
+    const EKSU_LAT = 7.6451;
+    const EKSU_LNG = 5.2247;
+    const CAMPUS_RADIUS_KM = 1.5;
     
     let query = db
       .select()
@@ -3443,11 +3452,7 @@ export class DatabaseStorage implements IStorage {
       followingIds = followingList.map(f => f.followingId);
     }
     
-    const results = await query.orderBy(
-      feedType === 'for_you' 
-        ? desc(sql`COALESCE(${feedEngagementScores.engagementScore}, 0) + CASE WHEN ${socialPosts.createdAt} > NOW() - INTERVAL '24 hours' THEN 10 ELSE 0 END`)
-        : desc(socialPosts.createdAt)
-    ).limit(50);
+    const results = await query.orderBy(desc(socialPosts.createdAt)).limit(100);
 
     let likedPostIds: string[] = [];
     let repostedPostIds: string[] = [];
@@ -3465,7 +3470,20 @@ export class DatabaseStorage implements IStorage {
       repostedPostIds = repostedResult.map(r => r.originalPostId);
     }
 
-    return results
+    // Calculate distance between two coordinates (Haversine formula)
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    const postsWithDistance = results
       .filter(r => r.social_posts && r.users)
       .filter(r => {
         if (feedType === 'following' && options?.userId) {
@@ -3473,14 +3491,74 @@ export class DatabaseStorage implements IStorage {
         }
         return true;
       })
-      .map(r => ({
-        ...r.social_posts!,
-        author: r.users!,
-        isLiked: likedPostIds.includes(r.social_posts!.id),
-        isFollowingAuthor: followingIds.includes(r.social_posts!.authorId),
-        isReposted: repostedPostIds.includes(r.social_posts!.id),
-        engagementScore: r.feed_engagement_scores?.engagementScore || "0",
-      }));
+      .map(r => {
+        const authorLat = r.users!.latitude ? parseFloat(r.users!.latitude) : null;
+        const authorLng = r.users!.longitude ? parseFloat(r.users!.longitude) : null;
+        
+        // Calculate author's distance from campus
+        let authorDistance: number | null = null;
+        let isOnCampus = false;
+        
+        if (authorLat !== null && authorLng !== null) {
+          const distFromCampus = calculateDistance(authorLat, authorLng, EKSU_LAT, EKSU_LNG);
+          authorDistance = distFromCampus;
+          isOnCampus = distFromCampus <= CAMPUS_RADIUS_KM;
+        }
+        
+        // Calculate distance from current user (if location provided)
+        let distanceFromUser: number | null = null;
+        if (options?.userLat && options?.userLng && authorLat !== null && authorLng !== null) {
+          distanceFromUser = calculateDistance(options.userLat, options.userLng, authorLat, authorLng);
+        }
+        
+        const engagementScore = parseFloat(r.feed_engagement_scores?.engagementScore || "0");
+        const recencyBonus = r.feed_engagement_scores?.recencyBonus ? parseFloat(r.feed_engagement_scores.recencyBonus) : 0;
+        
+        // Calculate ranking score (Fear-based algorithm)
+        // Priority: 1. On-campus authors (highest), 2. Nearby authors, 3. Engagement
+        let rankingScore = engagementScore + recencyBonus;
+        
+        if (isOnCampus) {
+          rankingScore += 1000; // Huge boost for on-campus
+        } else if (authorDistance !== null && authorDistance <= 5) {
+          rankingScore += 500; // Near campus boost
+        } else if (authorDistance !== null && authorDistance <= 15) {
+          rankingScore += 200; // In Ado-Ekiti boost
+        } else if (authorDistance !== null && authorDistance <= 100) {
+          rankingScore += 50; // In Ekiti State boost
+        }
+        
+        // Extra boost for nearby users (relative to viewer)
+        if (distanceFromUser !== null && distanceFromUser <= 3) {
+          rankingScore += 300;
+        }
+        
+        // Recency bonus for last 24 hours
+        const postAge = Date.now() - new Date(r.social_posts!.createdAt || Date.now()).getTime();
+        const hoursOld = postAge / (1000 * 60 * 60);
+        if (hoursOld <= 24) {
+          rankingScore += Math.max(0, 100 - (hoursOld * 4));
+        }
+        
+        return {
+          ...r.social_posts!,
+          author: r.users!,
+          isLiked: likedPostIds.includes(r.social_posts!.id),
+          isFollowingAuthor: followingIds.includes(r.social_posts!.authorId),
+          isReposted: repostedPostIds.includes(r.social_posts!.id),
+          engagementScore: r.feed_engagement_scores?.engagementScore || "0",
+          authorDistance,
+          _rankingScore: rankingScore,
+        };
+      });
+
+    // Sort by ranking score for 'for_you' feed, by date for 'following' feed
+    if (feedType === 'for_you') {
+      postsWithDistance.sort((a, b) => (b._rankingScore || 0) - (a._rankingScore || 0));
+    }
+    
+    // Remove internal ranking score and limit results
+    return postsWithDistance.slice(0, 50).map(({ _rankingScore, ...post }) => post);
   }
 
   async updatePostEngagementScore(postId: string): Promise<void> {
@@ -3542,6 +3620,20 @@ export class DatabaseStorage implements IStorage {
       .update(socialPosts)
       .set({ sharesCount: sql`COALESCE(${socialPosts.sharesCount}, 0) + 1` })
       .where(eq(socialPosts.id, postId));
+  }
+
+  async updateUserLocation(userId: string, latitude: string, longitude: string): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        latitude, 
+        longitude, 
+        lastLocationUpdate: new Date(),
+        updatedAt: new Date() 
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
   }
 
   // Username and system account operations
@@ -4795,18 +4887,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async autoApproveOldConfessions(): Promise<number> {
+    // Auto-approve confessions that are older than 5 minutes and not yet approved
+    // Uses raw SQL to handle both schema versions (is_approved boolean OR status enum)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
-    const result = await db
-      .update(confessions)
-      .set({ status: "approved" })
-      .where(and(
-        sql`${confessions.status} = 'pending'`,
-        sql`${confessions.createdAt} < ${fiveMinutesAgo}`
-      ))
-      .returning();
-    
-    return result.length;
+    try {
+      // Try new schema with status column
+      const result = await db
+        .update(confessions)
+        .set({ status: "approved" })
+        .where(and(
+          sql`${confessions.status} = 'pending'`,
+          sql`${confessions.createdAt} < ${fiveMinutesAgo}`
+        ))
+        .returning();
+      
+      return result.length;
+    } catch (error: any) {
+      // Fallback: database might use old is_approved boolean column
+      if (error.code === '42703') { // Column doesn't exist
+        try {
+          const result = await db.execute(sql`
+            UPDATE confessions 
+            SET is_approved = true 
+            WHERE is_approved = false 
+            AND created_at < ${fiveMinutesAgo}
+            RETURNING id
+          `);
+          return (result as any).rowCount || 0;
+        } catch (fallbackError) {
+          console.error("Fallback auto-approve also failed:", fallbackError);
+          return 0;
+        }
+      }
+      throw error;
+    }
   }
 
   // Confession vote operations

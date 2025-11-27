@@ -761,7 +761,7 @@ export default function ThePlugPage() {
                         ) : post.author?.isVerified ? (
                           <VerifiedBadge />
                         ) : null}
-                        {(post.author?.role === "seller" || post.author?.role === "both") && !isEKSUPlugAccount(post.author) && (
+                        {post.author?.role === "seller" && !isEKSUPlugAccount(post.author) && (
                           <SellerBadge />
                         )}
                         <span className="text-muted-foreground text-sm">·</span>

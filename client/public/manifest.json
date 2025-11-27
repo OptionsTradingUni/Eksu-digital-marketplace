@@ -1,0 +1,52 @@
+{
+  "name": "EKSU Digital Marketplace",
+  "short_name": "EKSU Market",
+  "description": "The #1 campus marketplace for EKSU students. Buy, sell, connect, and thrive.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16a34a",
+  "theme_color": "#16a34a",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "social", "education"],
+  "lang": "en-NG",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "The Plug",
+      "short_name": "Plug",
+      "description": "Social feed and updates",
+      "url": "/the-plug",
+      "icons": [{ "src": "/favicon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Messages",
+      "short_name": "Chat",
+      "description": "Your conversations",
+      "url": "/messages",
+      "icons": [{ "src": "/favicon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Sell Item",
+      "short_name": "Sell",
+      "description": "List a new product",
+      "url": "/products/new",
+      "icons": [{ "src": "/favicon.png", "sizes": "96x96" }]
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": []
+}

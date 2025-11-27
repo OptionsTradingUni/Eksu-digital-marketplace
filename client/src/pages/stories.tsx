@@ -670,12 +670,12 @@ function CreateStoryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-md p-0 flex flex-col max-h-[85vh] overflow-hidden">
+      <DialogContent className="max-w-md p-0 flex flex-col max-h-[80vh] sm:max-h-[85vh] overflow-hidden">
         <DialogHeader className="p-4 border-b shrink-0">
           <DialogTitle>Create Story</DialogTitle>
         </DialogHeader>
         
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4">
           <div className="flex gap-2 mb-4">
             <Button
               variant={storyType === "text" ? "default" : "outline"}
@@ -720,6 +720,7 @@ function CreateStoryModal({
             ref={fileInputRef}
             type="file"
             accept="image/*,video/*"
+            capture="environment"
             className="hidden"
             onChange={handleFileSelect}
             data-testid="input-story-media"
@@ -728,7 +729,7 @@ function CreateStoryModal({
           {storyType === "text" ? (
             <>
               <div 
-                className="aspect-[9/16] max-h-[40vh] rounded-lg mb-4 flex items-center justify-center p-4"
+                className="aspect-[9/16] max-h-[35vh] rounded-lg mb-4 flex items-center justify-center p-4"
                 style={{ backgroundColor }}
               >
                 <Textarea
@@ -777,7 +778,7 @@ function CreateStoryModal({
             </>
           ) : (
             <div 
-              className="aspect-[9/16] max-h-[40vh] rounded-lg mb-4 bg-muted flex items-center justify-center overflow-hidden cursor-pointer"
+              className="aspect-[9/16] max-h-[35vh] rounded-lg mb-4 bg-muted flex items-center justify-center overflow-hidden cursor-pointer"
               onClick={() => !mediaPreview && fileInputRef.current?.click()}
             >
               {mediaPreview ? (
@@ -820,7 +821,7 @@ function CreateStoryModal({
           )}
         </div>
         
-        <div className="shrink-0 p-4 border-t bg-background sticky bottom-0 z-10">
+        <div className="shrink-0 p-4 border-t bg-background z-50">
           {isUploading && (
             <div className="mb-3">
               <div className="flex items-center justify-between text-sm text-muted-foreground mb-1">

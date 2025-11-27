@@ -3820,10 +3820,14 @@ Happy trading!`;
     try {
       const userId = getUserId(req);
       const feedType = req.query.type === 'following' ? 'following' : 'for_you';
+      const userLat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
+      const userLng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
       
       const posts = await storage.getSocialPostsWithAlgorithm({
         userId: userId || undefined,
-        feedType: feedType as 'for_you' | 'following'
+        feedType: feedType as 'for_you' | 'following',
+        userLat: userLat && !isNaN(userLat) ? userLat : undefined,
+        userLng: userLng && !isNaN(userLng) ? userLng : undefined
       });
       
       // If logged in, also check bookmark status
@@ -3925,6 +3929,39 @@ Happy trading!`;
     } catch (error) {
       console.error("Error fetching pinned posts:", error);
       res.status(500).json({ message: "Failed to fetch pinned posts" });
+    }
+  });
+
+  // ========== LOCATION ENDPOINTS ==========
+  
+  // Update user location (GPS coordinates)
+  app.patch("/api/users/me/location", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { latitude, longitude } = req.body;
+      
+      if (latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ message: "Latitude and longitude are required" });
+      }
+      
+      // Validate coordinates
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ message: "Invalid coordinates" });
+      }
+      
+      const user = await storage.updateUserLocation(userId, lat.toString(), lng.toString());
+      const { password, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating location:", error);
+      res.status(500).json({ message: "Failed to update location" });
     }
   });
 

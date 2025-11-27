@@ -11,6 +11,9 @@ import { BottomNav } from "@/components/BottomNav";
 import ChatBot from "@/components/ChatBot";
 import { setupGlobalErrorHandler } from "@/lib/globalErrorHandler";
 import { lazy, Suspense, useEffect } from "react";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { BackToTop } from "@/components/BackToTop";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Landing = lazy(() => import("@/pages/landing"));
@@ -238,9 +241,12 @@ function Router() {
 }
 
 function App() {
-  // Setup global error handlers on mount
   useEffect(() => {
     setupGlobalErrorHandler();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
   }, []);
 
   return (
@@ -248,9 +254,12 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <TooltipProvider>
+            <OfflineIndicator />
             <Toaster />
             <Router />
             <ChatBot />
+            <BackToTop />
+            <PWAInstallPrompt />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>
