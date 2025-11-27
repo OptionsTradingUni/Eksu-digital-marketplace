@@ -1320,6 +1320,7 @@ export const initiateSquadPaymentSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
   purpose: z.enum(["wallet_deposit", "boost_payment", "featured_payment", "escrow_payment", "checkout_payment"]),
   paymentDescription: z.string().max(200).optional(),
+  paymentChannel: z.enum(["transfer", "card", "ussd"]).optional(),
 });
 
 // Seller verification request schema

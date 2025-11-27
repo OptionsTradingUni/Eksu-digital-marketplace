@@ -772,12 +772,18 @@ Happy trading!`;
       const paymentReference = generatePaymentReference();
       const redirectUrl = `${process.env.APP_URL || 'https://eksu-marketplace.replit.app'}/payment/callback`;
 
+      // Determine payment channels based on request
+      const paymentChannels: ('card' | 'bank' | 'ussd' | 'transfer')[] = validated.paymentChannel 
+        ? [validated.paymentChannel] 
+        : ['transfer', 'card', 'ussd'];
+
       const paymentResult = await squad.initializePayment({
         amount,
         email: user.email,
         customerName: `${user.firstName} ${user.lastName}`,
         transactionRef: paymentReference,
         callbackUrl: redirectUrl,
+        paymentChannels,
         metadata: {
           userId,
           purpose: validated.purpose,

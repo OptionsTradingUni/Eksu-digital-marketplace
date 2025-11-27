@@ -53,7 +53,8 @@ export default function CheckoutPage() {
   const walletBalance = wallet ? parseFloat(wallet.balance as string) : 0;
 
   const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE * 100) / 100;
-  const squadFeeEstimate = paymentMethod === "squad" 
+  const isSquadPayment = paymentMethod === "squad" || paymentMethod === "squad_card" || paymentMethod === "squad_ussd";
+  const squadFeeEstimate = isSquadPayment 
     ? Math.min(Math.round(subtotal * 0.01 * 100) / 100, 1000)
     : 0;
   const total = subtotal + platformFee + squadFeeEstimate;
@@ -86,6 +87,7 @@ export default function CheckoutPage() {
       amount: string;
       purpose: string;
       paymentDescription: string;
+      paymentChannel?: "transfer" | "card" | "ussd";
     }) => {
       const res = await apiRequest("POST", "/api/squad/initialize", data);
       return res.json();
@@ -161,10 +163,19 @@ export default function CheckoutPage() {
           deliveryNotes: deliveryNotes || undefined,
         }));
 
+        // Determine payment channel based on selected method
+        let paymentChannel: "transfer" | "card" | "ussd" = "transfer";
+        if (paymentMethod === "squad_card") {
+          paymentChannel = "card";
+        } else if (paymentMethod === "squad_ussd") {
+          paymentChannel = "ussd";
+        }
+
         const result = await initializeSquadMutation.mutateAsync({
           amount: total.toFixed(2),
           purpose: "checkout_payment",
           paymentDescription: `Purchase of ${cartItems.length} item(s) from EKSU Marketplace`,
+          paymentChannel,
         });
 
         if (result.checkoutUrl) {
@@ -440,13 +451,44 @@ export default function CheckoutPage() {
                 <div className="flex items-center space-x-3 rounded-md border-2 border-green-300 dark:border-green-600 p-4 bg-green-50 dark:bg-green-950/30 hover-elevate">
                   <RadioGroupItem value="squad" id="squad" data-testid="radio-squad" />
                   <Label htmlFor="squad" className="flex-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <CreditCard className="h-4 w-4 text-green-600" />
-                      <span className="font-medium text-green-700 dark:text-green-400">Pay with Bank Transfer</span>
+                      <span className="font-medium text-green-700 dark:text-green-400">Pay with Squad/GTCO</span>
                       <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Instant</Badge>
                     </div>
-                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                      Instant settlement (T+0) - Fastest option for order confirmation
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1 font-medium">
+                      Bank Transfer - Instant settlement (T+0)
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Funds arrive immediately. Fastest option for order confirmation.
+                    </p>
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-3 rounded-md border p-4 hover-elevate">
+                  <RadioGroupItem value="squad_card" id="squad_card" data-testid="radio-squad-card" />
+                  <Label htmlFor="squad_card" className="flex-1 cursor-pointer">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Credit/Debit Card</span>
+                      <Badge variant="secondary">1-3 Business Days</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Standard settlement (T+1 to T+3). Order processes after payment clears.
+                    </p>
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-3 rounded-md border p-4 hover-elevate">
+                  <RadioGroupItem value="squad_ussd" id="squad_ussd" data-testid="radio-squad-ussd" />
+                  <Label htmlFor="squad_ussd" className="flex-1 cursor-pointer">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">USSD</span>
+                      <Badge variant="secondary">1-2 Business Days</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Pay using your bank's USSD code. Standard settlement timing.
                     </p>
                   </Label>
                 </div>
@@ -469,7 +511,7 @@ export default function CheckoutPage() {
                 <span className="text-muted-foreground">Platform Fee (3.5%)</span>
                 <span data-testid="text-platform-fee">₦{platformFee.toLocaleString()}</span>
               </div>
-              {paymentMethod === "squad" && (
+              {isSquadPayment && (
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Payment Fee</span>
                   <span data-testid="text-payment-fee">₦{squadFeeEstimate.toLocaleString()}</span>
@@ -506,10 +548,20 @@ export default function CheckoutPage() {
                         <Wallet className="mr-2 h-4 w-4" />
                         Pay ₦{total.toLocaleString()}
                       </>
-                    ) : (
+                    ) : paymentMethod === "squad" ? (
                       <>
                         <CreditCard className="mr-2 h-4 w-4" />
                         Pay ₦{total.toLocaleString()} (Instant)
+                      </>
+                    ) : paymentMethod === "squad_card" ? (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Pay ₦{total.toLocaleString()} (Card)
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Pay ₦{total.toLocaleString()} (USSD)
                       </>
                     )}
                   </>

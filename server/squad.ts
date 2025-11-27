@@ -15,7 +15,18 @@
 
 import crypto from 'crypto';
 
-const SQUAD_BASE_URL = 'https://api.squadco.com';
+// Squad API URL - use sandbox for testing, production for live
+// The secret key prefix determines which environment: sk_test_ = sandbox, sk_live_ = production
+const getSquadBaseUrl = (): string => {
+  const secretKey = process.env.SQUAD_SECRET_KEY || '';
+  // If using test key, use sandbox URL
+  if (secretKey.startsWith('sk_test_') || secretKey.startsWith('sandbox_sk_')) {
+    return 'https://sandbox-api-d.squadco.com';
+  }
+  return 'https://api.squadco.com';
+};
+
+const SQUAD_BASE_URL = getSquadBaseUrl();
 
 export interface SquadCredentials {
   secretKey: string;
@@ -42,8 +53,11 @@ async function squadRequest<T>(
   body?: any
 ): Promise<T> {
   const { secretKey } = getCredentials();
+  const baseUrl = getSquadBaseUrl();
 
-  const response = await fetch(`${SQUAD_BASE_URL}${endpoint}`, {
+  console.log(`[Squad API] ${method} ${baseUrl}${endpoint}`);
+
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
     headers: {
       'Authorization': `Bearer ${secretKey}`,
@@ -54,8 +68,12 @@ async function squadRequest<T>(
 
   const data = await response.json();
 
+  console.log(`[Squad API] Response status: ${response.status}, success: ${data.success}`);
+
   if (!response.ok || !data.success) {
-    throw new Error(`Squad API error: ${data.message || 'Unknown error'}`);
+    const errorMessage = data.message || data.error || data.error_message || 'Unknown error';
+    console.error(`[Squad API] Error: ${errorMessage}`, JSON.stringify(data, null, 2));
+    throw new Error(`Squad API error: ${errorMessage}`);
   }
 
   return data.data as T;
