@@ -2796,6 +2796,88 @@ Happy trading!`;
     }
   });
 
+  // Message with image attachment route
+  app.post("/api/messages/with-attachment", isAuthenticated, upload.single("attachment"), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      let imageUrl: string | null = null;
+
+      // Upload image if provided
+      if (req.file) {
+        imageUrl = await uploadToObjectStorage(req.file, "message-attachments/");
+        if (!imageUrl) {
+          return res.status(500).json({ message: "Failed to upload attachment" });
+        }
+      }
+
+      // Parse the message data from form body
+      const { receiverId, content, productId } = req.body;
+
+      if (!receiverId) {
+        return res.status(400).json({ message: "Receiver ID is required" });
+      }
+
+      // Content is optional if there's an image
+      const messageContent = content || (imageUrl ? "[Image]" : "");
+      if (!messageContent && !imageUrl) {
+        return res.status(400).json({ message: "Message content or attachment is required" });
+      }
+
+      const validated = insertMessageSchema.parse({
+        senderId: userId,
+        receiverId,
+        content: messageContent,
+        imageUrl,
+        productId: productId || null,
+      });
+
+      // Prevent regular users from messaging the system account
+      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
+        return res.status(403).json({ 
+          message: "You cannot send messages to the Campus Hub account. For support, please use the Help section." 
+        });
+      }
+
+      const message = await storage.createMessage(validated);
+      
+      // Create notification for the message receiver
+      if (validated.receiverId && validated.receiverId !== userId) {
+        const sender = await storage.getUser(userId);
+        if (sender) {
+          const senderName = sender.firstName && sender.lastName 
+            ? `${sender.firstName} ${sender.lastName}` 
+            : sender.email;
+          
+          // Notification message preview
+          const messagePreview = imageUrl 
+            ? "Sent you an image" 
+            : (validated.content.length > 50 
+              ? validated.content.substring(0, 50) + "..." 
+              : validated.content);
+          
+          await createAndBroadcastNotification({
+            userId: validated.receiverId,
+            type: "message",
+            title: "New Message",
+            message: `${senderName}: ${messagePreview}`,
+            link: `/messages?user=${userId}`,
+            relatedUserId: userId,
+            relatedProductId: validated.productId || undefined,
+          });
+        }
+      }
+      
+      res.json(message);
+    } catch (error: any) {
+      console.error("Error creating message with attachment:", error);
+      res.status(400).json({ message: error.message || "Failed to send message" });
+    }
+  });
+
   // Message reactions routes
   app.post("/api/messages/:id/reactions", isAuthenticated, async (req: any, res) => {
     try {

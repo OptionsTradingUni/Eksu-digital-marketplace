@@ -191,6 +191,7 @@ export const messages = pgTable("messages", {
   receiverId: varchar("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   productId: varchar("product_id").references(() => products.id, { onDelete: "set null" }), // Optional context
   content: text("content").notNull(),
+  imageUrl: varchar("image_url", { length: 500 }), // Optional attachment image URL
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

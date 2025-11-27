@@ -32,7 +32,9 @@ import {
   Angry,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  X,
+  Image as ImageIcon
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -325,19 +327,37 @@ function ChatBubble({
     >
       <div className="relative">
         <div
-          className={`relative max-w-[75%] px-3 py-2 ${
+          className={`relative max-w-[75%] ${message.imageUrl ? 'p-1' : 'px-3 py-2'} ${
             isOwn
               ? `bg-primary text-primary-foreground ${showTail ? "rounded-2xl rounded-br-sm" : "rounded-2xl"}`
               : `bg-muted ${showTail ? "rounded-2xl rounded-bl-sm" : "rounded-2xl"}`
           }`}
         >
+          {/* Image attachment */}
+          {message.imageUrl && (
+            <div className="mb-1" data-testid={`image-attachment-${message.id}`}>
+              <img
+                src={message.imageUrl}
+                alt="Message attachment"
+                className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer"
+                onClick={() => window.open(message.imageUrl!, '_blank')}
+                loading="lazy"
+              />
+            </div>
+          )}
+          
           {/* Message content */}
-          <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-content-${message.id}`}>
-            {message.content}
-          </p>
+          {message.content && (
+            <p 
+              className={`text-sm whitespace-pre-wrap break-words ${message.imageUrl ? 'px-2 pb-1' : ''}`}
+              data-testid={`text-message-content-${message.id}`}
+            >
+              {message.content}
+            </p>
+          )}
           
           {/* Timestamp and read status */}
-          <div className={`flex items-center gap-1 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
+          <div className={`flex items-center gap-1 mt-1 ${message.imageUrl ? 'px-2' : ''} ${isOwn ? "justify-end" : "justify-start"}`}>
             <span 
               className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
               data-testid={`text-message-time-${message.id}`}
@@ -612,6 +632,9 @@ export default function Messages() {
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [messageContent, setMessageContent] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [wsStatus, setWsStatus] = useState<WebSocketStatus>("disconnected");
   const [isTyping, setIsTyping] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
@@ -813,7 +836,30 @@ export default function Messages() {
 
   // Send message mutation with optimistic update
   const sendMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({ content, file }: { content: string; file?: File | null }) => {
+      // If there's a file, use the attachment route with FormData
+      if (file) {
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append("attachment", file);
+        formData.append("receiverId", selectedUser || "");
+        formData.append("content", content);
+
+        const response = await fetch("/api/messages/with-attachment", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || "Failed to send message");
+        }
+
+        return await response.json();
+      }
+
+      // No file - use WebSocket if connected, or regular API
       if (wsStatus === "connected" && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: "message",
@@ -828,7 +874,7 @@ export default function Messages() {
         content,
       });
     },
-    onMutate: async (content: string) => {
+    onMutate: async ({ content, file }) => {
       await queryClient.cancelQueries({ queryKey: ["/api/messages", selectedUser] });
 
       const previousMessages = queryClient.getQueryData<Message[]>(["/api/messages", selectedUser]);
@@ -837,7 +883,8 @@ export default function Messages() {
         id: `temp-${Date.now()}`,
         senderId: currentUser?.id || "",
         receiverId: selectedUser || "",
-        content,
+        content: file ? (content || "[Image]") : content,
+        imageUrl: file ? filePreview : null,
         isRead: false,
         createdAt: new Date(),
         productId: null,
@@ -852,6 +899,9 @@ export default function Messages() {
     },
     onSuccess: (data, _, context) => {
       setMessageContent("");
+      setSelectedFile(null);
+      setFilePreview(null);
+      setIsUploading(false);
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
@@ -862,6 +912,7 @@ export default function Messages() {
       }
     },
     onError: (error, _, context) => {
+      setIsUploading(false);
       if (context?.previousMessages) {
         queryClient.setQueryData(["/api/messages", selectedUser], context.previousMessages);
       }
@@ -1092,8 +1143,49 @@ export default function Messages() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageContent.trim() || !selectedUser) return;
-    sendMutation.mutate(messageContent);
+    if ((!messageContent.trim() && !selectedFile) || !selectedUser) return;
+    sendMutation.mutate({ content: messageContent, file: selectedFile });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please select a file under 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file type - only images for now
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid file type",
+          description: "Only images are supported for now",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setSelectedFile(file);
+      
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setFilePreview(previewUrl);
+    }
+    // Reset the input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+      setFilePreview(null);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1426,22 +1518,40 @@ export default function Messages() {
               paddingBottom: isMobile ? 'max(1rem, env(safe-area-inset-bottom, 0px))' : '1rem'
             }}
           >
+            {/* File preview */}
+            {selectedFile && filePreview && (
+              <div className="mb-3 relative inline-block" data-testid="container-file-preview">
+                <img 
+                  src={filePreview} 
+                  alt="Preview" 
+                  className="max-h-24 max-w-[200px] rounded-lg object-cover border"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                  onClick={handleRemoveFile}
+                  data-testid="button-remove-attachment"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+                {isUploading && (
+                  <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg">
+                    <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="flex items-end gap-2">
               {/* Attachment button */}
               <input
                 type="file"
                 id="file-upload"
                 className="hidden"
-                accept="image/*,video/*,.pdf,.doc,.docx"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    toast({
-                      title: "File selected",
-                      description: `${file.name} ready to upload`,
-                    });
-                  }
-                }}
+                accept="image/*"
+                onChange={handleFileSelect}
               />
               <Button
                 type="button"
@@ -1449,6 +1559,7 @@ export default function Messages() {
                 size="icon"
                 className="shrink-0"
                 onClick={() => document.getElementById('file-upload')?.click()}
+                disabled={isUploading}
                 data-testid="button-attachment"
               >
                 <Paperclip className="h-5 w-5" />
@@ -1461,7 +1572,7 @@ export default function Messages() {
                   value={messageContent}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
+                  placeholder={selectedFile ? "Add a caption (optional)..." : "Type a message..."}
                   className="min-h-[40px] max-h-[120px] resize-none pr-10"
                   rows={1}
                   data-testid="input-message"
@@ -1490,7 +1601,7 @@ export default function Messages() {
               <Button
                 type="submit"
                 size="icon"
-                disabled={!messageContent.trim() || sendMutation.isPending}
+                disabled={(!messageContent.trim() && !selectedFile) || sendMutation.isPending || isUploading}
                 className="shrink-0"
                 data-testid="button-send-message"
               >
@@ -1510,10 +1621,10 @@ export default function Messages() {
     return (
       <>
         <div 
-          className="flex flex-col pb-16"
+          className="flex flex-col pb-20"
           style={{
             height: 'calc(100dvh - 4rem)',
-            paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))'
+            paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))'
           }}
         >
           {showMobileChat ? (
