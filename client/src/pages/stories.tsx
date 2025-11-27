@@ -720,7 +720,6 @@ function CreateStoryModal({
             ref={fileInputRef}
             type="file"
             accept="image/*,video/*"
-            capture="environment"
             className="hidden"
             onChange={handleFileSelect}
             data-testid="input-story-media"

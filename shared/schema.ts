@@ -1120,9 +1120,9 @@ export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit
 });
 
 // API-specific validation schemas
-// Role update schema - allows switching between buyer, seller, or both
+// Role update schema - allows switching between buyer or seller only
 export const roleUpdateSchema = z.object({
-  role: z.enum(['buyer', 'seller', 'both']),
+  role: z.enum(['buyer', 'seller']),
 });
 
 export const createReferralSchema = z.object({

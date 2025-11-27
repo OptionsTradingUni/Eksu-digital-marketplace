@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NotificationBell from "@/components/NotificationBell";
@@ -160,6 +160,24 @@ export function Header() {
                       <Link href="/wishlist" data-testid="link-wishlist">
                         <Heart className="mr-2 h-4 w-4" />
                         Wishlist
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/the-plug?tab=bookmarks" data-testid="link-bookmarks">
+                        <Bookmark className="mr-2 h-4 w-4" />
+                        Saved Posts
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/communities" data-testid="link-communities">
+                        <UsersRound className="mr-2 h-4 w-4" />
+                        Communities
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/confessions" data-testid="link-confessions">
+                        <MessageCircle className="mr-2 h-4 w-4" />
+                        Confessions
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

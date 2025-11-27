@@ -473,14 +473,19 @@ function ThreadItem({
     >
       {/* Archive indicator behind the thread item */}
       <motion.div 
-        className="absolute inset-0 flex items-center justify-end pr-6"
+        className="absolute inset-0 flex items-center justify-end pr-6 bg-destructive"
         style={{ opacity: archiveOpacity }}
       >
-        {isArchived ? (
-          <ArchiveRestore className="w-5 h-5 text-destructive-foreground" />
-        ) : (
-          <Archive className="w-5 h-5 text-destructive-foreground" />
-        )}
+        <div className="flex flex-col items-center gap-1">
+          {isArchived ? (
+            <ArchiveRestore className="w-6 h-6 text-destructive-foreground" />
+          ) : (
+            <Archive className="w-6 h-6 text-destructive-foreground" />
+          )}
+          <span className="text-xs text-destructive-foreground font-medium">
+            {isArchived ? "Unarchive" : "Archive"}
+          </span>
+        </div>
       </motion.div>
       
       <motion.button

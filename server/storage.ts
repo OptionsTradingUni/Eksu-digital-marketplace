@@ -3541,12 +3541,23 @@ export class DatabaseStorage implements IStorage {
           rankingScore += 300;
         }
         
-        // Recency bonus for last 24 hours
+        // Enhanced recency bonus - prioritize very recent posts
         const postAge = Date.now() - new Date(r.social_posts!.createdAt || Date.now()).getTime();
         const hoursOld = postAge / (1000 * 60 * 60);
-        if (hoursOld <= 24) {
-          rankingScore += Math.max(0, 100 - (hoursOld * 4));
+        
+        // Strong recency boost for very fresh posts (within 2 hours)
+        if (hoursOld <= 2) {
+          rankingScore += 500 + Math.max(0, 200 - (hoursOld * 100)); // 500-700 points for < 2 hours
+        } else if (hoursOld <= 6) {
+          rankingScore += 300 + Math.max(0, 200 - ((hoursOld - 2) * 50)); // 300-500 points for 2-6 hours
+        } else if (hoursOld <= 12) {
+          rankingScore += 200 + Math.max(0, 100 - ((hoursOld - 6) * 16.67)); // 200-300 points for 6-12 hours
+        } else if (hoursOld <= 24) {
+          rankingScore += Math.max(0, 200 - ((hoursOld - 12) * 16.67)); // 0-200 points for 12-24 hours
+        } else if (hoursOld <= 72) {
+          rankingScore += Math.max(0, 50 - ((hoursOld - 24) * 1)); // Small bonus for last 3 days
         }
+        // Posts older than 3 days get no recency bonus
         
         return {
           ...r.social_posts!,

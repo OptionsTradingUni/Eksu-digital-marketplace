@@ -3902,9 +3902,42 @@ Happy trading!`;
   app.get("/api/feed", async (req: any, res) => {
     try {
       const userId = getUserId(req);
-      const feedType = req.query.type === 'following' ? 'following' : 'for_you';
+      const feedTypeParam = req.query.type as string;
       const userLat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
       const userLng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
+      
+      // Handle bookmarks feed - requires authentication
+      if (feedTypeParam === 'bookmarks') {
+        if (!userId) {
+          return res.status(401).json({ message: "Login to view saved posts" });
+        }
+        const bookmarkedPostData = await storage.getUserBookmarks(userId);
+        
+        // Get user's following list
+        const followingList = await storage.getFollowing(userId);
+        const followingIds = new Set(followingList.map((f: any) => f.followingId || f.following?.id));
+        
+        // Check like and repost status for each bookmarked post
+        const postsWithBookmarks = await Promise.all(bookmarkedPostData.map(async (item) => {
+          const [isLiked, isReposted] = await Promise.all([
+            storage.isPostLiked(item.post.id, userId),
+            storage.isPostReposted(item.post.id, userId)
+          ]);
+          
+          return {
+            ...item.post,
+            author: item.author,
+            isBookmarked: true,
+            isLiked,
+            isFollowingAuthor: followingIds.has(item.post.authorId),
+            isReposted,
+            engagementScore: "0",
+          };
+        }));
+        return res.json(postsWithBookmarks);
+      }
+      
+      const feedType = feedTypeParam === 'following' ? 'following' : 'for_you';
       
       const posts = await storage.getSocialPostsWithAlgorithm({
         userId: userId || undefined,

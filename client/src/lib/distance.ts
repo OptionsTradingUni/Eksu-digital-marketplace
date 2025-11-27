@@ -4,7 +4,7 @@
  * @param lon1 - Longitude of point 1 in decimal degrees
  * @param lat2 - Latitude of point 2 in decimal degrees
  * @param lon2 - Longitude of point 2 in decimal degrees
- * @returns Distance in miles
+ * @returns Distance in kilometers
  */
 export function calculateDistance(
   lat1: number,
@@ -12,7 +12,7 @@ export function calculateDistance(
   lat2: number,
   lon2: number
 ): number {
-  const R = 3958.8; // Earth's radius in miles
+  const R = 6371; // Earth's radius in kilometers
   
   // Convert degrees to radians
   const toRad = (deg: number) => deg * (Math.PI / 180);
@@ -32,23 +32,24 @@ export function calculateDistance(
 
 /**
  * Format distance for display
- * @param distanceInMiles - Distance in miles
- * @returns Formatted string (e.g., "2.3 mi" or "500 ft")
+ * @param distanceInKm - Distance in kilometers
+ * @returns Formatted string (e.g., "2.3km" or "500m")
  */
-export function formatDistance(distanceInMiles: number): string {
-  if (distanceInMiles < 0.1) {
-    // Less than 0.1 miles, show in feet
-    const feet = Math.round(distanceInMiles * 5280);
-    return `${feet} ft`;
-  } else if (distanceInMiles < 1) {
-    // Less than 1 mile, show with 1 decimal
-    return `${distanceInMiles.toFixed(1)} mi`;
-  } else if (distanceInMiles < 10) {
-    // Less than 10 miles, show with 1 decimal
-    return `${distanceInMiles.toFixed(1)} mi`;
+export function formatDistance(distanceInKm: number): string {
+  if (distanceInKm < 0.1) {
+    // Less than 100m, show in meters
+    const meters = Math.round(distanceInKm * 1000);
+    return `${meters}m`;
+  } else if (distanceInKm < 1) {
+    // Less than 1km, show in meters
+    const meters = Math.round(distanceInKm * 1000);
+    return `${meters}m`;
+  } else if (distanceInKm < 10) {
+    // Less than 10km, show with 1 decimal
+    return `${distanceInKm.toFixed(1)}km`;
   } else {
-    // 10+ miles, show whole number
-    return `${Math.round(distanceInMiles)} mi`;
+    // 10+ km, show whole number
+    return `${Math.round(distanceInKm)}km`;
   }
 }
 

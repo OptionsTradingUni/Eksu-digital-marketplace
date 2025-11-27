@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -42,10 +42,11 @@ import {
   BadgeCheck,
   Plus,
   Link2,
-  Bookmark
+  Bookmark,
+  BookmarkCheck
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import type { User, SocialPost, SponsoredAd } from "@shared/schema";
 import { StoriesBar } from "./stories";
 
@@ -194,7 +195,19 @@ function isEKSUPlugAccount(author: User): boolean {
 export default function ThePlugPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("for_you");
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  
+  // Parse URL query parameter for initial tab
+  const initialTab = useMemo(() => {
+    const params = new URLSearchParams(searchString);
+    const tab = params.get("tab");
+    if (tab === "bookmarks") return "bookmarks";
+    if (tab === "following") return "following";
+    return "for_you";
+  }, [searchString]);
+  
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [newPostContent, setNewPostContent] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
@@ -209,6 +222,21 @@ export default function ThePlugPage() {
   const [sharePost, setSharePost] = useState<PostWithAuthor | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewedPostsRef = useRef<Set<string>>(new Set());
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  // Handle tab change and update URL
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    if (newTab === "for_you") {
+      setLocation("/the-plug");
+    } else {
+      setLocation(`/the-plug?tab=${newTab}`);
+    }
+  };
 
   const { data: posts, isLoading } = useQuery<PostWithAuthor[]>({
     queryKey: ["/api/feed", { type: activeTab }],
@@ -642,7 +670,7 @@ export default function ThePlugPage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-6">
             <TabsList className="w-full h-12 p-0 bg-transparent border-b rounded-none">
               <TabsTrigger 
                 value="for_you" 
@@ -659,6 +687,14 @@ export default function ThePlugPage() {
               >
                 <Users className="h-4 w-4 mr-2" />
                 <span className="font-semibold">Following</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="bookmarks" 
+                className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent transition-all"
+                data-testid="tab-bookmarks"
+              >
+                <BookmarkCheck className="h-4 w-4 mr-2" />
+                <span className="font-semibold">Saved</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -997,15 +1033,25 @@ export default function ThePlugPage() {
               transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
               className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4"
             >
-              <Zap className="h-8 w-8 text-primary" />
+              {activeTab === "bookmarks" ? (
+                <BookmarkCheck className="h-8 w-8 text-primary" />
+              ) : (
+                <Zap className="h-8 w-8 text-primary" />
+              )}
             </motion.div>
             <h3 className="text-lg font-semibold mb-2">
-              {activeTab === "following" ? "No posts from people you follow" : "No posts yet"}
+              {activeTab === "bookmarks" 
+                ? "No saved posts yet" 
+                : activeTab === "following" 
+                  ? "No posts from people you follow" 
+                  : "No posts yet"}
             </h3>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              {activeTab === "following"
-                ? "Follow more people to see their posts here"
-                : "Be the first to share what's happening on campus!"}
+              {activeTab === "bookmarks"
+                ? "Save posts by tapping the bookmark icon to view them here later"
+                : activeTab === "following"
+                  ? "Follow more people to see their posts here"
+                  : "Be the first to share what's happening on campus!"}
             </p>
           </motion.div>
         )}
