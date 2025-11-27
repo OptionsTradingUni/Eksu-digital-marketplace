@@ -160,3 +160,31 @@ The EKSU Marketplace includes an official system account ("Campus Hub") that pro
 - **React Query Caching:** staleTime: 30s, gcTime: 5 minutes
 - **Image Lazy Loading:** All images use `loading="lazy"` attribute
 - **Skeleton Loaders:** Used across pages during data fetching
+
+### PWA (Progressive Web App) Support
+- **Location:** `client/public/manifest.json`, `client/public/sw.js`
+- **Features:**
+  - Service worker with offline caching (static assets + API responses)
+  - Install prompt component for "Add to Home Screen"
+  - Offline indicator UI
+  - App icon and splash screens
+- **File:** `client/src/components/PWAInstallPrompt.tsx`
+
+### Smart Location System
+- **Files:** `client/src/lib/location.ts`, `server/routes.ts`
+- **Features:**
+  - Silent GPS acquisition with IP geolocation fallback
+  - Campus detection (EKSU coordinates: 7.6476° N, 5.2270° E)
+  - Distance-based status labels: "On Campus", "In Ado-Ekiti", "Far away"
+  - Location-aware feed algorithm (campus users prioritized)
+- **API Endpoint:** `PATCH /api/users/me/location` - Update user's coordinates
+- **Feed Enhancement:** `/api/feed` accepts `?lat=&lng=` query params for proximity ranking
+
+### Haptic Feedback
+- **File:** `client/src/lib/haptics.ts`
+- **Features:** Vibration feedback on button interactions (mobile devices)
+- **Pattern Types:** light, medium, heavy, success, warning, error, selection
+
+### Pull-to-Refresh & Back-to-Top
+- **File:** `client/src/components/ui/pull-to-refresh.tsx`
+- **Features:** Swipe-down gesture to refresh feeds, floating back-to-top button
