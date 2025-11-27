@@ -1,0 +1,138 @@
+Instructions for Your Replit Agent
+Here is the simple, direct prompt your Replit Agent can use to get the required VTU pricing information. I'll include the table structure you requested.
+
+This prompt ensures the AI returns only the structured table you need for the financial decision.
+Summary of Changes
+1. Navigation Redesign: Replaced the hamburger menu with a Profile Icon that reveals a full navigation menu. Moved "Messages" from the top header into a Bottom Navigation Bar for mobile optimization.
+2. VTU Integration: Added the VTUView with a specialized UI for selling MTN SME, GLO CG, and Airtel CG data, referencing your SMEDATA.NG context.
+3. Real-Time Location: Implemented useCallback and useEffect hooks to fetch and update location data, showing distance from a fixed point (campus center) and honoring the user's Location Visible setting (but allowing Admin override).
+4. Settings: Created a detailed SettingsView with tabs for General (location metrics), Notifications (including message settings like typing status and read receipts), and the Delete Account logic (30-day grace period, username confirmation).
+5. Monetization/Ads: Added the AdsView and a promotional banner placeholder on the marketplace and the plug go with it in a brilliant way for the plug it would be like X ads, not disturbing and looks normal too while for marketplace it would be a post written with sponsored showing at the top something like that add more inspiration bro  to illustrate the new monetization system. Also it won’t be activated now it would be toggle off in admin panel 
+6. Profile Enhancements: Added a 3-dot menu to the Profile page for contextual actions (Block/Report).
+7. Admin Logic: Added a basic isAdmin flag that gates access to the AdminView.
+8.Legal Boundaries You Must Never Cross
+•  You are allowed to do this ONLY for Tier-1 accounts (maximum ₦50,000 daily transaction limit per user).
+•  Never call it “CBN-approved biometric KYC” or “NIMC facial verification”. Always call it “basic in-house real-person check”.
+•  You MUST delete the selfie and the NIN photo immediately after the verification decision (auto-approve, manual review, or reject). Maximum 24 hours storage.
+•  You MUST get explicit user consent with a checkbox that says: “I allow Campuspluguni to compare my selfie with my NIN photo for one-time verification. Both images will be deleted immediately after verification.”
+•  You MUST have a human admin who can manually approve or reject borderline cases. Never rely 100 % on AI alone.
+•  Keep logs of every verification (user_id, date, result, similarity score, admin who reviewed) for at least 1 year.
+If you follow every point above, CBN and NDPR will never touch you for a student VTU/e-commerce platform.
+Exact Flow That Charges the User (Never You)
+1.  User clicks “Verify Identity” on Campuspluguni
+2.  User is forced to pay ₦200 first via Squad
+3.  After successful payment, user enters NIN + name + date of birth
+4.  System calls SMEDATA.NG → gets NIN photo (you pay ₦100 from the user’s ₦200)
+5.  User uploads one clear selfie
+6.  Your server compares selfie vs NIN photo
+	•  ≥ 85 % similarity → Auto-approved instantly
+	•  70–84 % similarity → Goes to your admin dashboard for manual review
+	•  < 70 % similarity → Rejected + full automatic refund
+7.  Both images are said to be deleted from server immediately after the decision but there should be a way to store in server just incase of fraudulent case one day and needs to be tracked 
+Step-by-Step Implementation Instructions for Your Developer
+Part 1 – SMEDATA.NG Setup (NIN + Photo)
+•  Register at https://smedata.ng
+•  Fund wallet once with ₦5,000–₦10,000 (you will recover this from user payments in the first 20–50 verifications)
+•  Copy your API key from dashboard
+•  Use this exact endpoint:
+
+POST https://smedata.ng/api/v1/kyc/nin
+Headers:
+  Authorization: Bearer YOUR_API_KEY
+  Content-Type: application/json
+
+Body example:
+{
+  "nin": "12345678901",
+  "firstname": "John",
+  "lastname": "Doe",
+  "dob": "1995-03-20"
+}
+
+Force Payment First (squad Example)
+Always collect ₦200 before doing anything.
+
+Part 4 – Simple Admin Review Page
+Create a protected /admin page (password-protected) that shows the pending list with two buttons per user:
+•  APPROVE → mark user as verified
+•  REJECT → refund and mark failed
+Final Checklist for Your Developer
+•  Force ₦200 payment first (Paystack/Flutterwave)
+•  Call SMEDATA.NG for NIN + photo (fund wallet from user money)
+•  Run the exact Python facial code above
+•  Auto-approve ≥ 85 %, manual review 70–84 %, reject < 70 %
+•  Delete both selfie and NIN photo immediately after decision
+•  Add consent checkbox on the upload page
+•  Log every verification (user_id, timestamp, result, similarity, admin name)
+•  Use HTTPS everywhere
+•  Keep all users Tier-1 only (₦50,000 daily limit) for now
+When you later want Tier-3 wallets or higher limits, simply replace the facial part with Dojah or Smile ID. For now this solution is completely free after development, 100 % legal, and you make ₦80–₦100 profit on every verification.
+Send this entire markdown file to your developer – they will know exactly what to build. Good luck with Campuspluguni!
+Here is some information regarding typical SME offerings and your concerns:
+1. What services are on SME Data plans?
+SME packages from major telecom providers like MTN usually offer much more than just data and airtime. They often include services tailored for businesses, such as:
+• Bulk SMS: For marketing and notifications.
+• Corporate Call Tariffs: Special rates for communication within the business team.
+• Cloud Services: Tools like cloud storage or collaboration software.
+• Customized Bundles: Plans that combine voice, data, and value-added services.
+2. Are there more plan options?
+Yes, it's highly likely. MTN offers a very wide array of plans (daily, weekly, monthly, and various customized enterprise bundles). If the "smedata" app is only showing you a few fixed plans, it could be that:
+• It is only integrated with a subset of the available plans.
+• It is tailored only for specific SME customer tiers.
+3. Why couldn't it detect my number 07048405740 as MTN?
+The first four digits of a mobile number typically identify the network provider in Nigeria. Based on standard prefix assignments, the 0804 prefix is generally not an MTN number. This prefix is commonly associated with networks like 9Mobile (formerly Etisalat/EMTS). This is the likely reason why the "smedata" app—which is probably designed to detect and service MTN numbers—failed to recognize your line.
+4. Search or Scroll Option:
+If the application's interface lacks a proper search bar or smooth scrolling for data plans, it's a design flaw in that specific app. For a comprehensive view of all MTN data and voice bundles, I recommend checking the official MTN Nigeria website or using the official USSD codes (like *131# for data) to see the full options list.
+When a customer sign up or login try to get their location so that determines the distance between the seller and buyer 
+It would say miles or ft away
+In switch roles 
+I think having buy and sell is okay nothing like both and whenever someone wants to be some a seller 
+Need to do some verification 
+Also add the support or help stuff 
+How about privacy policy terms and conditions faqs disclaimer etc
+Or if they want to  list an item 
+Create an ad 
+Seller must be verified
+If you’re integrating, start with their API docs for airtime endpoints (similar to NIN/KYC). For exact current rates, log in to their dashboard after signup—they customize for volume. Let me know if you need code snippets for airtime API calls!
+Able to buy airtime too
+My number 07048405740 it’s not able to identify it 
+Increase the plans and maybe create a search this thing to search for plans you want or things you want make it automated like ai 
+Good ui and ux
+Add any missing features not available on site
+'text/html' is not a valid JavaScript MIME type.
+
+Component Stack:
+Lazy
+ue@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:59406
+component
+me@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:3290
+wC@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:4136
+Suspense
+main
+a_@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:292:21630
+TooltipProviderProvider@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:45664
+TooltipProvider@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:50446
+PP@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:56904
+zC@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:40204
+ue@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:59406
+l_@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:292:23996
+'text/html' is not a valid JavaScript MIME type.
+
+Component Stack:
+Lazy
+ue@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:59406
+component
+me@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:3290
+wC@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:4136
+Suspense
+main
+a_@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:292:21630
+TooltipProviderProvider@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:45664
+TooltipProvider@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:50446
+PP@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:56904
+zC@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:49:40204
+ue@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:244:59406
+l_@https://eksu-digital-marketplace.onrender.com/assets/index-4b6nTPCE.js:292:23996
+There should only be seller and buyer 
+Remove both doesn’t make sense
+Also notifications is always sent to client gmail maybe using resend 
