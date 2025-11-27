@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SponsoredAdCard } from "@/components/SponsoredAdCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -44,7 +45,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import type { User, SocialPost } from "@shared/schema";
+import type { User, SocialPost, SponsoredAd } from "@shared/schema";
 
 type PostWithAuthor = SocialPost & { 
   author: User; 
@@ -190,6 +191,10 @@ export default function ThePlugPage() {
 
   const { data: posts, isLoading } = useQuery<PostWithAuthor[]>({
     queryKey: ["/api/social-posts", activeTab === "following" ? { following: true } : {}],
+  });
+
+  const { data: sponsoredAds = [] } = useQuery<SponsoredAd[]>({
+    queryKey: ["/api/ads/active", { type: "plug" }],
   });
 
   const { data: comments } = useQuery<Comment[]>({
@@ -610,8 +615,20 @@ export default function ThePlugPage() {
               }
             }}
           >
-            {posts.map((post) => (
-              <motion.article
+            {posts.map((post, index) => {
+              const adIndex = Math.floor(index / 5);
+              const showAd = index > 0 && index % 5 === 0 && sponsoredAds[adIndex - 1];
+              
+              return (
+                <>
+                  {showAd && (
+                    <SponsoredAdCard 
+                      key={`ad-${sponsoredAds[adIndex - 1].id}`} 
+                      ad={sponsoredAds[adIndex - 1]} 
+                      variant="plug"
+                    />
+                  )}
+                  <motion.article
                 key={post.id}
                 variants={{
                   hidden: { opacity: 0 },
@@ -836,7 +853,9 @@ export default function ThePlugPage() {
                   </div>
                 </div>
               </motion.article>
-            ))}
+                </>
+              );
+            })}
           </motion.div>
         ) : (
           <motion.div

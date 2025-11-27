@@ -499,9 +499,10 @@ export interface IStorage {
   // KYC Verification operations
   createKycVerification(userId: string): Promise<KycVerification>;
   getKycVerification(userId: string): Promise<KycVerification | undefined>;
+  getKycVerificationById(id: string): Promise<KycVerification | undefined>;
   updateKycVerification(id: string, data: Partial<KycVerification>): Promise<KycVerification>;
   getPendingKycVerifications(): Promise<KycVerification[]>;
-  createKycLog(data: { kycId: string; userId: string; action: string; result?: string; similarityScore?: number; reviewedBy?: string; ipAddress?: string; userAgent?: string; metadata?: any }): Promise<void>;
+  createKycLog(data: { kycId: string; userId: string; action: string; result?: string; similarityScore?: number | string; reviewedBy?: string; ipAddress?: string; userAgent?: string; metadata?: any }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3683,6 +3684,14 @@ export class DatabaseStorage implements IStorage {
       .from(kycVerifications)
       .where(eq(kycVerifications.userId, userId))
       .orderBy(desc(kycVerifications.createdAt));
+    return verification;
+  }
+
+  async getKycVerificationById(id: string): Promise<KycVerification | undefined> {
+    const [verification] = await db
+      .select()
+      .from(kycVerifications)
+      .where(eq(kycVerifications.id, id));
     return verification;
   }
 

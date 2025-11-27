@@ -34,6 +34,8 @@ const PaymentCallbackPage = lazy(() => import("@/pages/payment-callback"));
 const WishlistPage = lazy(() => import("@/pages/wishlist"));
 const VtuPage = lazy(() => import("@/pages/vtu"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
+const LegalPage = lazy(() => import("@/pages/legal"));
+const KycPage = lazy(() => import("@/pages/kyc"));
 
 function PageLoadingSpinner() {
   return (
@@ -182,6 +184,16 @@ function Router() {
             <Route path="/settings" component={() => (
               <ErrorBoundary>
                 <SettingsPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/legal" component={() => (
+              <ErrorBoundary>
+                <LegalPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/kyc" component={() => (
+              <ErrorBoundary>
+                <KycPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (

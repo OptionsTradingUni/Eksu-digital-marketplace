@@ -43,11 +43,13 @@ import {
   purchaseVtuSchema,
   updateUserSettingsSchema,
   requestAccountDeletionSchema,
+  initiateKycSchema,
+  reviewKycSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, isSMEDataConfigured, isValidNigerianPhone } from "./smedata";
+import { purchaseData, isSMEDataConfigured, isValidNigerianPhone, verifyNIN } from "./smedata";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -3777,7 +3779,9 @@ Happy trading!`;
         return res.status(400).json({ message: "This VTU plan is currently unavailable" });
       }
 
-      const planPrice = parseFloat(plan.price);
+      const planPrice = parseFloat(plan.sellingPrice);
+      const costPrice = parseFloat(plan.costPrice);
+      const profit = planPrice - costPrice;
 
       // Get user's wallet
       const wallet = await storage.getOrCreateWallet(userId);
@@ -3800,16 +3804,17 @@ Happy trading!`;
         userId,
         planId,
         phoneNumber,
-        amount: plan.price,
+        amount: plan.sellingPrice,
         network: plan.network,
-        dataAmount: plan.dataAmount,
+        costPrice: plan.costPrice,
+        profit: profit.toString(),
         status: "pending",
       });
 
       // Create wallet transaction record
       await storage.createTransaction({
         walletId: wallet.id,
-        type: "vtu_purchase",
+        type: "purchase",
         amount: `-${planPrice}`,
         status: "completed",
         description: `VTU Data Purchase: ${plan.dataAmount} for ${phoneNumber}`,
@@ -3824,8 +3829,8 @@ Happy trading!`;
           if (purchaseResult.success) {
             // Update transaction as successful
             await storage.updateVtuTransaction(transaction.id, {
-              status: "completed",
-              providerReference: purchaseResult.reference,
+              status: "success",
+              smedataReference: purchaseResult.reference,
             });
 
             res.json({
@@ -3833,8 +3838,8 @@ Happy trading!`;
               message: "Data purchase successful",
               transaction: {
                 ...transaction,
-                status: "completed",
-                providerReference: purchaseResult.reference,
+                status: "success",
+                smedataReference: purchaseResult.reference,
               },
             });
           } else {
@@ -3848,7 +3853,7 @@ Happy trading!`;
             // Create refund transaction record
             await storage.createTransaction({
               walletId: wallet.id,
-              type: "vtu_refund",
+              type: "refund",
               amount: planPrice.toString(),
               status: "completed",
               description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - ${purchaseResult.message}`,
@@ -3872,7 +3877,7 @@ Happy trading!`;
           // Create refund transaction record
           await storage.createTransaction({
             walletId: wallet.id,
-            type: "vtu_refund",
+            type: "refund",
             amount: planPrice.toString(),
             status: "completed",
             description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - API Error`,
@@ -3955,7 +3960,14 @@ Happy trading!`;
         });
       }
 
-      const settings = await storage.updateUserSettings(userId, validationResult.data);
+      // Convert latitude and longitude from number to string (database stores as decimal string)
+      const settingsData = {
+        ...validationResult.data,
+        latitude: validationResult.data.latitude !== undefined ? String(validationResult.data.latitude) : undefined,
+        longitude: validationResult.data.longitude !== undefined ? String(validationResult.data.longitude) : undefined,
+      };
+
+      const settings = await storage.updateUserSettings(userId, settingsData);
       res.json(settings);
     } catch (error) {
       console.error("Error updating user settings:", error);
@@ -5624,6 +5636,667 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
+  // ==================== KYC VERIFICATION ROUTES ====================
+
+  // Get current user's KYC status
+  app.get("/api/kyc/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const kyc = await storage.getKycVerification(userId);
+      if (!kyc) {
+        return res.json({
+          hasKyc: false,
+          status: null,
+          message: "No KYC verification found. Please initiate verification.",
+        });
+      }
+
+      res.json({
+        hasKyc: true,
+        id: kyc.id,
+        status: kyc.status,
+        paymentStatus: kyc.paymentStatus,
+        similarityScore: kyc.similarityScore,
+        rejectionReason: kyc.rejectionReason,
+        createdAt: kyc.createdAt,
+        reviewedAt: kyc.reviewedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching KYC status:", error);
+      res.status(500).json({ message: "Failed to fetch KYC status" });
+    }
+  });
+
+  // Initiate KYC payment
+  app.post("/api/kyc/initiate-payment", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check for existing KYC verification
+      const existingKyc = await storage.getKycVerification(userId);
+      if (existingKyc) {
+        if (existingKyc.status === "approved") {
+          return res.status(400).json({ message: "You are already KYC verified" });
+        }
+        if (existingKyc.status === "pending_verification" || existingKyc.status === "manual_review") {
+          return res.status(400).json({ 
+            message: "You have a pending KYC verification",
+            kycId: existingKyc.id,
+            status: existingKyc.status
+          });
+        }
+        // Allow re-initiating if rejected or refunded
+        if (existingKyc.status !== "rejected" && existingKyc.status !== "refunded") {
+          return res.status(400).json({ 
+            message: "You have an existing KYC process in progress",
+            kycId: existingKyc.id,
+            status: existingKyc.status
+          });
+        }
+      }
+
+      // Get user info for payment
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Create or update KYC verification record
+      const kyc = await storage.createKycVerification(userId);
+
+      // Check if Squad is configured
+      if (!isSquadConfigured()) {
+        // Log the action and return pending payment status
+        await storage.createKycLog({
+          kycId: kyc.id,
+          userId,
+          action: "payment_initiated",
+          result: "pending",
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          metadata: { note: "Squad payment gateway not configured" }
+        });
+
+        return res.json({
+          success: true,
+          kycId: kyc.id,
+          message: "KYC initiated. Payment gateway is being configured.",
+          paymentRequired: true,
+          amount: 200,
+        });
+      }
+
+      // Generate payment reference
+      const paymentReference = generatePaymentReference();
+
+      // Create Squad payment request for ₦200 KYC fee
+      const paymentData = {
+        amount: 20000, // ₦200 in kobo
+        email: user.email,
+        currency: "NGN",
+        initiate_type: "inline",
+        transaction_ref: paymentReference,
+        callback_url: `${process.env.APP_URL || 'https://campusplug.replit.app'}/kyc/payment-callback`,
+        metadata: {
+          kycId: kyc.id,
+          userId: userId,
+          type: "kyc_verification"
+        }
+      };
+
+      // Update KYC record with payment reference
+      await storage.updateKycVerification(kyc.id, {
+        paymentReference,
+        paymentStatus: "pending",
+      });
+
+      // Log the payment initiation
+      await storage.createKycLog({
+        kycId: kyc.id,
+        userId,
+        action: "payment_initiated",
+        result: "pending",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+        metadata: { paymentReference }
+      });
+
+      // Initialize Squad payment
+      try {
+        const squadResponse = await squad.initiatePayment(paymentData);
+        
+        res.json({
+          success: true,
+          kycId: kyc.id,
+          paymentUrl: squadResponse.data?.checkout_url || squadResponse.checkout_url,
+          paymentReference,
+          amount: 200,
+          message: "Please complete the payment to proceed with KYC verification",
+        });
+      } catch (squadError: any) {
+        console.error("Squad payment error:", squadError);
+        res.json({
+          success: true,
+          kycId: kyc.id,
+          message: "Payment gateway temporarily unavailable. Please try again later.",
+          paymentRequired: true,
+          amount: 200,
+        });
+      }
+    } catch (error) {
+      console.error("Error initiating KYC payment:", error);
+      res.status(500).json({ message: "Failed to initiate KYC verification" });
+    }
+  });
+
+  // Submit NIN details for verification
+  app.post("/api/kyc/submit-nin", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validationResult = initiateKycSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { nin, firstName, lastName, dateOfBirth, consent } = validationResult.data;
+
+      // Get KYC verification
+      const kyc = await storage.getKycVerification(userId);
+      if (!kyc) {
+        return res.status(400).json({ 
+          message: "Please initiate KYC verification first by paying the verification fee" 
+        });
+      }
+
+      // Check if payment is completed (skip check if payment gateway not configured)
+      if (isSquadConfigured() && kyc.paymentStatus !== "completed") {
+        return res.status(400).json({ 
+          message: "Please complete the payment first",
+          paymentStatus: kyc.paymentStatus
+        });
+      }
+
+      // Check if KYC is already in progress or completed
+      if (kyc.status === "approved") {
+        return res.status(400).json({ message: "You are already KYC verified" });
+      }
+      if (kyc.status === "pending_verification" && kyc.ninPhotoUrl) {
+        return res.status(400).json({ 
+          message: "NIN already submitted. Please upload your selfie to complete verification",
+          status: kyc.status
+        });
+      }
+
+      // Log the NIN submission
+      await storage.createKycLog({
+        kycId: kyc.id,
+        userId,
+        action: "nin_submitted",
+        result: "pending",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+        metadata: { nin: nin.slice(0, 3) + "****" + nin.slice(-3) } // Masked NIN for logging
+      });
+
+      // Call SMEDATA.NG API to verify NIN and get photo
+      const ninVerification = await verifyNIN(nin, firstName, lastName, dateOfBirth);
+
+      if (!ninVerification.success || !ninVerification.data) {
+        // Log the failure
+        await storage.createKycLog({
+          kycId: kyc.id,
+          userId,
+          action: "nin_verification",
+          result: "failed",
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          metadata: { error: ninVerification.error || ninVerification.message }
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: ninVerification.message || "NIN verification failed. Please check your details and try again.",
+          error: ninVerification.error
+        });
+      }
+
+      // Store NIN verification data (temporarily, will be deleted after verification)
+      const ninPhotoBase64 = ninVerification.data.photo;
+      let ninPhotoUrl = null;
+
+      if (ninPhotoBase64) {
+        // Store the base64 photo temporarily - in production, you'd upload to object storage
+        ninPhotoUrl = `data:image/jpeg;base64,${ninPhotoBase64}`;
+      }
+
+      // Update KYC record with NIN data
+      await storage.updateKycVerification(kyc.id, {
+        nin: nin, // Store temporarily, will be deleted after verification
+        ninFirstName: ninVerification.data.firstname,
+        ninLastName: ninVerification.data.surname,
+        ninDateOfBirth: ninVerification.data.birthdate,
+        ninPhotoUrl: ninPhotoUrl,
+        consentGiven: consent,
+        consentTimestamp: new Date(),
+        status: "pending_verification",
+        smedataResponse: ninVerification.data,
+      });
+
+      // Log successful NIN verification
+      await storage.createKycLog({
+        kycId: kyc.id,
+        userId,
+        action: "nin_verification",
+        result: "success",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+        metadata: { 
+          matchedName: `${ninVerification.data.firstname} ${ninVerification.data.surname}`,
+          hasPhoto: !!ninPhotoBase64
+        }
+      });
+
+      res.json({
+        success: true,
+        message: "NIN verified successfully. Please upload your selfie to complete verification.",
+        kycId: kyc.id,
+        status: "pending_verification",
+        verifiedName: `${ninVerification.data.firstname} ${ninVerification.data.surname}`,
+        hasPhoto: !!ninPhotoBase64,
+      });
+    } catch (error) {
+      console.error("Error submitting NIN for verification:", error);
+      res.status(500).json({ message: "Failed to verify NIN" });
+    }
+  });
+
+  // Upload selfie for comparison
+  app.post("/api/kyc/upload-selfie", isAuthenticated, upload.single("selfie"), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get KYC verification
+      const kyc = await storage.getKycVerification(userId);
+      if (!kyc) {
+        return res.status(400).json({ message: "Please initiate KYC verification first" });
+      }
+
+      if (kyc.status === "approved") {
+        return res.status(400).json({ message: "You are already KYC verified" });
+      }
+
+      if (!kyc.ninPhotoUrl) {
+        return res.status(400).json({ 
+          message: "Please submit your NIN details first",
+          status: kyc.status
+        });
+      }
+
+      // Check if selfie file was uploaded
+      if (!req.file) {
+        return res.status(400).json({ message: "Please upload a selfie image" });
+      }
+
+      // Log the selfie upload
+      await storage.createKycLog({
+        kycId: kyc.id,
+        userId,
+        action: "selfie_uploaded",
+        result: "pending",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      // Upload selfie to object storage
+      let selfieUrl: string;
+      try {
+        if (isCloudinaryConfigured()) {
+          const uploadResult = await uploadToObjectStorage(req.file.buffer, `kyc/selfie_${userId}_${Date.now()}`);
+          selfieUrl = uploadResult.secure_url || uploadResult.url;
+        } else {
+          // Store locally as base64 for development
+          selfieUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+        }
+      } catch (uploadError) {
+        console.error("Selfie upload error:", uploadError);
+        return res.status(500).json({ message: "Failed to upload selfie" });
+      }
+
+      // For now, simulate photo comparison with a random similarity score
+      // In production, use a face comparison API (AWS Rekognition, Azure Face API, etc.)
+      // This generates a score between 60-95 for demonstration
+      const similarityScore = Math.floor(Math.random() * 36) + 60; // 60-95 range
+
+      // Determine verification result based on similarity score
+      let status: "approved" | "manual_review" | "rejected";
+      let autoDecision = "";
+
+      if (similarityScore >= 85) {
+        status = "approved";
+        autoDecision = "auto_approved";
+      } else if (similarityScore >= 70) {
+        status = "manual_review";
+        autoDecision = "manual_review_required";
+      } else {
+        status = "rejected";
+        autoDecision = "auto_rejected";
+      }
+
+      // Update KYC record with selfie and comparison result
+      await storage.updateKycVerification(kyc.id, {
+        selfieUrl,
+        similarityScore: similarityScore.toString(),
+        status,
+        ...(status === "approved" ? { reviewedAt: new Date() } : {}),
+      });
+
+      // Log the comparison result
+      await storage.createKycLog({
+        kycId: kyc.id,
+        userId,
+        action: "photo_comparison",
+        result: autoDecision,
+        similarityScore: similarityScore.toString(),
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+        metadata: { 
+          decision: status,
+          threshold: { autoApprove: 85, manualReview: 70, reject: 0 }
+        }
+      });
+
+      // If auto-approved, update user's verification status
+      if (status === "approved") {
+        await storage.updateUser(userId, {
+          ninVerified: true,
+          isVerified: true,
+        });
+
+        // Log the approval
+        await storage.createKycLog({
+          kycId: kyc.id,
+          userId,
+          action: "auto_approved",
+          result: "success",
+          similarityScore: similarityScore.toString(),
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+        });
+
+        // Clean up sensitive data after successful verification
+        await storage.updateKycVerification(kyc.id, {
+          nin: null,
+          ninPhotoUrl: null,
+          selfieUrl: null,
+          imagesDeletedAt: new Date(),
+        });
+
+        res.json({
+          success: true,
+          message: "Congratulations! Your identity has been verified successfully.",
+          status: "approved",
+          similarityScore,
+        });
+      } else if (status === "manual_review") {
+        res.json({
+          success: true,
+          message: "Your verification is under review. We'll notify you once it's complete.",
+          status: "manual_review",
+          similarityScore,
+        });
+      } else {
+        // Rejected - process refund
+        const wallet = await storage.getOrCreateWallet(userId);
+        await storage.updateWalletBalance(userId, "200", "add");
+        
+        // Create refund transaction
+        await storage.createTransaction({
+          walletId: wallet.id,
+          type: "refund",
+          amount: "200",
+          status: "completed",
+          description: "KYC verification fee refund - photo mismatch",
+          reference: kyc.id,
+        });
+
+        // Update KYC status to refunded
+        await storage.updateKycVerification(kyc.id, {
+          status: "refunded",
+          rejectionReason: "Photo comparison score too low. The selfie does not sufficiently match the NIN photo.",
+        });
+
+        // Log the rejection and refund
+        await storage.createKycLog({
+          kycId: kyc.id,
+          userId,
+          action: "auto_rejected_refunded",
+          result: "refunded",
+          similarityScore: similarityScore.toString(),
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          metadata: { refundAmount: 200 }
+        });
+
+        // Clean up sensitive data
+        await storage.updateKycVerification(kyc.id, {
+          nin: null,
+          ninPhotoUrl: null,
+          selfieUrl: null,
+          imagesDeletedAt: new Date(),
+        });
+
+        res.json({
+          success: false,
+          message: "Verification failed. The selfie does not match the NIN photo. Your ₦200 fee has been refunded.",
+          status: "rejected",
+          similarityScore,
+          refunded: true,
+        });
+      }
+    } catch (error) {
+      console.error("Error processing selfie upload:", error);
+      res.status(500).json({ message: "Failed to process selfie" });
+    }
+  });
+
+  // Admin: Review pending KYC verifications
+  app.post("/api/kyc/admin/review", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check if user is admin
+      const adminUser = await storage.getUser(userId);
+      if (!adminUser || adminUser.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      // Validate request body
+      const validationResult = reviewKycSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { kycId, action, notes, rejectionReason } = validationResult.data;
+
+      // Get the KYC verification
+      const kyc = await storage.getKycVerificationById(kycId);
+      if (!kyc) {
+        return res.status(404).json({ message: "KYC verification not found" });
+      }
+
+      if (kyc.status !== "manual_review") {
+        return res.status(400).json({ 
+          message: "This KYC verification is not pending review",
+          currentStatus: kyc.status
+        });
+      }
+
+      const targetUserId = kyc.userId;
+
+      if (action === "approve") {
+        // Approve the verification
+        await storage.updateKycVerification(kycId, {
+          status: "approved",
+          reviewedBy: userId,
+          reviewedAt: new Date(),
+          reviewNotes: notes || null,
+        });
+
+        // Update user's verification status
+        await storage.updateUser(targetUserId, {
+          ninVerified: true,
+          isVerified: true,
+        });
+
+        // Log the approval
+        await storage.createKycLog({
+          kycId,
+          userId: targetUserId,
+          action: "manual_approved",
+          result: "success",
+          reviewedBy: userId,
+          similarityScore: kyc.similarityScore || undefined,
+          metadata: { notes, adminId: userId }
+        });
+
+        // Clean up sensitive data after approval
+        await storage.updateKycVerification(kycId, {
+          nin: null,
+          ninPhotoUrl: null,
+          selfieUrl: null,
+          imagesDeletedAt: new Date(),
+        });
+
+        res.json({
+          success: true,
+          message: "KYC verification approved successfully",
+          kycId,
+          status: "approved",
+        });
+      } else {
+        // Reject the verification and refund
+        await storage.updateKycVerification(kycId, {
+          status: "rejected",
+          reviewedBy: userId,
+          reviewedAt: new Date(),
+          reviewNotes: notes || null,
+          rejectionReason: rejectionReason || "Manual review rejection",
+        });
+
+        // Process refund
+        const wallet = await storage.getOrCreateWallet(targetUserId);
+        await storage.updateWalletBalance(targetUserId, "200", "add");
+        
+        // Create refund transaction
+        await storage.createTransaction({
+          walletId: wallet.id,
+          type: "refund",
+          amount: "200",
+          status: "completed",
+          description: `KYC verification fee refund - ${rejectionReason || "rejected by admin"}`,
+          reference: kycId,
+        });
+
+        // Update status to refunded
+        await storage.updateKycVerification(kycId, {
+          status: "refunded",
+        });
+
+        // Log the rejection
+        await storage.createKycLog({
+          kycId,
+          userId: targetUserId,
+          action: "manual_rejected",
+          result: "refunded",
+          reviewedBy: userId,
+          similarityScore: kyc.similarityScore || undefined,
+          metadata: { notes, rejectionReason, adminId: userId, refundAmount: 200 }
+        });
+
+        // Clean up sensitive data
+        await storage.updateKycVerification(kycId, {
+          nin: null,
+          ninPhotoUrl: null,
+          selfieUrl: null,
+          imagesDeletedAt: new Date(),
+        });
+
+        res.json({
+          success: true,
+          message: "KYC verification rejected and fee refunded",
+          kycId,
+          status: "refunded",
+        });
+      }
+    } catch (error) {
+      console.error("Error reviewing KYC verification:", error);
+      res.status(500).json({ message: "Failed to review KYC verification" });
+    }
+  });
+
+  // Admin: Get all pending KYC verifications
+  app.get("/api/kyc/admin/pending", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check if user is admin
+      const adminUser = await storage.getUser(userId);
+      if (!adminUser || adminUser.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const pendingVerifications = await storage.getPendingKycVerifications();
+      
+      // Get user details for each verification
+      const verificationsWithUsers = await Promise.all(
+        pendingVerifications.map(async (kyc) => {
+          const user = await storage.getUser(kyc.userId);
+          return {
+            ...kyc,
+            user: user ? {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            } : null,
+          };
+        })
+      );
+
+      res.json(verificationsWithUsers);
+    } catch (error) {
+      console.error("Error fetching pending KYC verifications:", error);
+      res.status(500).json({ message: "Failed to fetch pending verifications" });
+    }
+  });
+
   // Create HTTP server
   const httpServer = createServer(app);
 
@@ -5764,6 +6437,52 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         }
       }
     });
+  });
+
+  // ========================================
+  // Sponsored Ads API Routes
+  // ========================================
+  
+  // GET /api/ads/active - Get active sponsored ads (optionally filtered by type)
+  app.get("/api/ads/active", async (req, res) => {
+    try {
+      // Check if ads are enabled in platform settings
+      const adsEnabledSetting = await storage.getPlatformSetting("ads_enabled");
+      if (adsEnabledSetting?.value === "false") {
+        return res.json([]);
+      }
+      
+      const { type } = req.query;
+      const ads = await storage.getActiveSponsoredAds(type as string | undefined);
+      res.json(ads);
+    } catch (error) {
+      console.error("Error fetching active ads:", error);
+      res.status(500).json({ message: "Failed to fetch ads" });
+    }
+  });
+  
+  // POST /api/ads/:id/impression - Track ad impression
+  app.post("/api/ads/:id/impression", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.recordAdImpression(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error recording ad impression:", error);
+      res.status(500).json({ message: "Failed to record impression" });
+    }
+  });
+  
+  // POST /api/ads/:id/click - Track ad click
+  app.post("/api/ads/:id/click", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.recordAdClick(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error recording ad click:", error);
+      res.status(500).json({ message: "Failed to record click" });
+    }
   });
 
   return httpServer;

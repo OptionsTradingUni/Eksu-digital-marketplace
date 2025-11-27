@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NotificationBell from "@/components/NotificationBell";
@@ -154,6 +154,31 @@ export function Header() {
                       <Link href="/notifications" data-testid="link-notifications">
                         <Bell className="mr-2 h-4 w-4" />
                         Notifications
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/wishlist" data-testid="link-wishlist">
+                        <Heart className="mr-2 h-4 w-4" />
+                        Wishlist
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/support" data-testid="link-support">
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Help & Support
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/kyc" data-testid="link-kyc-verify">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Verify Identity
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/legal" data-testid="link-legal">
+                        <FileText className="mr-2 h-4 w-4" />
+                        Legal & Privacy
                       </Link>
                     </DropdownMenuItem>
                     {isAdmin && (

@@ -12,8 +12,9 @@ export function useAuth() {
     isLoading,
     isError,
     isAuthenticated: !!user && !isError,
-    isSeller: user?.role === "seller" || user?.role === "admin",
-    isBuyer: user?.role === "buyer" || user?.role === "admin",
+    isSeller: user?.role === "seller" || user?.role === "both" || user?.role === "admin",
+    isBuyer: user?.role === "buyer" || user?.role === "both" || user?.role === "admin",
     isAdmin: user?.role === "admin",
+    isVerified: user?.isVerified || user?.ninVerified || false,
   };
 }

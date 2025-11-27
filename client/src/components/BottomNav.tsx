@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Zap, Search, MessageSquare, Gamepad2, User } from "lucide-react";
+import { Home, Zap, MessageSquare, Gamepad2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,19 +34,17 @@ export function BottomNav() {
 
   const isActive = (path: string) => {
     if (path === "/") {
-      return location === "/" && !location.includes("?focus=search");
+      return location === "/";
     }
     return location.startsWith(path);
   };
-
-  const isSearchActive = location.includes("?focus=search");
 
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background lg:hidden"
       data-testid="bottom-nav"
     >
-      <div className="grid h-16 grid-cols-6">
+      <div className="grid h-16 grid-cols-5">
         <NavItem
           icon={<Home className="h-5 w-5" />}
           label="Home"
@@ -61,14 +59,6 @@ export function BottomNav() {
           href="/the-plug"
           isActive={isActive("/the-plug")}
           testId="button-nav-plug"
-        />
-
-        <NavItem
-          icon={<Search className="h-5 w-5" />}
-          label="Search"
-          href="/?focus=search"
-          isActive={isSearchActive}
-          testId="button-nav-search"
         />
 
         <NavItem

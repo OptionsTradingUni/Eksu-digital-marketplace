@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ProductCard";
+import { SponsoredAdCard } from "@/components/SponsoredAdCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import { Plus, SlidersHorizontal, X, MapPin, Wallet, Search } from "lucide-react
 import { Link, useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Product, Category } from "@shared/schema";
+import type { Product, Category, SponsoredAd } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
 const EKSU_LOCATIONS = [
@@ -85,6 +86,10 @@ export default function Home() {
       condition: condition !== "all" ? condition : undefined, 
       location: locationFilter !== "all" ? locationFilter : undefined 
     }],
+  });
+
+  const { data: sponsoredAds = [] } = useQuery<SponsoredAd[]>({
+    queryKey: ["/api/ads/active", { type: "marketplace" }],
   });
 
   const handleSearch = () => {
@@ -436,9 +441,24 @@ export default function Home() {
               </div>
             ) : filteredProducts && filteredProducts.length > 0 ? (
               <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
+                {filteredProducts.map((product, index) => {
+                  const elements = [
+                    <ProductCard key={product.id} product={product} />
+                  ];
+                  
+                  const adIndex = Math.floor((index + 1) / 6);
+                  if ((index + 1) % 6 === 0 && sponsoredAds[adIndex - 1]) {
+                    elements.push(
+                      <SponsoredAdCard 
+                        key={`ad-${sponsoredAds[adIndex - 1].id}`} 
+                        ad={sponsoredAds[adIndex - 1]} 
+                        variant="marketplace"
+                      />
+                    );
+                  }
+                  
+                  return elements;
+                })}
               </div>
             ) : (
               <div className="text-center py-12">

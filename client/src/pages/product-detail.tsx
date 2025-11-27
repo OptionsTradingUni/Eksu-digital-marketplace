@@ -2,19 +2,21 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, Link } from "wouter";
 import { insertProductSchema, type InsertProduct, type Category, type Product } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, X, Loader2, MapPin, Tag } from "lucide-react";
+import { Upload, X, Loader2, MapPin, Tag, Shield, AlertTriangle } from "lucide-react";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 const EKSU_LOCATIONS = [
@@ -30,11 +32,15 @@ export default function CreateProduct() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, isVerified, isSeller } = useAuth();
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   
   const isEditMode = !!id;
+  
+  // Check if user can create listings (must be verified seller)
+  const canCreateListing = isVerified && isSeller;
 
   // Fetch categories
   const { data: categories } = useQuery<Category[]>({
@@ -217,6 +223,59 @@ export default function CreateProduct() {
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show verification required message for non-verified users
+  if (!isEditMode && !canCreateListing) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-3xl">
+        <Card>
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900">
+              <Shield className="h-8 w-8 text-yellow-600" />
+            </div>
+            <CardTitle>Verification Required</CardTitle>
+            <CardDescription>
+              You need to verify your identity before you can list products for sale
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Why verification?</AlertTitle>
+              <AlertDescription>
+                We verify all sellers to prevent scams and build trust in our marketplace. 
+                Verification is quick, easy, and only costs N200.
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2">
+              <h4 className="font-medium">Benefits of verification:</h4>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                <li>Green verified badge on your profile</li>
+                <li>Ability to list and sell products</li>
+                <li>Higher trust from buyers</li>
+                <li>Access to all seller features</li>
+              </ul>
+            </div>
+            
+            <div className="flex flex-col gap-2 pt-4">
+              <Link href="/kyc">
+                <Button className="w-full" data-testid="button-verify-now">
+                  <Shield className="mr-2 h-4 w-4" />
+                  Verify Now - N200
+                </Button>
+              </Link>
+              <Link href="/">
+                <Button variant="outline" className="w-full">
+                  Go Back to Marketplace
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
