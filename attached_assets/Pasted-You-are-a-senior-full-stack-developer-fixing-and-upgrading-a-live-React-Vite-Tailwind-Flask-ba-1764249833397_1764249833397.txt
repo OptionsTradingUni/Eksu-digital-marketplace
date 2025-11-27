@@ -1,0 +1,117 @@
+You are a senior full-stack developer fixing and upgrading a live React + Vite + Tailwind + Flask backend app called "EKSU Digital Marketplace" hosted on Render.
+
+Current live URL: https://eksu-digital-marketplace.onrender.com
+
+Fix ALL these bugs and add ALL these features exactly as specified. Do not ask questions — just generate clean, working code.
+
+BUGS TO FIX IMMEDIATELY:
+1. When clicking "VTU Data", "Messages", or any lazy-loaded route → error: "'text/html' is not a valid JavaScript MIME type" → Fix lazy loading and code splitting properly in Vite/React Router.
+2. Clicking notification → "404 Page Not Found - Did you forget to add the page to the router?" → Add proper routes for /messages, /notifications, /chat/:id
+3. Chatbot: delete button and voice button are decorative → make them fully working
+4. Block User and Report User buttons do nothing → make them actually block/report
+5. Blocked accounts section in settings → make it work: show list of blocked users + unblock button
+6. Site is slow: page changes, sending messages, loading → make everything instant with proper loading states, React Query, suspense, and code splitting
+
+NEW FEATURES TO ADD (ALL MUST WORK PERFECTLY):
+
+1. Smart TikTok/X-style Feed Algorithm (The Plug tab)
+   - Use real-time scoring: likes (x3), comments (x5), saves (x4), time spent on post (x1), location proximity (x2)
+   - Show posts from people near EKSU first
+   - Mix in trending data plans (e.g., "200+ people bought 1GB MTN this week")
+   - Use Groq API to generate smart captions when needed
+
+2. Full JavaScript Face + NIN Verification (Best Version 2025)
+   - Use face-api.js (already fast and accurate)
+   - Flow:
+     → Step 1: Terms & Conditions page with checkbox (required)
+     → Step 2: Form: Full Name, NIN, Phone, Email, Upload ID Card/Student ID photo (they can blur matric number)
+     → Step 3: Pay ₦100 via Paystack Inline (no redirect)
+     → Step 4: Backend calls SMEDATA.NG API → gets NIN photo
+     → Step 5: Open camera → take live selfie (with liveness: blink or turn head)
+     → Step 6: Compare faces IN BROWSER using face-api.js
+        • ≥ 85% match → Auto Approved + Verified badge
+        • 70–84% → Manual review (admin dashboard)
+        • < 70% → Rejected + auto refund
+     → Delete ALL photos immediately after decision (client + server)
+     → Show department, level, full name on profile after verification (matric optional & blurred OK)
+     → Save verification data permanently for fraud cases (but tell user "deleted after verification")
+
+3. Real-Time Location (Secret + Smart)
+   - Use browser geolocation silently (with fallback to manual input)
+   - Save user’s lat/long in profile
+   - In The Plug and Messages: show "2.1km away · EKSU Campus" under username
+   - Prioritize local sellers in search and feed
+   - If user is within 10km of EKSU → auto tag as "On Campus"
+
+4. Groq AI Chatbot — Make It Actually Smart & Fast
+   - Use Groq API (llama3-70b or mixtral) with system prompt: "You are EKSU Plug Assistant — funny, young, uses Nigerian student slang, helps buy/sell data, airtime, gadgets fast"
+   - Fix loading forever issue
+   - Add voice input (Web Speech API)
+   - Add delete message (long press)
+   - Make it exit properly with back button
+
+5. Profile Page Like X (Twitter)
+   - Big profile picture
+   - Cover photo optional
+   - Bio, department, level, location
+   - "Verified Student" blue tick
+   - Posts / Selling tabs
+   - Allow up to 6 photos in profile (grid like Instagram)
+
+6. Email + SMS Verification on Signup
+   - Send verification code to email
+   - Optional phone verification
+
+7. Campus Updates → Rename to "EKSU Marketplace Updates"
+   - Admin-only posting from dashboard
+   - Shows in notifications when new update
+   - Example: "New MTN SME prices dropped!", "Face verification now live!"
+
+8. Buyer/Seller Role Fix
+   - Remove "Both" option
+   - Anyone who picked "Both" → change to "Buyer"
+   - Only allow "Buyer" or "Seller"
+
+9. Make Everything Lightning Fast
+   - Image optimization (WebP, lazy load)
+   - Skeleton loaders
+   - React Query caching
+   - No full reloads
+
+10. Final Requirements
+    - Mobile-first (90% of EKSU students use phone)
+    - Work perfectly on Chrome Android
+    - No console errors
+    - All buttons must work
+    - Deployable on Render with zero config
+
+Generate ALL the fixed and new code files. Include:
+- Updated React components
+- Fixed router
+- New verification flow with face-api.js
+- Groq chatbot with voice + delete
+- Real-time location
+- Smart feed algorithm
+- Admin panel updates
+
+Do it now. Make EKSU Digital Marketplace the fastest, smartest, most secure campus app in Nigeria.
+
+When I click on notifications then new message i got router failed message 
+
+11. Official @EKSUPlug Bot Account (MUST HAVE – This is very important)
+   - Create a special system user called “EKSUPlug” (username: @eksuplug, display name: EKSU Marketplace ✓ with blue verified tick)
+   - This account is automatically followed by EVERY new user the second they sign up (no choice)
+   - When a user creates an account:
+     → @EKSUPlug automatically sends them a DM:  
+       “Welcome to EKSU Digital Marketplace! 🎉  
+       You’re now verified to buy/sell data, airtime, gadgets & more on campus.  
+       Need help? Just type here anytime.”
+   - The bot can post on “The Plug” feed just like normal users (its posts appear at the top or pinned)
+   - Admin panel gets a new section: “Post as @EKSUPlug”
+     → Admin can type any message and post it to the main feed instantly (e.g., “MTN 1GB now ₦230 only today!”, “Beware of scammers asking for WhatsApp”, “Face verification is now live!”)
+   - Admin can also send mass DMs or warnings from this account:
+     → “Warning: User @scammer123 has been banned for fraud”
+     → “New update: You can now add 6 photos to your profile!”
+   - All posts and DMs from @EKSUPlug appear with a special crown badge or “Official” label so everyone knows it’s from admins
+   - Users CANNOT unfollow or block @EKSUPlug (it stays forever)
+   - In notifications, messages from @EKSUPlug show up first with a different color (e.g., purple)
