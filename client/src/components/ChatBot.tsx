@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { 
   MessageCircle, 
@@ -21,7 +21,9 @@ import {
   Search,
   ArrowLeft,
   Trash2,
-  Clock
+  Clock,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +31,40 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message?: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  onstart: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
 
 interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
 }
@@ -100,13 +134,26 @@ function formatMessage(content: string): string {
 
 const NOTIFICATION_SOUND = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQcAQMC2qaSfkX1pUUQ0JyclKC45UVCKL0ptnLPS3My0mH5xZ19WUk5KPz84NjUzMTAwLy4sKyopJyYlJCMhIB4eHRsaGhkYFxYVFBQTEhEREA8ODg0NDAsLCgoJCQgIBwcGBgUFBQQEBAMDAwICAgIBAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQgGRQQDA0KBwUDAQECAgMFBggKDA4REhQYGx0gIycqLC4wMzU3OT0/QUNGSU1QVFhbX2NnamtvdHl+goeLj5OYnKCkqK2xtbnBxszT2d/l7PL4/wCBhYqFbA==";
 
+function generateMessageId(): string {
+  return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
 const INITIAL_MESSAGE: Message = {
+  id: generateMessageId(),
   role: "assistant",
   content: "Hey! I'm your campus marketplace assistant. I sabi everything about buying, selling, wallet, games, and staying safe from scams. How I fit help you today? Tap any quick action below or ask me anything!",
 };
 
+function getSpeechRecognition(): SpeechRecognition | null {
+  if (typeof window === "undefined") return null;
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognitionClass) return null;
+  return new SpeechRecognitionClass();
+}
+
 export default function ChatBot() {
   const [location, navigate] = useLocation();
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [hasGreetedForPage, setHasGreetedForPage] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
@@ -115,14 +162,61 @@ export default function ChatBot() {
   const [loadingTime, setLoadingTime] = useState(0);
   const [showPaymentWarning, setShowPaymentWarning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio(NOTIFICATION_SOUND);
     audioRef.current.volume = 0.3;
-  }, []);
+    
+    const recognition = getSpeechRecognition();
+    if (!recognition) {
+      setSpeechSupported(false);
+    } else {
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+      
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = event.results[0][0].transcript;
+        setInput((prev) => prev + (prev ? " " : "") + transcript);
+        setIsListening(false);
+      };
+      
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+        if (event.error === "not-allowed") {
+          toast({
+            title: "Microphone access denied",
+            description: "Please allow microphone access to use voice input.",
+            variant: "destructive",
+          });
+        } else if (event.error !== "aborted") {
+          toast({
+            title: "Voice input error",
+            description: "Could not understand. Please try again.",
+            variant: "destructive",
+          });
+        }
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -174,6 +268,38 @@ export default function ChatBot() {
     }
   };
 
+  const toggleVoiceInput = useCallback(() => {
+    if (!speechSupported) {
+      toast({
+        title: "Voice input not supported",
+        description: "Your browser doesn't support voice input. Try Chrome, Edge, or Safari.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.abort();
+      setIsListening(false);
+    } else {
+      try {
+        recognitionRef.current?.start();
+        setIsListening(true);
+      } catch (error) {
+        console.error("Failed to start speech recognition:", error);
+        toast({
+          title: "Voice input error",
+          description: "Could not start voice input. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [isListening, speechSupported, toast]);
+
+  const deleteMessage = useCallback((messageId: string) => {
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+  }, []);
+
   const sendMessage = async (messageText?: string, navigateAfter?: string) => {
     const userMessage = (messageText || input).trim();
     if (!userMessage || isLoading) return;
@@ -182,7 +308,7 @@ export default function ChatBot() {
     setIsLoading(true);
     setShowPaymentWarning(false);
 
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage }]);
 
     try {
       const res = await fetch("/api/chatbot", {
@@ -205,7 +331,7 @@ export default function ChatBot() {
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: formattedMessage },
+        { id: generateMessageId(), role: "assistant", content: formattedMessage },
       ]);
 
       playNotificationSound();
@@ -214,7 +340,7 @@ export default function ChatBot() {
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: `Taking you to ${getPageName(navigateAfter)} now...` },
+            { id: generateMessageId(), role: "assistant", content: `Taking you to ${getPageName(navigateAfter)} now...` },
           ]);
           setTimeout(() => {
             navigate(navigateAfter);
@@ -227,6 +353,7 @@ export default function ChatBot() {
       setMessages((prev) => [
         ...prev,
         {
+          id: generateMessageId(),
           role: "assistant",
           content: "Omo, something don wrong. Network no dey flow well. Abeg try again!",
         },
@@ -250,8 +377,8 @@ export default function ChatBot() {
   const handleNavigateAction = (path: string, label: string) => {
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: `Take me to ${label}` },
-      { role: "assistant", content: `No wahala! Taking you to ${label} now...` },
+      { id: generateMessageId(), role: "user", content: `Take me to ${label}` },
+      { id: generateMessageId(), role: "assistant", content: `No wahala! Taking you to ${label} now...` },
     ]);
     playNotificationSound();
     setTimeout(() => {
@@ -261,14 +388,13 @@ export default function ChatBot() {
   };
 
   const clearChat = () => {
-    setMessages([INITIAL_MESSAGE]);
+    setMessages([{ ...INITIAL_MESSAGE, id: generateMessageId() }]);
     setShowPaymentWarning(false);
     setHasGreetedForPage(null);
   };
 
-  const goHome = () => {
-    navigate("/home");
-    setIsOpen(false);
+  const goBack = () => {
+    window.history.back();
   };
 
   const isNotOnHome = location !== "/" && location !== "/home";
@@ -296,9 +422,9 @@ export default function ChatBot() {
             <Button
               size="icon"
               variant="ghost"
-              onClick={goHome}
-              data-testid="button-go-home"
-              aria-label="Go to home"
+              onClick={goBack}
+              data-testid="button-go-back"
+              aria-label="Go back"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -361,10 +487,20 @@ export default function ChatBot() {
         <div className="space-y-3">
           {messages.map((message, index) => (
             <div
-              key={index}
-              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              key={message.id}
+              className={`flex group items-start gap-1 ${message.role === "user" ? "justify-end" : "justify-start"}`}
               data-testid={`message-${message.role}-${index}`}
             >
+              {message.role === "user" && (
+                <button
+                  className="h-6 w-6 shrink-0 mt-1 flex items-center justify-center rounded-md hover:bg-muted invisible group-hover:visible"
+                  onClick={() => deleteMessage(message.id)}
+                  data-testid={`button-delete-message-${index}`}
+                  aria-label="Delete message"
+                >
+                  <Trash2 className="h-3 w-3 text-muted-foreground" />
+                </button>
+              )}
               <div
                 className={`max-w-[85%] rounded-lg p-3 ${
                   message.role === "user"
@@ -490,6 +626,21 @@ export default function ChatBot() {
             className="flex-1 bg-background/60 backdrop-blur-sm"
             data-testid="input-chatbot-message"
           />
+          <Button
+            size="icon"
+            variant={isListening ? "destructive" : "outline"}
+            onClick={toggleVoiceInput}
+            disabled={isLoading}
+            className={isListening ? "animate-pulse" : ""}
+            data-testid="button-voice-input"
+            aria-label={isListening ? "Stop listening" : "Start voice input"}
+          >
+            {isListening ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </Button>
           <Button
             size="icon"
             onClick={() => sendMessage()}

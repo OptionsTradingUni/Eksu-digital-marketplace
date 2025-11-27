@@ -43,8 +43,11 @@ import {
   X,
   Shield,
   BadgeCheck,
-  ExternalLink
+  ExternalLink,
+  Ban,
+  VolumeX
 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 
 export default function SettingsPage() {
@@ -157,6 +160,68 @@ export default function SettingsPage() {
     },
   });
 
+  const { data: blockedUsers, isLoading: blockedUsersLoading } = useQuery<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    profileImageUrl?: string;
+    email?: string;
+  }>>({
+    queryKey: ["/api/blocked-users"],
+    enabled: !!user,
+  });
+
+  const { data: mutedUsers, isLoading: mutedUsersLoading } = useQuery<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    profileImageUrl?: string;
+    email?: string;
+  }>>({
+    queryKey: ["/api/users/muted"],
+    enabled: !!user,
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("DELETE", `/api/users/${userId}/block`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/blocked-users"] });
+      toast({
+        title: "User Unblocked",
+        description: "You have unblocked this user.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unblock user.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unmuteMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("DELETE", `/api/users/${userId}/mute`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/muted"] });
+      toast({
+        title: "User Unmuted",
+        description: "You have unmuted this user.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unmute user.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSettingToggle = (key: keyof UserSettings, value: boolean) => {
     updateSettingsMutation.mutate({ [key]: value } as Partial<UserSettings>);
   };
@@ -206,7 +271,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3" data-testid="tabs-settings">
+        <TabsList className="grid w-full grid-cols-4" data-testid="tabs-settings">
           <TabsTrigger value="general" data-testid="tab-general">
             <MapPin className="h-4 w-4 mr-2" />
             General
@@ -214,6 +279,10 @@ export default function SettingsPage() {
           <TabsTrigger value="notifications" data-testid="tab-notifications">
             <Bell className="h-4 w-4 mr-2" />
             Notifications
+          </TabsTrigger>
+          <TabsTrigger value="privacy" data-testid="tab-privacy">
+            <Shield className="h-4 w-4 mr-2" />
+            Privacy
           </TabsTrigger>
           <TabsTrigger value="account" data-testid="tab-account">
             <User className="h-4 w-4 mr-2" />
@@ -473,6 +542,146 @@ export default function SettingsPage() {
                   data-testid="switch-online-status"
                 />
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Ban className="h-5 w-5" />
+                Blocked Accounts
+              </CardTitle>
+              <CardDescription>Users you have blocked</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {blockedUsersLoading ? (
+                <div className="space-y-3" data-testid="skeleton-blocked-users">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-9 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : blockedUsers && blockedUsers.length > 0 ? (
+                <div className="space-y-3" data-testid="list-blocked-users">
+                  {blockedUsers.map((blockedUser) => (
+                    <div
+                      key={blockedUser.id}
+                      className="flex items-center justify-between gap-4"
+                      data-testid={`blocked-user-${blockedUser.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={blockedUser.profileImageUrl || undefined} />
+                          <AvatarFallback>
+                            {blockedUser.firstName?.[0] || ""}
+                            {blockedUser.lastName?.[0] || ""}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium" data-testid={`text-blocked-user-name-${blockedUser.id}`}>
+                          {blockedUser.firstName} {blockedUser.lastName}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => unblockMutation.mutate(blockedUser.id)}
+                        disabled={unblockMutation.isPending}
+                        data-testid={`button-unblock-${blockedUser.id}`}
+                      >
+                        {unblockMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Unblock"
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center" data-testid="empty-blocked-users">
+                  <Ban className="h-12 w-12 text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">No blocked users</p>
+                  <p className="text-sm text-muted-foreground">
+                    Users you block will appear here
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <VolumeX className="h-5 w-5" />
+                Muted Accounts
+              </CardTitle>
+              <CardDescription>Users you have muted</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {mutedUsersLoading ? (
+                <div className="space-y-3" data-testid="skeleton-muted-users">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-9 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : mutedUsers && mutedUsers.length > 0 ? (
+                <div className="space-y-3" data-testid="list-muted-users">
+                  {mutedUsers.map((mutedUser) => (
+                    <div
+                      key={mutedUser.id}
+                      className="flex items-center justify-between gap-4"
+                      data-testid={`muted-user-${mutedUser.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={mutedUser.profileImageUrl || undefined} />
+                          <AvatarFallback>
+                            {mutedUser.firstName?.[0] || ""}
+                            {mutedUser.lastName?.[0] || ""}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium" data-testid={`text-muted-user-name-${mutedUser.id}`}>
+                          {mutedUser.firstName} {mutedUser.lastName}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => unmuteMutation.mutate(mutedUser.id)}
+                        disabled={unmuteMutation.isPending}
+                        data-testid={`button-unmute-${mutedUser.id}`}
+                      >
+                        {unmuteMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Unmute"
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center" data-testid="empty-muted-users">
+                  <VolumeX className="h-12 w-12 text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">No muted users</p>
+                  <p className="text-sm text-muted-foreground">
+                    Users you mute will appear here
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
