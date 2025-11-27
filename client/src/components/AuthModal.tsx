@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Users, Gift, Check } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const signInSchema = z.object({
@@ -39,7 +39,7 @@ const signUpSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
-  role: z.enum(["buyer", "seller", "both"]).default("buyer"),
+  role: z.enum(["buyer", "seller"]).default("buyer"),
   referralCode: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -58,11 +58,11 @@ interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultTab?: "signin" | "signup";
-  defaultRole?: "buyer" | "seller" | "both";
+  defaultRole?: "buyer" | "seller";
   defaultReferralCode?: string;
 }
 
-export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "both", defaultReferralCode = "" }: AuthModalProps) {
+export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "buyer", defaultReferralCode = "" }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { toast } = useToast();
@@ -502,24 +502,6 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                                 <Store className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
                                 <span className="text-sm font-medium">Seller</span>
                                 {field.value === "seller" && (
-                                  <Check className="h-3 w-3 text-primary ml-auto" />
-                                )}
-                              </label>
-                            </div>
-                            <div className="flex-1 min-w-[100px]">
-                              <RadioGroupItem
-                                value="both"
-                                id="role-both"
-                                className="peer sr-only"
-                                data-testid="radio-role-both"
-                              />
-                              <label
-                                htmlFor="role-both"
-                                className="flex items-center gap-2 rounded-md border-2 border-muted bg-popover px-3 py-2 cursor-pointer transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
-                              >
-                                <Users className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                                <span className="text-sm font-medium">Both</span>
-                                {field.value === "both" && (
                                   <Check className="h-3 w-3 text-primary ml-auto" />
                                 )}
                               </label>

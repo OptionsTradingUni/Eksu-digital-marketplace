@@ -8,11 +8,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Product, Watchlist } from "@shared/schema";
+import type { Product, Watchlist, UserSettings } from "@shared/schema";
 import { useState } from "react";
+import { getDistanceDisplay } from "@/lib/distance";
+
+interface SellerSettings {
+  latitude: string | null;
+  longitude: string | null;
+  locationVisible: boolean | null;
+}
 
 interface ProductCardProps {
-  product: Product & { seller?: { firstName?: string; isVerified?: boolean; id?: string; profileImageUrl?: string } };
+  product: Product & { 
+    seller?: { firstName?: string; isVerified?: boolean; id?: string; profileImageUrl?: string };
+    sellerSettings?: SellerSettings | null;
+  };
 }
 
 export function ProductCard({ product }: ProductCardProps) {
@@ -26,6 +36,22 @@ export function ProductCard({ product }: ProductCardProps) {
     queryKey: ["/api/watchlist"],
     enabled: isAuthenticated,
   });
+
+  const { data: userSettings } = useQuery<UserSettings>({
+    queryKey: ["/api/settings"],
+    enabled: isAuthenticated,
+  });
+
+  const distanceDisplay = isAuthenticated && 
+    userSettings?.locationVisible && 
+    product.sellerSettings?.locationVisible
+      ? getDistanceDisplay(
+          userSettings.latitude,
+          userSettings.longitude,
+          product.sellerSettings.latitude,
+          product.sellerSettings.longitude
+        )
+      : null;
 
   const isInWishlist = wishlistItems.some(item => item.productId === product?.id);
 
@@ -217,12 +243,20 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </Button>
           </div>
-          {product.location && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">
-              <MapPin className="h-3 w-3" />
-              <span>{product.location}</span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-2">
+            {product.location && (
+              <div className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                <span>{product.location}</span>
+              </div>
+            )}
+            {distanceDisplay && (
+              <Badge variant="secondary" className="text-xs py-0 px-1.5" data-testid={`badge-distance-${product.id}`}>
+                <MapPin className="h-3 w-3 mr-1" />
+                {distanceDisplay}
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Eye className="h-3 w-3" />

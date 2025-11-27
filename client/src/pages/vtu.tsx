@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
-import { Wallet, Smartphone, Signal, CheckCircle, XCircle, Clock, Loader2, Plus, AlertCircle } from "lucide-react";
+import { Wallet, Smartphone, Signal, CheckCircle, XCircle, Clock, Loader2, Plus, AlertCircle, Search, Phone, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import type { Wallet as WalletType, VtuPlan, VtuTransaction } from "@shared/schema";
 
 type NetworkType = "mtn_sme" | "glo_cg" | "airtel_cg" | "9mobile";
+type ServiceType = "data" | "airtime";
 
 interface NetworkInfo {
   id: NetworkType;
@@ -34,7 +35,7 @@ const NETWORKS: NetworkInfo[] = [
     color: "bg-yellow-500",
     bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
     textColor: "text-yellow-700 dark:text-yellow-300",
-    prefixes: ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"],
+    prefixes: ["0803", "0806", "0703", "0704", "0706", "0810", "0813", "0814", "0816", "0903", "0906", "0913", "0916", "0702"],
   },
   {
     id: "glo_cg",
@@ -64,6 +65,8 @@ const NETWORKS: NetworkInfo[] = [
     prefixes: ["0809", "0817", "0818", "0909", "0908"],
   },
 ];
+
+const AIRTIME_AMOUNTS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
 
 function detectNetwork(phoneNumber: string): NetworkInfo | null {
   const cleaned = phoneNumber.replace(/\D/g, "");
@@ -107,9 +110,13 @@ function validatePhoneNumber(phone: string): { valid: boolean; message: string }
 
 export default function VtuPage() {
   const { toast } = useToast();
+  const [serviceType, setServiceType] = useState<ServiceType>("data");
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>("mtn_sme");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customAirtimeAmount, setCustomAirtimeAmount] = useState("");
+  const [selectedAirtimeAmount, setSelectedAirtimeAmount] = useState<number | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletType>({
     queryKey: ["/api/wallet"],
@@ -123,7 +130,7 @@ export default function VtuPage() {
     queryKey: ["/api/vtu/transactions"],
   });
 
-  const purchaseMutation = useMutation({
+  const purchaseDataMutation = useMutation({
     mutationFn: async (data: { planId: string; phoneNumber: string }) => {
       const response = await apiRequest("POST", "/api/vtu/purchase", data);
       return response.json();
@@ -147,19 +154,65 @@ export default function VtuPage() {
     },
   });
 
+  const purchaseAirtimeMutation = useMutation({
+    mutationFn: async (data: { phoneNumber: string; amount: number; network: NetworkType }) => {
+      const response = await apiRequest("POST", "/api/vtu/airtime", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Airtime Purchase Successful",
+        description: "Airtime has been sent to the phone number.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vtu/transactions"] });
+      setSelectedAirtimeAmount(null);
+      setCustomAirtimeAmount("");
+      setPhoneNumber("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Airtime Purchase Failed",
+        description: error.message || "Unable to complete the purchase. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const detectedNetwork = useMemo(() => detectNetwork(phoneNumber), [phoneNumber]);
   const phoneValidation = useMemo(() => validatePhoneNumber(phoneNumber), [phoneNumber]);
   const networkMatch = detectedNetwork?.id === selectedNetwork;
 
+  const filteredPlans = useMemo(() => {
+    if (!plans) return [];
+    if (!searchQuery.trim()) return plans;
+    
+    const query = searchQuery.toLowerCase();
+    return plans.filter(plan => 
+      plan.dataAmount.toLowerCase().includes(query) ||
+      plan.validity.toLowerCase().includes(query) ||
+      plan.planName.toLowerCase().includes(query) ||
+      plan.sellingPrice.includes(query)
+    );
+  }, [plans, searchQuery]);
+
   const selectedPlan = plans?.find((p) => p.id === selectedPlanId);
   const walletBalance = parseFloat(wallet?.balance || "0");
-  const canPurchase = 
+  
+  const canPurchaseData = 
     selectedPlanId && 
     phoneValidation.valid && 
     selectedPlan && 
     walletBalance >= parseFloat(selectedPlan.sellingPrice);
 
-  const handlePurchase = () => {
+  const airtimeAmount = selectedAirtimeAmount || (customAirtimeAmount ? parseFloat(customAirtimeAmount) : 0);
+  const canPurchaseAirtime = 
+    phoneValidation.valid && 
+    airtimeAmount >= 50 && 
+    airtimeAmount <= 50000 &&
+    walletBalance >= airtimeAmount;
+
+  const handleDataPurchase = () => {
     if (!selectedPlanId || !phoneValidation.valid) return;
 
     if (detectedNetwork && !networkMatch) {
@@ -171,7 +224,19 @@ export default function VtuPage() {
       return;
     }
 
-    purchaseMutation.mutate({ planId: selectedPlanId, phoneNumber });
+    purchaseDataMutation.mutate({ planId: selectedPlanId, phoneNumber });
+  };
+
+  const handleAirtimePurchase = () => {
+    if (!phoneValidation.valid || airtimeAmount < 50) return;
+
+    const network = detectedNetwork?.id || selectedNetwork;
+
+    purchaseAirtimeMutation.mutate({ 
+      phoneNumber, 
+      amount: airtimeAmount, 
+      network 
+    });
   };
 
   const getNetworkBadge = (networkId: NetworkType) => {
@@ -227,8 +292,8 @@ export default function VtuPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Buy Data</h1>
-        <p className="text-muted-foreground">Purchase data bundles for any network</p>
+        <h1 className="text-3xl font-bold mb-2">VTU Services</h1>
+        <p className="text-muted-foreground">Purchase data bundles and airtime for any network</p>
       </div>
 
       <Card className="mb-8 bg-gradient-to-br from-primary/20 to-primary/5">
@@ -259,73 +324,185 @@ export default function VtuPage() {
         </CardContent>
       </Card>
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Signal className="h-5 w-5" />
-            Select Network & Plan
-          </CardTitle>
-          <CardDescription>Choose your preferred network and data plan</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={selectedNetwork} onValueChange={(v) => {
-            setSelectedNetwork(v as NetworkType);
-            setSelectedPlanId(null);
-          }}>
-            <TabsList className="grid w-full grid-cols-4 mb-6">
-              {NETWORKS.map((network) => (
-                <TabsTrigger 
-                  key={network.id} 
-                  value={network.id}
-                  data-testid={`tab-network-${network.id}`}
-                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <span className={`w-2 h-2 rounded-full ${network.color} mr-2`} />
-                  {network.displayName}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+      <Tabs value={serviceType} onValueChange={(v) => setServiceType(v as ServiceType)} className="mb-8">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="data" data-testid="tab-service-data" className="flex items-center gap-2">
+            <Signal className="h-4 w-4" />
+            Buy Data
+          </TabsTrigger>
+          <TabsTrigger value="airtime" data-testid="tab-service-airtime" className="flex items-center gap-2">
+            <Phone className="h-4 w-4" />
+            Buy Airtime
+          </TabsTrigger>
+        </TabsList>
 
-            {NETWORKS.map((network) => (
-              <TabsContent key={network.id} value={network.id}>
-                {plansLoading ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {[...Array(6)].map((_, i) => (
-                      <Skeleton key={i} className="h-28" />
-                    ))}
+        <TabsContent value="data">
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Signal className="h-5 w-5" />
+                Select Network & Plan
+              </CardTitle>
+              <CardDescription>Choose your preferred network and data plan</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={selectedNetwork} onValueChange={(v) => {
+                setSelectedNetwork(v as NetworkType);
+                setSelectedPlanId(null);
+                setSearchQuery("");
+              }}>
+                <TabsList className="grid w-full grid-cols-4 mb-6">
+                  {NETWORKS.map((network) => (
+                    <TabsTrigger 
+                      key={network.id} 
+                      value={network.id}
+                      data-testid={`tab-network-${network.id}`}
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${network.color} mr-2`} />
+                      {network.displayName}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search plans (e.g., 1GB, 30 days, 500)"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-search-plans"
+                    />
                   </div>
-                ) : plans && plans.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {plans.map((plan) => (
-                      <div
-                        key={plan.id}
-                        onClick={() => setSelectedPlanId(plan.id)}
-                        className={`p-4 rounded-md border-2 cursor-pointer transition-all ${
-                          selectedPlanId === plan.id
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover-elevate"
-                        }`}
-                        data-testid={`card-plan-${plan.id}`}
-                      >
-                        <div className="text-lg font-bold">{plan.dataAmount}</div>
-                        <div className="text-sm text-muted-foreground">{plan.validity}</div>
-                        <div className="text-lg font-semibold text-primary mt-2">
-                          ₦{parseFloat(plan.sellingPrice).toLocaleString()}
-                        </div>
+                  {searchQuery && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Showing {filteredPlans.length} of {plans?.length || 0} plans
+                    </p>
+                  )}
+                </div>
+
+                {NETWORKS.map((network) => (
+                  <TabsContent key={network.id} value={network.id}>
+                    {plansLoading ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {[...Array(6)].map((_, i) => (
+                          <Skeleton key={i} className="h-28" />
+                        ))}
                       </div>
-                    ))}
+                    ) : filteredPlans && filteredPlans.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-2">
+                        {filteredPlans.map((plan) => (
+                          <div
+                            key={plan.id}
+                            onClick={() => setSelectedPlanId(plan.id)}
+                            className={`p-4 rounded-md border-2 cursor-pointer transition-all ${
+                              selectedPlanId === plan.id
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover-elevate"
+                            }`}
+                            data-testid={`card-plan-${plan.id}`}
+                          >
+                            <div className="text-lg font-bold">{plan.dataAmount}</div>
+                            <div className="text-sm text-muted-foreground">{plan.validity}</div>
+                            <div className="text-lg font-semibold text-primary mt-2">
+                              ₦{parseFloat(plan.sellingPrice).toLocaleString()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Signal className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                        <p>{searchQuery ? "No plans match your search." : "No plans available for this network."}</p>
+                        {searchQuery && (
+                          <Button 
+                            variant="link" 
+                            onClick={() => setSearchQuery("")}
+                            className="mt-2"
+                          >
+                            Clear search
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="airtime">
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Select Airtime Amount
+              </CardTitle>
+              <CardDescription>Choose or enter the airtime amount</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={selectedNetwork} onValueChange={(v) => setSelectedNetwork(v as NetworkType)}>
+                <TabsList className="grid w-full grid-cols-4 mb-6">
+                  {NETWORKS.map((network) => (
+                    <TabsTrigger 
+                      key={network.id} 
+                      value={network.id}
+                      data-testid={`tab-airtime-network-${network.id}`}
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${network.color} mr-2`} />
+                      {network.displayName}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+
+              <div className="grid grid-cols-4 gap-3 mb-6">
+                {AIRTIME_AMOUNTS.map((amount) => (
+                  <div
+                    key={amount}
+                    onClick={() => {
+                      setSelectedAirtimeAmount(amount);
+                      setCustomAirtimeAmount("");
+                    }}
+                    className={`p-3 rounded-md border-2 cursor-pointer transition-all text-center ${
+                      selectedAirtimeAmount === amount
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover-elevate"
+                    }`}
+                    data-testid={`card-airtime-${amount}`}
+                  >
+                    <div className="font-bold">₦{amount.toLocaleString()}</div>
                   </div>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Signal className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                    <p>No plans available for this network.</p>
-                  </div>
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="custom-amount">Or enter custom amount</Label>
+                <Input
+                  id="custom-amount"
+                  type="number"
+                  placeholder="Enter amount (50 - 50,000)"
+                  value={customAirtimeAmount}
+                  onChange={(e) => {
+                    setCustomAirtimeAmount(e.target.value);
+                    setSelectedAirtimeAmount(null);
+                  }}
+                  min={50}
+                  max={50000}
+                  data-testid="input-custom-airtime"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum: ₦50 | Maximum: ₦50,000
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Card className="mb-8">
         <CardHeader>
@@ -380,7 +557,7 @@ export default function VtuPage() {
             )}
           </div>
 
-          {selectedPlan && (
+          {serviceType === "data" && selectedPlan && (
             <div className="p-4 rounded-md bg-muted/50 space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Plan:</span>
@@ -397,7 +574,24 @@ export default function VtuPage() {
             </div>
           )}
 
-          {selectedPlan && walletBalance < parseFloat(selectedPlan.sellingPrice) && (
+          {serviceType === "airtime" && airtimeAmount > 0 && (
+            <div className="p-4 rounded-md bg-muted/50 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Service:</span>
+                <span className="font-medium">Airtime Top-up</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Network:</span>
+                {getNetworkBadge(detectedNetwork?.id || selectedNetwork)}
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Amount:</span>
+                <span className="font-bold text-primary">₦{airtimeAmount.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
+          {serviceType === "data" && selectedPlan && walletBalance < parseFloat(selectedPlan.sellingPrice) && (
             <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
               <div>
@@ -407,24 +601,55 @@ export default function VtuPage() {
             </div>
           )}
 
-          <Button
-            onClick={handlePurchase}
-            disabled={!canPurchase || purchaseMutation.isPending}
-            className="w-full"
-            data-testid="button-purchase"
-          >
-            {purchaseMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                Purchase Data
-                {selectedPlan && ` - ₦${parseFloat(selectedPlan.sellingPrice).toLocaleString()}`}
-              </>
-            )}
-          </Button>
+          {serviceType === "airtime" && airtimeAmount > 0 && walletBalance < airtimeAmount && (
+            <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Insufficient Balance</p>
+                <p className="text-sm">You need ₦{(airtimeAmount - walletBalance).toLocaleString()} more to purchase this airtime.</p>
+              </div>
+            </div>
+          )}
+
+          {serviceType === "data" ? (
+            <Button
+              onClick={handleDataPurchase}
+              disabled={!canPurchaseData || purchaseDataMutation.isPending}
+              className="w-full"
+              data-testid="button-purchase-data"
+            >
+              {purchaseDataMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Purchase Data
+                  {selectedPlan && ` - ₦${parseFloat(selectedPlan.sellingPrice).toLocaleString()}`}
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleAirtimePurchase}
+              disabled={!canPurchaseAirtime || purchaseAirtimeMutation.isPending}
+              className="w-full"
+              data-testid="button-purchase-airtime"
+            >
+              {purchaseAirtimeMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Purchase Airtime
+                  {airtimeAmount > 0 && ` - ₦${airtimeAmount.toLocaleString()}`}
+                </>
+              )}
+            </Button>
+          )}
         </CardContent>
       </Card>
 

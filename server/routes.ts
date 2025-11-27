@@ -41,6 +41,7 @@ import {
   createOrderSchema,
   updateOrderStatusSchema,
   purchaseVtuSchema,
+  purchaseAirtimeSchema,
   updateUserSettingsSchema,
   requestAccountDeletionSchema,
   initiateKycSchema,
@@ -49,7 +50,7 @@ import {
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, isSMEDataConfigured, isValidNigerianPhone, verifyNIN } from "./smedata";
+import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN } from "./smedata";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -1784,6 +1785,19 @@ Happy trading!`;
   app.post('/api/boosts', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      
+      // Check KYC verification - sellers must be verified before boosting products
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      if (!user.isVerified && !user.ninVerified) {
+        return res.status(403).json({ 
+          message: "Please complete identity verification before boosting products. Go to Settings > KYC Verification to get started." 
+        });
+      }
+      
       const validated = createBoostSchema.parse(req.body);
       
       // Verify sufficient balance before deducting
@@ -1943,7 +1957,27 @@ Happy trading!`;
         condition: condition as string,
         location: location as string,
       });
-      res.json(products);
+      
+      // Include seller's location settings for distance calculation
+      const productsWithSellerSettings = await Promise.all(
+        products.map(async (product) => {
+          try {
+            const sellerSettings = await storage.getOrCreateUserSettings(product.sellerId);
+            return {
+              ...product,
+              sellerSettings: sellerSettings.locationVisible ? {
+                latitude: sellerSettings.latitude,
+                longitude: sellerSettings.longitude,
+                locationVisible: sellerSettings.locationVisible,
+              } : null,
+            };
+          } catch (err) {
+            return { ...product, sellerSettings: null };
+          }
+        })
+      );
+      
+      res.json(productsWithSellerSettings);
     } catch (error) {
       console.error("Error fetching products:", error);
       res.status(500).json({ message: "Failed to fetch products" });
@@ -2008,7 +2042,22 @@ Happy trading!`;
         console.error("Error recording product view:", viewError);
       }
       
-      res.json(product);
+      // Include seller's location settings for distance calculation
+      let sellerSettings = null;
+      try {
+        const settings = await storage.getOrCreateUserSettings(product.sellerId);
+        if (settings.locationVisible) {
+          sellerSettings = {
+            latitude: settings.latitude,
+            longitude: settings.longitude,
+            locationVisible: settings.locationVisible,
+          };
+        }
+      } catch (err) {
+        console.error("Error fetching seller settings:", err);
+      }
+      
+      res.json({ ...product, sellerSettings });
     } catch (error) {
       console.error("Error fetching product:", error);
       res.status(500).json({ message: "Failed to fetch product" });
@@ -2030,6 +2079,13 @@ Happy trading!`;
       if (user.role !== "seller" && user.role !== "admin" && user.role !== "both") {
         return res.status(403).json({ 
           message: "Only sellers can create listings. Please update your role to 'Seller' or 'Both' in your profile settings." 
+        });
+      }
+
+      // Check KYC verification - sellers must be verified before listing products
+      if (!user.isVerified && !user.ninVerified) {
+        return res.status(403).json({ 
+          message: "Please complete identity verification before listing products. Go to Settings > KYC Verification to get started." 
         });
       }
 
@@ -3922,6 +3978,111 @@ Happy trading!`;
     } catch (error) {
       console.error("Error fetching VTU transactions:", error);
       res.status(500).json({ message: "Failed to fetch VTU transactions" });
+    }
+  });
+
+  // Purchase airtime
+  app.post("/api/vtu/airtime", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validationResult = purchaseAirtimeSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { phoneNumber, amount, network } = validationResult.data;
+
+      if (!isValidNigerianPhone(phoneNumber)) {
+        return res.status(400).json({ message: "Invalid Nigerian phone number" });
+      }
+
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < amount) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance",
+          required: amount,
+          available: walletBalance
+        });
+      }
+
+      await storage.updateWalletBalance(userId, amount.toString(), "subtract");
+
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: "purchase",
+        amount: `-${amount}`,
+        status: "pending",
+        description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
+      });
+
+      if (isSMEDataConfigured()) {
+        try {
+          const purchaseResult = await purchaseAirtime(network, phoneNumber, amount);
+          
+          if (purchaseResult.success) {
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "purchase",
+              amount: `-${amount}`,
+              status: "completed",
+              description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
+            });
+
+            res.json({
+              success: true,
+              message: "Airtime purchase successful",
+              reference: purchaseResult.reference,
+            });
+          } else {
+            await storage.updateWalletBalance(userId, amount.toString(), "add");
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "refund",
+              amount: amount.toString(),
+              status: "completed",
+              description: `Airtime Refund: ₦${amount} for ${phoneNumber} - ${purchaseResult.message}`,
+            });
+
+            res.status(400).json({
+              success: false,
+              message: purchaseResult.message || "Airtime purchase failed. Amount refunded.",
+              error: purchaseResult.error,
+            });
+          }
+        } catch (apiError: any) {
+          await storage.updateWalletBalance(userId, amount.toString(), "add");
+          await storage.createTransaction({
+            walletId: wallet.id,
+            type: "refund",
+            amount: amount.toString(),
+            status: "completed",
+            description: `Airtime Refund: ₦${amount} for ${phoneNumber} - API Error`,
+          });
+
+          console.error("Airtime API error:", apiError);
+          res.status(500).json({
+            success: false,
+            message: "Airtime purchase failed due to network error. Amount refunded.",
+          });
+        }
+      } else {
+        res.json({
+          success: true,
+          message: "Airtime purchase request submitted. Your airtime will be delivered shortly.",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing airtime purchase:", error);
+      res.status(500).json({ message: "Failed to process airtime purchase" });
     }
   });
 
@@ -6444,6 +6605,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
   // ========================================
   
   // GET /api/ads/active - Get active sponsored ads (optionally filtered by type)
+  // Returns randomized results, max 3 ads
   app.get("/api/ads/active", async (req, res) => {
     try {
       // Check if ads are enabled in platform settings
@@ -6453,7 +6615,17 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       }
       
       const { type } = req.query;
-      const ads = await storage.getActiveSponsoredAds(type as string | undefined);
+      const allAds = await storage.getActiveSponsoredAds(type as string | undefined);
+      
+      // Shuffle array using Fisher-Yates algorithm
+      const shuffled = [...allAds];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      
+      // Return max 3 randomized ads
+      const ads = shuffled.slice(0, 3);
       res.json(ads);
     } catch (error) {
       console.error("Error fetching active ads:", error);

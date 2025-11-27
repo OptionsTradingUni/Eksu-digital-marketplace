@@ -12,7 +12,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot, Share2, Loader2, Check } from "lucide-react";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
-import type { Product, User, Watchlist } from "@shared/schema";
+import type { Product, User, Watchlist, UserSettings } from "@shared/schema";
+import { getDistanceDisplay } from "@/lib/distance";
+
+interface SellerSettings {
+  latitude: string | null;
+  longitude: string | null;
+  locationVisible: boolean | null;
+}
+
+type ProductWithSellerSettings = Product & { 
+  seller: User; 
+  sellerSettings?: SellerSettings | null;
+};
 
 function formatJoinDate(dateStr: string | Date | null | undefined): string {
   if (!dateStr) return "Recently";
@@ -59,7 +71,7 @@ export default function ProductView() {
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
 
-  const { data: product, isLoading } = useQuery<Product & { seller: User }>({
+  const { data: product, isLoading } = useQuery<ProductWithSellerSettings>({
     queryKey: ["/api/products", id],
   });
 
@@ -67,6 +79,22 @@ export default function ProductView() {
     queryKey: ["/api/watchlist"],
     enabled: isAuthenticated,
   });
+
+  const { data: userSettings } = useQuery<UserSettings>({
+    queryKey: ["/api/settings"],
+    enabled: isAuthenticated,
+  });
+
+  const distanceDisplay = isAuthenticated && 
+    userSettings?.locationVisible && 
+    product?.sellerSettings?.locationVisible
+      ? getDistanceDisplay(
+          userSettings.latitude,
+          userSettings.longitude,
+          product.sellerSettings.latitude,
+          product.sellerSettings.longitude
+        )
+      : null;
 
   const isInWishlist = wishlistItems.some(item => item.productId === id);
 
@@ -402,12 +430,20 @@ export default function ProductView() {
               )}
             </div>
 
-            {product.location && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                <span>{product.location}</span>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+              {product.location && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  <span>{product.location}</span>
+                </div>
+              )}
+              {distanceDisplay && (
+                <Badge variant="secondary" className="text-sm py-0.5 px-2" data-testid="badge-seller-distance">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  {distanceDisplay} away
+                </Badge>
+              )}
+            </div>
 
             <div>
               <h2 className="font-semibold mb-2">Description</h2>

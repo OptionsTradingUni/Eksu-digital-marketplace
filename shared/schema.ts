@@ -1082,8 +1082,10 @@ export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit
 });
 
 // API-specific validation schemas
+// Note: "both" role is deprecated - users must choose buyer OR seller only
+// Existing "both" users are grandfathered but new selections not allowed
 export const roleUpdateSchema = z.object({
-  role: z.enum(['buyer', 'seller', 'both', 'admin']),
+  role: z.enum(['buyer', 'seller']),
 });
 
 export const createReferralSchema = z.object({
@@ -1603,13 +1605,14 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 // Authentication schemas
+// Note: "both" role is deprecated - users must choose buyer OR seller only
 export const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
-  role: z.enum(["buyer", "seller", "both"]).optional().default("buyer"),
+  role: z.enum(["buyer", "seller"]).optional().default("buyer"),
   referralCode: z.string().optional(),
 });
 
@@ -1848,12 +1851,20 @@ export const purchaseVtuSchema = z.object({
   phoneNumber: z.string().min(10, "Valid phone number is required").max(15),
 });
 
+// Airtime purchase schema
+export const purchaseAirtimeSchema = z.object({
+  phoneNumber: z.string().min(10, "Valid phone number is required").max(15),
+  amount: z.number().min(50, "Minimum airtime is 50 Naira").max(50000, "Maximum airtime is 50,000 Naira"),
+  network: z.enum(["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]),
+});
+
 // VTU TypeScript types
 export type VtuPlan = typeof vtuPlans.$inferSelect;
 export type InsertVtuPlan = z.infer<typeof insertVtuPlanSchema>;
 export type VtuTransaction = typeof vtuTransactions.$inferSelect;
 export type InsertVtuTransaction = z.infer<typeof insertVtuTransactionSchema>;
 export type PurchaseVtuInput = z.infer<typeof purchaseVtuSchema>;
+export type PurchaseAirtimeInput = z.infer<typeof purchaseAirtimeSchema>;
 
 // ===========================================
 // USER SETTINGS SYSTEM

@@ -246,6 +246,22 @@ function normalizePhoneNumber(phone: string): string {
   return cleaned;
 }
 
+// Complete Nigerian mobile phone prefixes (updated 2024)
+const MTN_PREFIXES = [
+  "0803", "0806", "0703", "0704", "0706", "0810", "0813", "0814", "0816",
+  "0903", "0906", "0913", "0916", "0702"
+];
+const GLO_PREFIXES = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
+const AIRTEL_PREFIXES = ["0802", "0808", "0708", "0812", "0701", "0902", "0901", "0907", "0912"];
+const NINE_MOBILE_PREFIXES = ["0809", "0818", "0817", "0909", "0908"];
+
+const ALL_VALID_PREFIXES = [
+  ...MTN_PREFIXES,
+  ...GLO_PREFIXES,
+  ...AIRTEL_PREFIXES,
+  ...NINE_MOBILE_PREFIXES,
+];
+
 // Validate Nigerian phone number
 export function isValidNigerianPhone(phone: string): boolean {
   const normalized = normalizePhoneNumber(phone);
@@ -254,16 +270,8 @@ export function isValidNigerianPhone(phone: string): boolean {
     return false;
   }
   
-  // Valid prefixes for major networks
-  const validPrefixes = [
-    "0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916", // MTN
-    "0805", "0807", "0705", "0815", "0811", "0905", "0915", // GLO
-    "0802", "0808", "0708", "0812", "0701", "0902", "0901", "0907", "0912", // Airtel
-    "0809", "0818", "0817", "0909", "0908", // 9mobile
-  ];
-  
   const prefix = normalized.substring(0, 4);
-  return validPrefixes.includes(prefix);
+  return ALL_VALID_PREFIXES.includes(prefix);
 }
 
 // Detect network from phone number
@@ -271,17 +279,62 @@ export function detectNetwork(phone: string): string | null {
   const normalized = normalizePhoneNumber(phone);
   const prefix = normalized.substring(0, 4);
   
-  const mtnPrefixes = ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"];
-  const gloPrefixes = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
-  const airtelPrefixes = ["0802", "0808", "0708", "0812", "0701", "0902", "0901", "0907", "0912"];
-  const nineMobilePrefixes = ["0809", "0818", "0817", "0909", "0908"];
-  
-  if (mtnPrefixes.includes(prefix)) return "mtn_sme";
-  if (gloPrefixes.includes(prefix)) return "glo_cg";
-  if (airtelPrefixes.includes(prefix)) return "airtel_cg";
-  if (nineMobilePrefixes.includes(prefix)) return "9mobile";
+  if (MTN_PREFIXES.includes(prefix)) return "mtn_sme";
+  if (GLO_PREFIXES.includes(prefix)) return "glo_cg";
+  if (AIRTEL_PREFIXES.includes(prefix)) return "airtel_cg";
+  if (NINE_MOBILE_PREFIXES.includes(prefix)) return "9mobile";
   
   return null;
+}
+
+// Purchase airtime from SMEDATA
+export async function purchaseAirtime(
+  network: string,
+  phoneNumber: string,
+  amount: number
+): Promise<SMEDataResponse> {
+  if (!isSMEDataConfigured()) {
+    return {
+      success: false,
+      message: "VTU service is not configured. Please contact support.",
+      error: "API_NOT_CONFIGURED",
+    };
+  }
+
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  const smedataNetwork = NETWORK_MAP[network] || network.toUpperCase();
+
+  try {
+    const response = await fetch(`${SMEDATA_BASE_URL}/airtime`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SME_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        network: smedataNetwork,
+        phone: normalizedPhone,
+        amount: amount,
+      }),
+    });
+
+    const data = await response.json();
+    
+    return {
+      success: data.success || data.status === "success",
+      message: data.message || "Airtime purchase processed",
+      reference: data.reference || data.data?.reference,
+      data: data.data,
+      error: data.error,
+    };
+  } catch (error: any) {
+    console.error("SMEDATA airtime purchase error:", error);
+    return {
+      success: false,
+      message: "Failed to process airtime purchase. Please try again.",
+      error: error.message || "NETWORK_ERROR",
+    };
+  }
 }
 
 export { normalizePhoneNumber };

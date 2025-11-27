@@ -16,14 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban, Database, Activity, HardDrive, Megaphone, Pin, Trash2, Edit, Plus, Sparkles, AlertTriangle } from "lucide-react";
+import { Users, ShoppingBag, TrendingUp, AlertCircle, Shield, Ban, Database, Activity, HardDrive, Megaphone, Pin, Trash2, Edit, Plus, Sparkles, AlertTriangle, ScanFace, Check, X, Eye, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import type { User, Product, Announcement } from "@shared/schema";
+import type { User, Product, Announcement, KycVerification, PlatformSetting } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
@@ -55,6 +55,25 @@ export default function AdminPanel() {
     queryKey: ["/api/admin/announcements"],
   });
 
+  // KYC Review types - extend KycVerification with user info
+  interface KycVerificationWithUser extends KycVerification {
+    user?: {
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      phoneNumber: string | null;
+    };
+  }
+
+  const { data: pendingKyc, isLoading: kycLoading } = useQuery<KycVerificationWithUser[]>({
+    queryKey: ["/api/kyc/admin/pending"],
+  });
+
+  const { data: platformSettings, isLoading: settingsLoading } = useQuery<PlatformSetting[]>({
+    queryKey: ["/api/admin/platform-settings"],
+  });
+
   const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [newAnnouncement, setNewAnnouncement] = useState({
@@ -65,6 +84,16 @@ export default function AdminPanel() {
     isPinned: false,
     isPublished: true,
   });
+
+  // KYC Review state
+  const [kycReviewDialogOpen, setKycReviewDialogOpen] = useState(false);
+  const [selectedKyc, setSelectedKyc] = useState<KycVerificationWithUser | null>(null);
+  const [kycReviewData, setKycReviewData] = useState({
+    action: "approve" as "approve" | "reject",
+    notes: "",
+    rejectionReason: "",
+  });
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const verifyUserMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -157,6 +186,80 @@ export default function AdminPanel() {
       });
     },
   });
+
+  const updatePlatformSettingMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      return await apiRequest("PATCH", `/api/admin/platform-settings/${key}`, { value });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-settings"] });
+      toast({
+        title: "Success",
+        description: "Setting updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update setting",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // KYC Review mutation
+  const reviewKycMutation = useMutation({
+    mutationFn: async (data: { kycId: string; action: "approve" | "reject"; notes?: string; rejectionReason?: string }) => {
+      return await apiRequest("POST", "/api/kyc/admin/review", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/kyc/admin/pending"] });
+      setKycReviewDialogOpen(false);
+      setSelectedKyc(null);
+      setKycReviewData({ action: "approve", notes: "", rejectionReason: "" });
+      toast({
+        title: "Success",
+        description: variables.action === "approve" 
+          ? "KYC verification approved successfully" 
+          : "KYC verification rejected",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process KYC review",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // KYC Review handlers
+  const handleOpenKycReview = (kyc: KycVerificationWithUser) => {
+    setSelectedKyc(kyc);
+    setKycReviewData({ action: "approve", notes: "", rejectionReason: "" });
+    setKycReviewDialogOpen(true);
+  };
+
+  const handleSubmitKycReview = () => {
+    if (!selectedKyc) return;
+    
+    // Validate rejection reason if rejecting
+    if (kycReviewData.action === "reject" && !kycReviewData.rejectionReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Rejection reason is required when rejecting a verification",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    reviewKycMutation.mutate({
+      kycId: selectedKyc.id,
+      action: kycReviewData.action,
+      notes: kycReviewData.notes || undefined,
+      rejectionReason: kycReviewData.action === "reject" ? kycReviewData.rejectionReason : undefined,
+    });
+  };
 
   const handleOpenAnnouncementDialog = (announcement?: Announcement) => {
     if (announcement) {
@@ -271,6 +374,8 @@ export default function AdminPanel() {
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="products" data-testid="tab-products">Products</TabsTrigger>
           <TabsTrigger value="announcements" data-testid="tab-announcements">Campus Updates</TabsTrigger>
+          <TabsTrigger value="kyc" data-testid="tab-kyc">KYC Review</TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
           <TabsTrigger value="metrics" data-testid="tab-metrics">Database Metrics</TabsTrigger>
         </TabsList>
 
@@ -674,6 +779,381 @@ export default function AdminPanel() {
                     <Plus className="h-4 w-4 mr-2" />
                     Create Announcement
                   </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="kyc">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ScanFace className="h-5 w-5" />
+                KYC Verification Review
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {kycLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-24" />
+                  ))}
+                </div>
+              ) : pendingKyc && pendingKyc.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>NIN Name</TableHead>
+                        <TableHead>Similarity Score</TableHead>
+                        <TableHead>Images</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingKyc.map((kyc) => (
+                        <TableRow key={kyc.id} data-testid={`row-kyc-${kyc.id}`}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium" data-testid={`text-kyc-user-${kyc.id}`}>
+                                {kyc.user?.firstName || kyc.user?.email || "Unknown User"}
+                                {kyc.user?.lastName ? ` ${kyc.user.lastName}` : ""}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {kyc.user?.email}
+                              </p>
+                              {kyc.user?.phoneNumber && (
+                                <p className="text-xs text-muted-foreground">
+                                  {kyc.user.phoneNumber}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">
+                                {kyc.ninFirstName} {kyc.ninLastName}
+                              </p>
+                              {kyc.ninDateOfBirth && (
+                                <p className="text-xs text-muted-foreground">
+                                  DOB: {kyc.ninDateOfBirth}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {kyc.similarityScore ? (
+                              <Badge 
+                                variant={parseFloat(kyc.similarityScore as string) >= 70 ? "default" : "secondary"}
+                                className={parseFloat(kyc.similarityScore as string) >= 70 ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30" : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"}
+                              >
+                                {parseFloat(kyc.similarityScore as string).toFixed(1)}%
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">N/A</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {kyc.selfieUrl && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setImagePreviewUrl(kyc.selfieUrl)}
+                                  data-testid={`button-view-selfie-${kyc.id}`}
+                                >
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Selfie
+                                </Button>
+                              )}
+                              {kyc.ninPhotoUrl && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setImagePreviewUrl(kyc.ninPhotoUrl)}
+                                  data-testid={`button-view-nin-${kyc.id}`}
+                                >
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  NIN
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {kyc.createdAt && formatDistanceToNow(new Date(kyc.createdAt), { addSuffix: true })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenKycReview(kyc)}
+                              data-testid={`button-review-kyc-${kyc.id}`}
+                            >
+                              Review
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <ScanFace className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="font-semibold mb-2">No Pending KYC Reviews</h3>
+                  <p className="text-muted-foreground">All KYC verifications have been processed.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* KYC Review Dialog */}
+          <Dialog open={kycReviewDialogOpen} onOpenChange={setKycReviewDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Review KYC Verification</DialogTitle>
+                <DialogDescription>
+                  Review the submitted verification documents and decide to approve or reject.
+                </DialogDescription>
+              </DialogHeader>
+              {selectedKyc && (
+                <div className="space-y-6 py-4">
+                  {/* User Info Summary */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Account Name</Label>
+                      <p className="font-medium">
+                        {selectedKyc.user?.firstName} {selectedKyc.user?.lastName}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{selectedKyc.user?.email}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">NIN Name</Label>
+                      <p className="font-medium">
+                        {selectedKyc.ninFirstName} {selectedKyc.ninLastName}
+                      </p>
+                      {selectedKyc.ninDateOfBirth && (
+                        <p className="text-sm text-muted-foreground">DOB: {selectedKyc.ninDateOfBirth}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Similarity Score */}
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs">Similarity Score</Label>
+                    <div className="flex items-center gap-2">
+                      {selectedKyc.similarityScore ? (
+                        <>
+                          <Badge 
+                            className={parseFloat(selectedKyc.similarityScore as string) >= 70 
+                              ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30" 
+                              : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"}
+                          >
+                            {parseFloat(selectedKyc.similarityScore as string).toFixed(1)}%
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {parseFloat(selectedKyc.similarityScore as string) >= 70 
+                              ? "Good match" 
+                              : "Low match - requires manual review"}
+                          </span>
+                        </>
+                      ) : (
+                        <Badge variant="secondary">Not available</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Images */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs">Selfie Image</Label>
+                      {selectedKyc.selfieUrl ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <img 
+                            src={selectedKyc.selfieUrl} 
+                            alt="User Selfie" 
+                            className="w-full h-48 object-cover cursor-pointer"
+                            onClick={() => setImagePreviewUrl(selectedKyc.selfieUrl)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border rounded-lg h-48 flex items-center justify-center bg-muted">
+                          <p className="text-muted-foreground text-sm">No selfie available</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs">NIN Photo</Label>
+                      {selectedKyc.ninPhotoUrl ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <img 
+                            src={selectedKyc.ninPhotoUrl} 
+                            alt="NIN Photo" 
+                            className="w-full h-48 object-cover cursor-pointer"
+                            onClick={() => setImagePreviewUrl(selectedKyc.ninPhotoUrl)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border rounded-lg h-48 flex items-center justify-center bg-muted">
+                          <p className="text-muted-foreground text-sm">No NIN photo available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Review Action */}
+                  <div className="space-y-2">
+                    <Label htmlFor="action">Decision</Label>
+                    <Select
+                      value={kycReviewData.action}
+                      onValueChange={(value: "approve" | "reject") => 
+                        setKycReviewData({ ...kycReviewData, action: value })
+                      }
+                    >
+                      <SelectTrigger data-testid="select-kyc-action">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="approve">
+                          <span className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-600" />
+                            Approve Verification
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="reject">
+                          <span className="flex items-center gap-2">
+                            <X className="h-4 w-4 text-red-600" />
+                            Reject Verification
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Notes (optional)</Label>
+                    <Textarea
+                      id="notes"
+                      value={kycReviewData.notes}
+                      onChange={(e) => setKycReviewData({ ...kycReviewData, notes: e.target.value })}
+                      placeholder="Add any notes about this verification..."
+                      className="min-h-20"
+                      data-testid="input-kyc-notes"
+                    />
+                  </div>
+
+                  {/* Rejection Reason - only show if rejecting */}
+                  {kycReviewData.action === "reject" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="rejectionReason">Rejection Reason (required)</Label>
+                      <Textarea
+                        id="rejectionReason"
+                        value={kycReviewData.rejectionReason}
+                        onChange={(e) => setKycReviewData({ ...kycReviewData, rejectionReason: e.target.value })}
+                        placeholder="Explain why this verification is being rejected..."
+                        className="min-h-20"
+                        data-testid="input-kyc-rejection-reason"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setKycReviewDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSubmitKycReview}
+                  disabled={reviewKycMutation.isPending}
+                  variant={kycReviewData.action === "reject" ? "destructive" : "default"}
+                  data-testid="button-submit-kyc-review"
+                >
+                  {reviewKycMutation.isPending 
+                    ? "Processing..." 
+                    : kycReviewData.action === "approve" 
+                      ? "Approve" 
+                      : "Reject"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Image Preview Dialog */}
+          <Dialog open={!!imagePreviewUrl} onOpenChange={() => setImagePreviewUrl(null)}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Image Preview</DialogTitle>
+              </DialogHeader>
+              {imagePreviewUrl && (
+                <div className="flex justify-center">
+                  <img 
+                    src={imagePreviewUrl} 
+                    alt="Preview" 
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Platform Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {settingsLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-16" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Megaphone className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium">Sponsored Ads System</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Enable or disable sponsored advertisements in the marketplace
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={platformSettings?.find(s => s.key === "ads_enabled")?.value !== "false"}
+                      onCheckedChange={(checked) => {
+                        updatePlatformSettingMutation.mutate({
+                          key: "ads_enabled",
+                          value: checked ? "true" : "false",
+                        });
+                      }}
+                      disabled={updatePlatformSettingMutation.isPending}
+                      data-testid="switch-ads-enabled"
+                    />
+                  </div>
+
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      About Sponsored Ads
+                    </h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>Ads appear every 6th position in the marketplace grid</li>
+                      <li>Maximum 3 ads are shown at a time (randomized)</li>
+                      <li>Ads are clearly labeled with a "Sponsored" badge</li>
+                      <li>Impressions and clicks are tracked for analytics</li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </CardContent>

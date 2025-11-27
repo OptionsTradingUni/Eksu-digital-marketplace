@@ -40,11 +40,15 @@ import {
   ShoppingBag,
   Megaphone,
   Check,
-  X
+  X,
+  Shield,
+  BadgeCheck,
+  ExternalLink
 } from "lucide-react";
+import { Link } from "wouter";
 
 export default function SettingsPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, isVerified } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("general");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -531,6 +535,65 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className={isVerified ? "border-green-500/50" : "border-yellow-500/50"}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className={`h-5 w-5 ${isVerified ? "text-green-500" : "text-yellow-500"}`} />
+                KYC Verification
+              </CardTitle>
+              <CardDescription>
+                {isVerified 
+                  ? "Your identity has been verified" 
+                  : "Verify your identity to unlock seller features"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isVerified ? (
+                <div className="flex items-center gap-3 p-4 bg-green-500/10 rounded-md border border-green-500/20">
+                  <BadgeCheck className="h-6 w-6 text-green-500" />
+                  <div>
+                    <p className="font-medium text-green-600 dark:text-green-400" data-testid="text-verification-status">
+                      Verified Seller
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      You can list products and create ads on the marketplace
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                    <AlertTitle className="text-yellow-600 dark:text-yellow-400">Verification Required</AlertTitle>
+                    <AlertDescription>
+                      Complete identity verification to list products for sale on the marketplace. 
+                      This helps build trust and prevents scams.
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Benefits of verification:</h4>
+                    <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                      <li>Green verified badge on your profile</li>
+                      <li>Ability to list and sell products</li>
+                      <li>Higher trust from buyers</li>
+                      <li>Access to all seller features</li>
+                    </ul>
+                  </div>
+                  
+                  <Link href="/kyc">
+                    <Button className="w-full" data-testid="button-verify-kyc">
+                      <Shield className="mr-2 h-4 w-4" />
+                      Get Verified Now
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
