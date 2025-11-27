@@ -121,6 +121,47 @@ function isUserOnline(userId: string): boolean {
   return wsConnections.has(userId);
 }
 
+// Game room WebSocket connections map: roomCode -> Set of user WebSocket connections
+const gameRoomConnections = new Map<string, Map<string, WebSocket>>();
+
+// Add a WebSocket connection to a game room
+function addGameRoomConnection(roomCode: string, userId: string, ws: WebSocket) {
+  if (!gameRoomConnections.has(roomCode)) {
+    gameRoomConnections.set(roomCode, new Map());
+  }
+  gameRoomConnections.get(roomCode)!.set(userId, ws);
+}
+
+// Remove a WebSocket connection from a game room
+function removeGameRoomConnection(roomCode: string, userId: string) {
+  const room = gameRoomConnections.get(roomCode);
+  if (room) {
+    room.delete(userId);
+    if (room.size === 0) {
+      gameRoomConnections.delete(roomCode);
+    }
+  }
+}
+
+// Broadcast message to all players in a game room
+function broadcastToGameRoom(roomCode: string, data: any, excludeUserId?: string) {
+  const room = gameRoomConnections.get(roomCode);
+  if (room) {
+    const message = JSON.stringify(data);
+    room.forEach((ws, odID) => {
+      if (odID !== excludeUserId && ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+      }
+    });
+  }
+}
+
+// Get count of connected players in a game room
+function getGameRoomPlayerCount(roomCode: string): number {
+  const room = gameRoomConnections.get(roomCode);
+  return room ? room.size : 0;
+}
+
 // Helper function to broadcast user online/offline status to all connected users
 function broadcastUserStatusChange(userId: string, isOnline: boolean) {
   const statusMessage = JSON.stringify({
@@ -2751,6 +2792,175 @@ Happy trading!`;
     } catch (error: any) {
       console.error("Error creating message:", error);
       res.status(400).json({ message: error.message || "Failed to send message" });
+    }
+  });
+
+  // Message reactions routes
+  app.post("/api/messages/:id/reactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { reaction } = req.body;
+      const validReactions = ['heart', 'thumbs_up', 'laugh', 'surprised', 'sad', 'angry'];
+      
+      if (!reaction || !validReactions.includes(reaction)) {
+        return res.status(400).json({ message: "Invalid reaction. Valid reactions are: " + validReactions.join(", ") });
+      }
+
+      const messageReaction = await storage.addMessageReaction(req.params.id, userId, reaction);
+      res.json(messageReaction);
+    } catch (error: any) {
+      console.error("Error adding reaction:", error);
+      res.status(400).json({ message: error.message || "Failed to add reaction" });
+    }
+  });
+
+  app.delete("/api/messages/:id/reactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.removeMessageReaction(req.params.id, userId);
+      res.json({ message: "Reaction removed successfully" });
+    } catch (error: any) {
+      console.error("Error removing reaction:", error);
+      res.status(400).json({ message: error.message || "Failed to remove reaction" });
+    }
+  });
+
+  app.get("/api/messages/:id/reactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const reactions = await storage.getMessageReactions(req.params.id);
+      res.json(reactions);
+    } catch (error: any) {
+      console.error("Error getting reactions:", error);
+      res.status(500).json({ message: "Failed to get reactions" });
+    }
+  });
+
+  // Read receipts route
+  app.get("/api/messages/read-receipts/:messageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const receipts = await storage.getReadReceipts(req.params.messageId);
+      res.json(receipts);
+    } catch (error: any) {
+      console.error("Error getting read receipts:", error);
+      res.status(500).json({ message: "Failed to get read receipts" });
+    }
+  });
+
+  // Conversation archive routes
+  app.get("/api/conversations/archived", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const archived = await storage.getArchivedConversations(userId);
+      res.json(archived);
+    } catch (error: any) {
+      console.error("Error getting archived conversations:", error);
+      res.status(500).json({ message: "Failed to get archived conversations" });
+    }
+  });
+
+  app.post("/api/conversations/:userId/archive", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const archived = await storage.archiveConversation(userId, req.params.userId);
+      res.json(archived);
+    } catch (error: any) {
+      console.error("Error archiving conversation:", error);
+      res.status(400).json({ message: error.message || "Failed to archive conversation" });
+    }
+  });
+
+  app.delete("/api/conversations/:userId/archive", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.unarchiveConversation(userId, req.params.userId);
+      res.json({ message: "Conversation unarchived successfully" });
+    } catch (error: any) {
+      console.error("Error unarchiving conversation:", error);
+      res.status(400).json({ message: error.message || "Failed to unarchive conversation" });
+    }
+  });
+
+  // Mark messages as read route
+  app.post("/api/conversations/:userId/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.markMessagesAsRead(userId, req.params.userId);
+      res.json({ message: "Messages marked as read" });
+    } catch (error: any) {
+      console.error("Error marking messages as read:", error);
+      res.status(400).json({ message: error.message || "Failed to mark messages as read" });
+    }
+  });
+
+  // Disappearing messages routes
+  app.post("/api/conversations/:userId/disappearing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { duration } = req.body;
+      const validDurations = [0, 86400, 604800, 7776000]; // off, 24h, 7d, 90d in seconds
+      
+      if (duration === undefined || !validDurations.includes(Number(duration))) {
+        return res.status(400).json({ message: "Invalid duration. Valid durations are: 0 (off), 86400 (24h), 604800 (7d), 7776000 (90d)" });
+      }
+
+      const setting = await storage.setDisappearingMessages(userId, req.params.userId, Number(duration));
+      res.json(setting);
+    } catch (error: any) {
+      console.error("Error setting disappearing messages:", error);
+      res.status(400).json({ message: error.message || "Failed to set disappearing messages" });
+    }
+  });
+
+  app.get("/api/conversations/:userId/disappearing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const setting = await storage.getDisappearingMessageSettings(userId, req.params.userId);
+      res.json(setting || { isEnabled: false, duration: 0 });
+    } catch (error: any) {
+      console.error("Error getting disappearing message settings:", error);
+      res.status(500).json({ message: "Failed to get disappearing message settings" });
     }
   });
 
@@ -7622,6 +7832,212 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
             message: savedMessage,
           }));
         }
+
+        // ========================================
+        // Game Room WebSocket Events
+        // ========================================
+
+        // Join game room WebSocket channel
+        if (data.type === "game_room_join" && userId) {
+          const { roomCode } = data;
+          if (!roomCode) {
+            ws.send(JSON.stringify({ type: "game_room_error", message: "Room code required" }));
+            return;
+          }
+
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (!room) {
+            ws.send(JSON.stringify({ type: "game_room_error", message: "Room not found" }));
+            return;
+          }
+
+          addGameRoomConnection(roomCode, userId, ws);
+          
+          // Notify others in room
+          broadcastToGameRoom(roomCode, {
+            type: "player_joined",
+            playerId: userId,
+            roomCode,
+            players: room.players,
+          }, userId);
+
+          ws.send(JSON.stringify({
+            type: "game_room_joined",
+            room,
+          }));
+        }
+
+        // Leave game room WebSocket channel
+        if (data.type === "game_room_leave" && userId) {
+          const { roomCode } = data;
+          if (roomCode) {
+            removeGameRoomConnection(roomCode, userId);
+            
+            // Notify others
+            broadcastToGameRoom(roomCode, {
+              type: "player_left",
+              playerId: userId,
+              roomCode,
+            });
+          }
+        }
+
+        // Player ready status change
+        if (data.type === "player_ready" && userId) {
+          const { roomCode } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room) {
+            const player = await storage.togglePlayerReady(room.id, userId);
+            const updatedRoom = await storage.getGameRoomByCode(roomCode);
+            
+            // Broadcast to all players including sender
+            const roomConnections = gameRoomConnections.get(roomCode);
+            if (roomConnections) {
+              const message = JSON.stringify({
+                type: "player_ready_changed",
+                playerId: userId,
+                isReady: player.isReady,
+                room: updatedRoom,
+              });
+              roomConnections.forEach((conn) => {
+                if (conn.readyState === WebSocket.OPEN) {
+                  conn.send(message);
+                }
+              });
+            }
+          }
+        }
+
+        // Game chat message
+        if (data.type === "game_chat" && userId) {
+          const { roomCode, content } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room && content) {
+            const message = await storage.createGameChatMessage(room.id, userId, content);
+            const sender = await storage.getUser(userId);
+            
+            // Broadcast to all players in room
+            const roomConnections = gameRoomConnections.get(roomCode);
+            if (roomConnections) {
+              const broadcastMsg = JSON.stringify({
+                type: "game_chat_message",
+                message: { ...message, sender },
+              });
+              roomConnections.forEach((conn) => {
+                if (conn.readyState === WebSocket.OPEN) {
+                  conn.send(broadcastMsg);
+                }
+              });
+            }
+          }
+        }
+
+        // Game action (move, play card, etc.)
+        if (data.type === "game_action" && userId) {
+          const { roomCode, action, payload } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room && room.status === "playing") {
+            // Update game state based on action
+            const currentState = room.gameState || {};
+            const newState = { ...currentState, lastAction: { action, payload, playerId: userId, timestamp: new Date() } };
+            await storage.updateGameState(room.id, newState);
+
+            // Broadcast action to all players
+            const roomConnections = gameRoomConnections.get(roomCode);
+            if (roomConnections) {
+              const message = JSON.stringify({
+                type: "game_action_broadcast",
+                playerId: userId,
+                action,
+                payload,
+                gameState: newState,
+              });
+              roomConnections.forEach((conn) => {
+                if (conn.readyState === WebSocket.OPEN) {
+                  conn.send(message);
+                }
+              });
+            }
+          }
+        }
+
+        // Game state update (full state sync)
+        if (data.type === "game_state_update" && userId) {
+          const { roomCode, gameState } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room && room.hostId === userId) {
+            await storage.updateGameState(room.id, gameState);
+
+            // Broadcast to all players
+            const roomConnections = gameRoomConnections.get(roomCode);
+            if (roomConnections) {
+              const message = JSON.stringify({
+                type: "game_state_sync",
+                gameState,
+              });
+              roomConnections.forEach((conn) => {
+                if (conn.readyState === WebSocket.OPEN) {
+                  conn.send(message);
+                }
+              });
+            }
+          }
+        }
+
+        // Game start event
+        if (data.type === "game_start" && userId) {
+          const { roomCode } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room && room.hostId === userId) {
+            try {
+              const updatedRoom = await storage.startGameRoom(room.id);
+              
+              // Broadcast game start to all players
+              const roomConnections = gameRoomConnections.get(roomCode);
+              if (roomConnections) {
+                const message = JSON.stringify({
+                  type: "game_started",
+                  room: updatedRoom,
+                });
+                roomConnections.forEach((conn) => {
+                  if (conn.readyState === WebSocket.OPEN) {
+                    conn.send(message);
+                  }
+                });
+              }
+            } catch (error: any) {
+              ws.send(JSON.stringify({
+                type: "game_room_error",
+                message: error.message || "Failed to start game",
+              }));
+            }
+          }
+        }
+
+        // Game end event
+        if (data.type === "game_end" && userId) {
+          const { roomCode, winnerId, results } = data;
+          const room = await storage.getGameRoomByCode(roomCode);
+          if (room && room.hostId === userId) {
+            const updatedRoom = await storage.endGameRoom(room.id, winnerId, results);
+            
+            // Broadcast game end to all players
+            const roomConnections = gameRoomConnections.get(roomCode);
+            if (roomConnections) {
+              const message = JSON.stringify({
+                type: "game_ended",
+                room: updatedRoom,
+                winnerId,
+                results,
+              });
+              roomConnections.forEach((conn) => {
+                if (conn.readyState === WebSocket.OPEN) {
+                  conn.send(message);
+                }
+              });
+            }
+          }
+        }
       } catch (error) {
         console.error("WebSocket error:", error);
         ws.send(JSON.stringify({ type: "error", message: "Failed to process message" }));
@@ -8716,6 +9132,269 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error fetching community members:", error);
       res.status(500).json({ message: "Failed to fetch members" });
+    }
+  });
+
+  // ========================================
+  // Multiplayer Game Room API Routes
+  // ========================================
+
+  // POST /api/game-rooms - Create a new game room
+  app.post("/api/game-rooms", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { gameType, stakeAmount, maxPlayers, isPrivate, password, settings } = req.body;
+
+      if (!gameType) {
+        return res.status(400).json({ message: "Game type is required" });
+      }
+
+      const validGameTypes = ["ludo", "whot", "word_battle", "trivia"];
+      if (!validGameTypes.includes(gameType)) {
+        return res.status(400).json({ message: "Invalid game type" });
+      }
+
+      const room = await storage.createGameRoom({
+        hostId: userId,
+        gameType,
+        stakeAmount: stakeAmount || "0.00",
+        maxPlayers: maxPlayers || (gameType === "trivia" ? 10 : 4),
+        isPrivate: isPrivate || false,
+        password: isPrivate ? password : undefined,
+        settings,
+      });
+
+      const fullRoom = await storage.getGameRoom(room.id);
+      res.status(201).json(fullRoom);
+    } catch (error: any) {
+      console.error("Error creating game room:", error);
+      res.status(500).json({ message: error.message || "Failed to create game room" });
+    }
+  });
+
+  // GET /api/game-rooms - List available public game rooms
+  app.get("/api/game-rooms", async (req, res) => {
+    try {
+      const { gameType } = req.query;
+      const rooms = await storage.getAvailableGameRooms(gameType as string | undefined);
+      res.json(rooms);
+    } catch (error) {
+      console.error("Error fetching game rooms:", error);
+      res.status(500).json({ message: "Failed to fetch game rooms" });
+    }
+  });
+
+  // GET /api/game-rooms/:code - Get room by code
+  app.get("/api/game-rooms/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const room = await storage.getGameRoomByCode(code);
+      
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      // Don't send password in response
+      const { password, ...safeRoom } = room;
+      res.json({ ...safeRoom, hasPassword: !!password });
+    } catch (error) {
+      console.error("Error fetching game room:", error);
+      res.status(500).json({ message: "Failed to fetch game room" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/join - Join a game room
+  app.post("/api/game-rooms/:code/join", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+      const { password } = req.body;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      const player = await storage.joinGameRoom(room.id, userId, password);
+      const updatedRoom = await storage.getGameRoom(room.id);
+
+      res.json({ player, room: updatedRoom });
+    } catch (error: any) {
+      console.error("Error joining game room:", error);
+      res.status(400).json({ message: error.message || "Failed to join game room" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/leave - Leave a game room
+  app.post("/api/game-rooms/:code/leave", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      await storage.leaveGameRoom(room.id, userId);
+      res.json({ message: "Left room successfully" });
+    } catch (error: any) {
+      console.error("Error leaving game room:", error);
+      res.status(500).json({ message: error.message || "Failed to leave game room" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/ready - Toggle ready status
+  app.post("/api/game-rooms/:code/ready", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      const player = await storage.togglePlayerReady(room.id, userId);
+      const updatedRoom = await storage.getGameRoom(room.id);
+
+      res.json({ player, room: updatedRoom });
+    } catch (error: any) {
+      console.error("Error toggling ready status:", error);
+      res.status(500).json({ message: error.message || "Failed to toggle ready status" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/start - Start the game (host only)
+  app.post("/api/game-rooms/:code/start", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      if (room.hostId !== userId) {
+        return res.status(403).json({ message: "Only the host can start the game" });
+      }
+
+      const startedRoom = await storage.startGameRoom(room.id);
+      res.json(startedRoom);
+    } catch (error: any) {
+      console.error("Error starting game:", error);
+      res.status(400).json({ message: error.message || "Failed to start game" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/chat - Send a chat message
+  app.post("/api/game-rooms/:code/chat", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code } = req.params;
+      const { content } = req.body;
+
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      const message = await storage.createGameChatMessage(room.id, userId, content.trim());
+      const sender = await storage.getUser(userId);
+
+      res.status(201).json({ ...message, sender });
+    } catch (error: any) {
+      console.error("Error sending chat message:", error);
+      res.status(500).json({ message: error.message || "Failed to send message" });
+    }
+  });
+
+  // GET /api/game-rooms/:code/chat - Get chat messages for a room
+  app.get("/api/game-rooms/:code/chat", isAuthenticated, async (req, res) => {
+    try {
+      const { code } = req.params;
+      const { limit } = req.query;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      const messages = await storage.getGameRoomChatMessages(room.id, limit ? parseInt(limit as string) : 50);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching chat messages:", error);
+      res.status(500).json({ message: "Failed to fetch chat messages" });
+    }
+  });
+
+  // POST /api/game-rooms/:code/kick/:playerId - Kick a player (host only)
+  app.post("/api/game-rooms/:code/kick/:playerId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code, playerId } = req.params;
+
+      const room = await storage.getGameRoomByCode(code);
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      await storage.kickPlayerFromRoom(room.id, userId, playerId);
+      const updatedRoom = await storage.getGameRoom(room.id);
+
+      res.json({ message: "Player kicked", room: updatedRoom });
+    } catch (error: any) {
+      console.error("Error kicking player:", error);
+      res.status(400).json({ message: error.message || "Failed to kick player" });
+    }
+  });
+
+  // GET /api/game-rooms/user/my-rooms - Get user's active game rooms
+  app.get("/api/game-rooms/user/my-rooms", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const rooms = await storage.getUserGameRooms(userId);
+      res.json(rooms);
+    } catch (error) {
+      console.error("Error fetching user game rooms:", error);
+      res.status(500).json({ message: "Failed to fetch user game rooms" });
     }
   });
 

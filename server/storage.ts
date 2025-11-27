@@ -68,6 +68,10 @@ import {
   storyViews,
   storyReactions,
   storyReplies,
+  messageReactions,
+  archivedConversations,
+  disappearingMessageSettings,
+  messageReadReceipts,
   type User,
   type UpsertUser,
   type Product,
@@ -180,6 +184,16 @@ import {
   type StoryView,
   type StoryReaction,
   type StoryReply,
+  type MessageReaction,
+  type ArchivedConversation,
+  type DisappearingMessageSetting,
+  type MessageReadReceipt,
+  gameRooms,
+  gameRoomPlayers,
+  gameChatMessages,
+  type GameRoom,
+  type GameRoomPlayer,
+  type GameChatMessage,
   confessions,
   confessionVotes,
   confessionComments,
@@ -250,6 +264,19 @@ export interface IStorage {
   getMessageThreads(userId: string): Promise<any[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessagesAsRead(userId: string, fromUserId: string): Promise<void>;
+  
+  // Enhanced messaging operations
+  addMessageReaction(messageId: string, userId: string, reaction: string): Promise<MessageReaction>;
+  removeMessageReaction(messageId: string, userId: string): Promise<void>;
+  getMessageReactions(messageId: string): Promise<(MessageReaction & { user: User })[]>;
+  archiveConversation(userId: string, otherUserId: string): Promise<ArchivedConversation>;
+  unarchiveConversation(userId: string, otherUserId: string): Promise<void>;
+  getArchivedConversations(userId: string): Promise<(ArchivedConversation & { otherUser: User })[]>;
+  isConversationArchived(userId: string, otherUserId: string): Promise<boolean>;
+  setDisappearingMessages(userId: string, otherUserId: string, duration: number): Promise<DisappearingMessageSetting>;
+  getDisappearingMessageSettings(userId: string, otherUserId: string): Promise<DisappearingMessageSetting | undefined>;
+  createReadReceipt(messageId: string, readerId: string): Promise<MessageReadReceipt>;
+  getReadReceipts(messageId: string): Promise<(MessageReadReceipt & { reader: User })[]>;
   
   // Review operations
   getUserReviews(userId: string): Promise<Review[]>;
@@ -681,6 +708,33 @@ export interface IStorage {
   createCommunityPostComment(data: { postId: string; authorId: string; content: string; parentId?: string }): Promise<CommunityPostComment>;
   getCommunityPostComments(postId: string): Promise<(CommunityPostComment & { author: User })[]>;
   deleteCommunityPostComment(id: string): Promise<void>;
+
+  // Game Room operations
+  createGameRoom(data: { hostId: string; gameType: string; stakeAmount?: string; maxPlayers?: number; isPrivate?: boolean; password?: string; settings?: any }): Promise<GameRoom>;
+  getGameRoom(id: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] }) | undefined>;
+  getGameRoomByCode(code: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] }) | undefined>;
+  getAvailableGameRooms(gameType?: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] })[]>;
+  getUserGameRooms(userId: string): Promise<GameRoom[]>;
+  updateGameRoom(id: string, data: Partial<GameRoom>): Promise<GameRoom>;
+  deleteGameRoom(id: string): Promise<void>;
+  
+  // Game Room Player operations
+  joinGameRoom(roomId: string, userId: string, password?: string): Promise<GameRoomPlayer>;
+  leaveGameRoom(roomId: string, userId: string): Promise<void>;
+  kickPlayerFromRoom(roomId: string, hostId: string, userId: string): Promise<void>;
+  togglePlayerReady(roomId: string, userId: string): Promise<GameRoomPlayer>;
+  updatePlayerState(roomId: string, userId: string, playerState: any): Promise<GameRoomPlayer>;
+  getGameRoomPlayer(roomId: string, userId: string): Promise<GameRoomPlayer | undefined>;
+  getGameRoomPlayers(roomId: string): Promise<(GameRoomPlayer & { user: User })[]>;
+  
+  // Game Room Chat operations
+  createGameChatMessage(roomId: string, senderId: string, content: string, type?: string): Promise<GameChatMessage>;
+  getGameRoomChatMessages(roomId: string, limit?: number): Promise<(GameChatMessage & { sender: User })[]>;
+  
+  // Game State operations
+  updateGameState(roomId: string, gameState: any): Promise<GameRoom>;
+  startGameRoom(roomId: string): Promise<GameRoom>;
+  endGameRoom(roomId: string, winnerId?: string, results?: any): Promise<GameRoom>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5238,6 +5292,474 @@ export class DatabaseStorage implements IStorage {
         .set({ commentsCount: sql`GREATEST(${communityPosts.commentsCount} - 1, 0)` })
         .where(eq(communityPosts.id, comment.postId));
     }
+  }
+
+  // Enhanced messaging operations
+  async addMessageReaction(messageId: string, userId: string, reaction: string): Promise<MessageReaction> {
+    // Remove existing reaction first (user can only have one reaction per message)
+    await db.delete(messageReactions).where(
+      and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId)
+      )
+    );
+    
+    const [created] = await db.insert(messageReactions).values({
+      messageId,
+      userId,
+      reaction,
+    }).returning();
+    
+    return created;
+  }
+
+  async removeMessageReaction(messageId: string, userId: string): Promise<void> {
+    await db.delete(messageReactions).where(
+      and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId)
+      )
+    );
+  }
+
+  async getMessageReactions(messageId: string): Promise<(MessageReaction & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(messageReactions)
+      .innerJoin(users, eq(messageReactions.userId, users.id))
+      .where(eq(messageReactions.messageId, messageId));
+    
+    return result.map(row => ({ ...row.message_reactions, user: row.users }));
+  }
+
+  async archiveConversation(userId: string, otherUserId: string): Promise<ArchivedConversation> {
+    // Check if already archived
+    const existing = await db.select().from(archivedConversations).where(
+      and(
+        eq(archivedConversations.userId, userId),
+        eq(archivedConversations.otherUserId, otherUserId)
+      )
+    );
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [created] = await db.insert(archivedConversations).values({
+      userId,
+      otherUserId,
+    }).returning();
+    
+    return created;
+  }
+
+  async unarchiveConversation(userId: string, otherUserId: string): Promise<void> {
+    await db.delete(archivedConversations).where(
+      and(
+        eq(archivedConversations.userId, userId),
+        eq(archivedConversations.otherUserId, otherUserId)
+      )
+    );
+  }
+
+  async getArchivedConversations(userId: string): Promise<(ArchivedConversation & { otherUser: User })[]> {
+    const result = await db
+      .select()
+      .from(archivedConversations)
+      .innerJoin(users, eq(archivedConversations.otherUserId, users.id))
+      .where(eq(archivedConversations.userId, userId))
+      .orderBy(desc(archivedConversations.archivedAt));
+    
+    return result.map(row => ({ ...row.archived_conversations, otherUser: row.users }));
+  }
+
+  async isConversationArchived(userId: string, otherUserId: string): Promise<boolean> {
+    const [result] = await db.select().from(archivedConversations).where(
+      and(
+        eq(archivedConversations.userId, userId),
+        eq(archivedConversations.otherUserId, otherUserId)
+      )
+    );
+    return !!result;
+  }
+
+  async setDisappearingMessages(userId: string, otherUserId: string, duration: number): Promise<DisappearingMessageSetting> {
+    // Check if setting already exists
+    const existing = await db.select().from(disappearingMessageSettings).where(
+      and(
+        eq(disappearingMessageSettings.userId, userId),
+        eq(disappearingMessageSettings.otherUserId, otherUserId)
+      )
+    );
+    
+    if (existing.length > 0) {
+      // Update existing setting
+      const [updated] = await db.update(disappearingMessageSettings)
+        .set({ 
+          duration, 
+          isEnabled: duration > 0 
+        })
+        .where(eq(disappearingMessageSettings.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new setting
+    const [created] = await db.insert(disappearingMessageSettings).values({
+      userId,
+      otherUserId,
+      duration,
+      isEnabled: duration > 0,
+    }).returning();
+    
+    return created;
+  }
+
+  async getDisappearingMessageSettings(userId: string, otherUserId: string): Promise<DisappearingMessageSetting | undefined> {
+    const [result] = await db.select().from(disappearingMessageSettings).where(
+      and(
+        eq(disappearingMessageSettings.userId, userId),
+        eq(disappearingMessageSettings.otherUserId, otherUserId)
+      )
+    );
+    return result;
+  }
+
+  async createReadReceipt(messageId: string, readerId: string): Promise<MessageReadReceipt> {
+    // Check if receipt already exists
+    const existing = await db.select().from(messageReadReceipts).where(
+      and(
+        eq(messageReadReceipts.messageId, messageId),
+        eq(messageReadReceipts.readerId, readerId)
+      )
+    );
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [created] = await db.insert(messageReadReceipts).values({
+      messageId,
+      readerId,
+    }).returning();
+    
+    return created;
+  }
+
+  async getReadReceipts(messageId: string): Promise<(MessageReadReceipt & { reader: User })[]> {
+    const result = await db
+      .select()
+      .from(messageReadReceipts)
+      .innerJoin(users, eq(messageReadReceipts.readerId, users.id))
+      .where(eq(messageReadReceipts.messageId, messageId));
+    
+    return result.map(row => ({ ...row.message_read_receipts, reader: row.users }));
+  }
+
+  // ========================================
+  // Game Room Operations
+  // ========================================
+
+  private generateRoomCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  async createGameRoom(data: { hostId: string; gameType: string; stakeAmount?: string; maxPlayers?: number; isPrivate?: boolean; password?: string; settings?: any }): Promise<GameRoom> {
+    const roomCode = this.generateRoomCode();
+    
+    const [room] = await db.insert(gameRooms).values({
+      hostId: data.hostId,
+      gameType: data.gameType as any,
+      roomCode,
+      stakeAmount: data.stakeAmount || "0.00",
+      maxPlayers: data.maxPlayers || 4,
+      isPrivate: data.isPrivate || false,
+      password: data.password,
+      settings: data.settings,
+      status: "waiting",
+      currentPlayers: 1,
+    }).returning();
+
+    // Add host as first player
+    await db.insert(gameRoomPlayers).values({
+      roomId: room.id,
+      userId: data.hostId,
+      playerNumber: 1,
+      isReady: false,
+      isConnected: true,
+    });
+
+    return room;
+  }
+
+  async getGameRoom(id: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] }) | undefined> {
+    const [room] = await db.select().from(gameRooms).where(eq(gameRooms.id, id));
+    if (!room) return undefined;
+
+    const [host] = await db.select().from(users).where(eq(users.id, room.hostId));
+    const players = await this.getGameRoomPlayers(room.id);
+
+    return { ...room, host, players };
+  }
+
+  async getGameRoomByCode(code: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] }) | undefined> {
+    const [room] = await db.select().from(gameRooms).where(eq(gameRooms.roomCode, code.toUpperCase()));
+    if (!room) return undefined;
+
+    const [host] = await db.select().from(users).where(eq(users.id, room.hostId));
+    const players = await this.getGameRoomPlayers(room.id);
+
+    return { ...room, host, players };
+  }
+
+  async getAvailableGameRooms(gameType?: string): Promise<(GameRoom & { host: User; players: (GameRoomPlayer & { user: User })[] })[]> {
+    let query = db
+      .select()
+      .from(gameRooms)
+      .innerJoin(users, eq(gameRooms.hostId, users.id))
+      .where(
+        and(
+          eq(gameRooms.status, "waiting"),
+          eq(gameRooms.isPrivate, false)
+        )
+      )
+      .orderBy(desc(gameRooms.createdAt));
+
+    const rooms = await query;
+
+    const result = await Promise.all(
+      rooms
+        .filter(row => !gameType || row.game_rooms.gameType === gameType)
+        .map(async row => {
+          const players = await this.getGameRoomPlayers(row.game_rooms.id);
+          return {
+            ...row.game_rooms,
+            host: row.users,
+            players,
+          };
+        })
+    );
+
+    return result;
+  }
+
+  async getUserGameRooms(userId: string): Promise<GameRoom[]> {
+    const asHost = await db.select().from(gameRooms).where(eq(gameRooms.hostId, userId));
+    const asPlayer = await db
+      .select({ room: gameRooms })
+      .from(gameRoomPlayers)
+      .innerJoin(gameRooms, eq(gameRoomPlayers.roomId, gameRooms.id))
+      .where(eq(gameRoomPlayers.userId, userId));
+
+    const playerRooms = asPlayer.map(p => p.room);
+    const allRooms = [...asHost, ...playerRooms];
+    
+    // Remove duplicates
+    const uniqueRooms = allRooms.filter((room, index, self) => 
+      index === self.findIndex(r => r.id === room.id)
+    );
+
+    return uniqueRooms;
+  }
+
+  async updateGameRoom(id: string, data: Partial<GameRoom>): Promise<GameRoom> {
+    const [room] = await db.update(gameRooms)
+      .set(data)
+      .where(eq(gameRooms.id, id))
+      .returning();
+    return room;
+  }
+
+  async deleteGameRoom(id: string): Promise<void> {
+    await db.delete(gameRooms).where(eq(gameRooms.id, id));
+  }
+
+  // Game Room Player operations
+  async joinGameRoom(roomId: string, userId: string, password?: string): Promise<GameRoomPlayer> {
+    const room = await this.getGameRoom(roomId);
+    if (!room) throw new Error("Room not found");
+    
+    if (room.status !== "waiting") throw new Error("Game already started");
+    if (room.currentPlayers >= room.maxPlayers!) throw new Error("Room is full");
+    if (room.isPrivate && room.password !== password) throw new Error("Invalid password");
+
+    // Check if already in room
+    const existing = await this.getGameRoomPlayer(roomId, userId);
+    if (existing) return existing;
+
+    const nextPlayerNumber = room.currentPlayers + 1;
+
+    const [player] = await db.insert(gameRoomPlayers).values({
+      roomId,
+      userId,
+      playerNumber: nextPlayerNumber,
+      isReady: false,
+      isConnected: true,
+    }).returning();
+
+    // Update room player count
+    await db.update(gameRooms)
+      .set({ currentPlayers: nextPlayerNumber })
+      .where(eq(gameRooms.id, roomId));
+
+    return player;
+  }
+
+  async leaveGameRoom(roomId: string, userId: string): Promise<void> {
+    const room = await this.getGameRoom(roomId);
+    if (!room) return;
+
+    await db.delete(gameRoomPlayers).where(
+      and(
+        eq(gameRoomPlayers.roomId, roomId),
+        eq(gameRoomPlayers.userId, userId)
+      )
+    );
+
+    const newCount = Math.max(0, room.currentPlayers - 1);
+
+    if (newCount === 0 || room.hostId === userId) {
+      // Delete room if empty or host left
+      await db.delete(gameRooms).where(eq(gameRooms.id, roomId));
+    } else {
+      await db.update(gameRooms)
+        .set({ currentPlayers: newCount })
+        .where(eq(gameRooms.id, roomId));
+    }
+  }
+
+  async kickPlayerFromRoom(roomId: string, hostId: string, userId: string): Promise<void> {
+    const room = await this.getGameRoom(roomId);
+    if (!room) throw new Error("Room not found");
+    if (room.hostId !== hostId) throw new Error("Only host can kick players");
+    if (userId === hostId) throw new Error("Cannot kick yourself");
+
+    await this.leaveGameRoom(roomId, userId);
+  }
+
+  async togglePlayerReady(roomId: string, userId: string): Promise<GameRoomPlayer> {
+    const player = await this.getGameRoomPlayer(roomId, userId);
+    if (!player) throw new Error("Player not in room");
+
+    const [updated] = await db.update(gameRoomPlayers)
+      .set({ isReady: !player.isReady })
+      .where(
+        and(
+          eq(gameRoomPlayers.roomId, roomId),
+          eq(gameRoomPlayers.userId, userId)
+        )
+      )
+      .returning();
+
+    return updated;
+  }
+
+  async updatePlayerState(roomId: string, userId: string, playerState: any): Promise<GameRoomPlayer> {
+    const [updated] = await db.update(gameRoomPlayers)
+      .set({ playerState })
+      .where(
+        and(
+          eq(gameRoomPlayers.roomId, roomId),
+          eq(gameRoomPlayers.userId, userId)
+        )
+      )
+      .returning();
+
+    return updated;
+  }
+
+  async getGameRoomPlayer(roomId: string, userId: string): Promise<GameRoomPlayer | undefined> {
+    const [player] = await db.select().from(gameRoomPlayers).where(
+      and(
+        eq(gameRoomPlayers.roomId, roomId),
+        eq(gameRoomPlayers.userId, userId)
+      )
+    );
+    return player;
+  }
+
+  async getGameRoomPlayers(roomId: string): Promise<(GameRoomPlayer & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(gameRoomPlayers)
+      .innerJoin(users, eq(gameRoomPlayers.userId, users.id))
+      .where(eq(gameRoomPlayers.roomId, roomId))
+      .orderBy(gameRoomPlayers.playerNumber);
+
+    return result.map(row => ({ ...row.game_room_players, user: row.users }));
+  }
+
+  // Game Room Chat operations
+  async createGameChatMessage(roomId: string, senderId: string, content: string, type: string = "text"): Promise<GameChatMessage> {
+    const [message] = await db.insert(gameChatMessages).values({
+      roomId,
+      senderId,
+      content,
+      type,
+    }).returning();
+
+    return message;
+  }
+
+  async getGameRoomChatMessages(roomId: string, limit: number = 50): Promise<(GameChatMessage & { sender: User })[]> {
+    const result = await db
+      .select()
+      .from(gameChatMessages)
+      .innerJoin(users, eq(gameChatMessages.senderId, users.id))
+      .where(eq(gameChatMessages.roomId, roomId))
+      .orderBy(desc(gameChatMessages.createdAt))
+      .limit(limit);
+
+    return result.map(row => ({ ...row.game_chat_messages, sender: row.users })).reverse();
+  }
+
+  // Game State operations
+  async updateGameState(roomId: string, gameState: any): Promise<GameRoom> {
+    const [room] = await db.update(gameRooms)
+      .set({ gameState })
+      .where(eq(gameRooms.id, roomId))
+      .returning();
+
+    return room;
+  }
+
+  async startGameRoom(roomId: string): Promise<GameRoom> {
+    const room = await this.getGameRoom(roomId);
+    if (!room) throw new Error("Room not found");
+
+    // Check all players are ready
+    const notReady = room.players.filter(p => !p.isReady && p.userId !== room.hostId);
+    if (notReady.length > 0) throw new Error("Not all players are ready");
+
+    const [updated] = await db.update(gameRooms)
+      .set({ 
+        status: "playing",
+        startedAt: new Date(),
+      })
+      .where(eq(gameRooms.id, roomId))
+      .returning();
+
+    return updated;
+  }
+
+  async endGameRoom(roomId: string, winnerId?: string, results?: any): Promise<GameRoom> {
+    const gameState = results ? { ...results, winnerId } : { winnerId };
+    
+    const [updated] = await db.update(gameRooms)
+      .set({ 
+        status: "finished",
+        finishedAt: new Date(),
+        gameState,
+      })
+      .where(eq(gameRooms.id, roomId))
+      .returning();
+
+    return updated;
   }
 }
 

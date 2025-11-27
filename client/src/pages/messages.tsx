@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Send, 
   Paperclip, 
@@ -20,15 +21,27 @@ import {
   Users,
   Search,
   Wifi,
-  WifiOff
+  WifiOff,
+  Archive,
+  ArchiveRestore,
+  Timer,
+  Heart,
+  ThumbsUp,
+  Laugh,
+  Frown,
+  Angry,
+  Settings,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import { UserActionsMenu } from "@/components/UserActionsMenu";
-import type { Message, User } from "@shared/schema";
+import type { Message, User, MessageReaction, ArchivedConversation, DisappearingMessageSetting } from "@shared/schema";
 import { useSearch, useParams } from "wouter";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 
 type WebSocketStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -37,6 +50,28 @@ interface ChatThread {
   lastMessage?: Message;
   unreadCount: number;
 }
+
+interface ReactionWithUser extends MessageReaction {
+  user: User;
+}
+
+// Reaction options using lucide icons
+const REACTION_OPTIONS = [
+  { id: 'heart', icon: Heart, label: 'Heart' },
+  { id: 'thumbs_up', icon: ThumbsUp, label: 'Like' },
+  { id: 'laugh', icon: Laugh, label: 'Laugh' },
+  { id: 'surprised', icon: Frown, label: 'Surprised' },
+  { id: 'sad', icon: Frown, label: 'Sad' },
+  { id: 'angry', icon: Angry, label: 'Angry' },
+];
+
+// Disappearing message duration options
+const DISAPPEARING_DURATIONS = [
+  { value: "0", label: "Off", seconds: 0 },
+  { value: "86400", label: "24 hours", seconds: 86400 },
+  { value: "604800", label: "7 days", seconds: 604800 },
+  { value: "7776000", label: "90 days", seconds: 7776000 },
+];
 
 // Common emoji categories for the emoji picker
 const EMOJI_CATEGORIES = [
@@ -143,71 +178,228 @@ function NoConversationSelectedState() {
   );
 }
 
-// Chat bubble component with tail
+// Reaction picker component
+function ReactionPicker({ 
+  onSelect, 
+  onClose 
+}: { 
+  onSelect: (reaction: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      className="absolute z-50 bg-card border rounded-full shadow-lg p-2 flex items-center gap-1"
+      data-testid="picker-reactions"
+    >
+      {REACTION_OPTIONS.map((reaction) => {
+        const Icon = reaction.icon;
+        return (
+          <Button
+            key={reaction.id}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => {
+              onSelect(reaction.id);
+              onClose();
+            }}
+            data-testid={`button-reaction-${reaction.id}`}
+          >
+            <Icon className="h-4 w-4" />
+          </Button>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+// Message reactions display component
+function MessageReactions({ 
+  reactions, 
+  isOwn,
+  onReactionClick
+}: { 
+  reactions: ReactionWithUser[];
+  isOwn: boolean;
+  onReactionClick: (reactionId: string) => void;
+}) {
+  if (!reactions || reactions.length === 0) return null;
+
+  // Group reactions by type
+  const groupedReactions = reactions.reduce((acc, r) => {
+    if (!acc[r.reaction]) acc[r.reaction] = [];
+    acc[r.reaction].push(r);
+    return acc;
+  }, {} as Record<string, ReactionWithUser[]>);
+
+  return (
+    <div 
+      className={`flex items-center gap-1 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}
+      data-testid="container-reactions"
+    >
+      {Object.entries(groupedReactions).map(([reactionId, users]) => {
+        const reactionInfo = REACTION_OPTIONS.find(r => r.id === reactionId);
+        if (!reactionInfo) return null;
+        const Icon = reactionInfo.icon;
+        
+        return (
+          <button
+            key={reactionId}
+            onClick={() => onReactionClick(reactionId)}
+            className="flex items-center gap-1 bg-muted/80 rounded-full px-2 py-0.5 text-xs hover-elevate"
+            data-testid={`reaction-badge-${reactionId}`}
+          >
+            <Icon className="h-3 w-3" />
+            <span>{users.length}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Chat bubble component with reactions and blue checkmarks
 function ChatBubble({ 
   message, 
   isOwn, 
-  showTail 
+  showTail,
+  reactions,
+  onAddReaction,
+  onRemoveReaction,
+  currentUserId
 }: { 
   message: Message; 
   isOwn: boolean; 
   showTail: boolean;
+  reactions?: ReactionWithUser[];
+  onAddReaction: (messageId: string, reaction: string) => void;
+  onRemoveReaction: (messageId: string) => void;
+  currentUserId?: string;
 }) {
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messageDate = new Date(message.createdAt!);
+
+  const handleTouchStart = () => {
+    longPressTimerRef.current = setTimeout(() => {
+      setShowReactionPicker(true);
+    }, 500); // 500ms long press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowReactionPicker(true);
+  };
+
+  const handleReactionSelect = (reaction: string) => {
+    onAddReaction(message.id, reaction);
+    setShowReactionPicker(false);
+  };
+
+  const handleReactionClick = (reactionId: string) => {
+    // Check if current user has this reaction
+    const userReaction = reactions?.find(r => r.userId === currentUserId && r.reaction === reactionId);
+    if (userReaction) {
+      onRemoveReaction(message.id);
+    } else {
+      onAddReaction(message.id, reactionId);
+    }
+  };
   
   return (
     <div
-      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}
+      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1 relative`}
       data-testid={`message-${message.id}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onContextMenu={handleContextMenu}
     >
-      <div
-        className={`relative max-w-[75%] px-3 py-2 ${
-          isOwn
-            ? `bg-primary text-primary-foreground ${showTail ? "rounded-2xl rounded-br-sm" : "rounded-2xl"}`
-            : `bg-muted ${showTail ? "rounded-2xl rounded-bl-sm" : "rounded-2xl"}`
-        }`}
-      >
-        {/* Message content */}
-        <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-content-${message.id}`}>
-          {message.content}
-        </p>
-        
-        {/* Timestamp and read status */}
-        <div className={`flex items-center gap-1 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
-          <span 
-            className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-            data-testid={`text-message-time-${message.id}`}
-          >
-            {messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </span>
+      <div className="relative">
+        <div
+          className={`relative max-w-[75%] px-3 py-2 ${
+            isOwn
+              ? `bg-primary text-primary-foreground ${showTail ? "rounded-2xl rounded-br-sm" : "rounded-2xl"}`
+              : `bg-muted ${showTail ? "rounded-2xl rounded-bl-sm" : "rounded-2xl"}`
+          }`}
+        >
+          {/* Message content */}
+          <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-content-${message.id}`}>
+            {message.content}
+          </p>
           
-          {/* Read receipts for sent messages */}
-          {isOwn && (
-            <span data-testid={`status-message-read-${message.id}`}>
-              {message.isRead ? (
-                <CheckCheck className="w-3.5 h-3.5 text-primary-foreground/70" />
-              ) : (
-                <Check className="w-3.5 h-3.5 text-primary-foreground/70" />
-              )}
+          {/* Timestamp and read status */}
+          <div className={`flex items-center gap-1 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
+            <span 
+              className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+              data-testid={`text-message-time-${message.id}`}
+            >
+              {messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
+            
+            {/* Read receipts for sent messages - WhatsApp style blue checkmarks */}
+            {isOwn && (
+              <span data-testid={`status-message-read-${message.id}`}>
+                {message.isRead ? (
+                  <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
+                ) : (
+                  <Check className="w-3.5 h-3.5 text-primary-foreground/70" />
+                )}
+              </span>
+            )}
+          </div>
+          
+          {/* Tail indicator */}
+          {showTail && (
+            <div
+              className={`absolute bottom-0 w-3 h-3 ${
+                isOwn
+                  ? "right-0 translate-x-1/2 bg-primary"
+                  : "left-0 -translate-x-1/2 bg-muted"
+              }`}
+              style={{
+                clipPath: isOwn
+                  ? "polygon(0 0, 100% 0, 0 100%)"
+                  : "polygon(100% 0, 0 0, 100% 100%)",
+              }}
+            />
           )}
         </div>
         
-        {/* Tail indicator */}
-        {showTail && (
-          <div
-            className={`absolute bottom-0 w-3 h-3 ${
-              isOwn
-                ? "right-0 translate-x-1/2 bg-primary"
-                : "left-0 -translate-x-1/2 bg-muted"
-            }`}
-            style={{
-              clipPath: isOwn
-                ? "polygon(0 0, 100% 0, 0 100%)"
-                : "polygon(100% 0, 0 0, 100% 100%)",
-            }}
+        {/* Reactions display */}
+        {reactions && reactions.length > 0 && (
+          <MessageReactions 
+            reactions={reactions} 
+            isOwn={isOwn}
+            onReactionClick={handleReactionClick}
           />
         )}
+        
+        {/* Reaction picker popup */}
+        <AnimatePresence>
+          {showReactionPicker && (
+            <>
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={() => setShowReactionPicker(false)}
+              />
+              <div className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-50`}>
+                <ReactionPicker 
+                  onSelect={handleReactionSelect}
+                  onClose={() => setShowReactionPicker(false)}
+                />
+              </div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -224,84 +416,119 @@ function DateSeparator({ date }: { date: Date }) {
   );
 }
 
-// Thread item component with online status and animations
+// Swipeable thread item component
 function ThreadItem({
   thread,
   isSelected,
   onClick,
   isOnline,
+  onArchive,
+  isArchived = false,
 }: {
   thread: ChatThread;
   isSelected: boolean;
   onClick: () => void;
   isOnline: boolean;
+  onArchive: () => void;
+  isArchived?: boolean;
 }) {
+  const x = useMotionValue(0);
+  const background = useTransform(x, [-100, 0], ["hsl(var(--destructive))", "transparent"]);
+  const archiveOpacity = useTransform(x, [-100, -50, 0], [1, 0.5, 0]);
+  
   const lastMessageTime = thread.lastMessage?.createdAt
     ? formatRelativeTime(new Date(thread.lastMessage.createdAt))
     : null;
 
+  const handleDragEnd = () => {
+    if (x.get() < -80) {
+      onArchive();
+    }
+  };
+
   return (
-    <button
-      onClick={onClick}
-      className={`w-full p-4 hover-elevate text-left transition-all duration-200 ${
-        isSelected ? "bg-accent" : ""
-      }`}
+    <motion.div 
+      className="relative overflow-hidden"
       data-testid={`thread-${thread.user.id}`}
     >
-      <div className="flex items-center gap-3">
-        {/* Avatar with online indicator */}
-        <div className="relative">
-          <Avatar>
-            <AvatarImage src={thread.user.profileImageUrl || undefined} />
-            <AvatarFallback>
-              {thread.user.firstName?.[0] || thread.user.email?.[0]}
-            </AvatarFallback>
-          </Avatar>
-          {/* Online/Offline indicator */}
-          <span
-            className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-              isOnline ? "bg-green-500" : "bg-muted-foreground/50"
-            }`}
-            data-testid={`status-online-${thread.user.id}`}
-          />
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
-              {thread.user.firstName || thread.user.email}
-            </p>
-            <div className="flex items-center gap-2 shrink-0">
-              {lastMessageTime && (
-                <span 
-                  className="text-xs text-muted-foreground"
-                  data-testid={`text-thread-time-${thread.user.id}`}
-                >
-                  {lastMessageTime}
-                </span>
-              )}
-              {thread.unreadCount > 0 && (
-                <Badge 
-                  variant="default" 
-                  className="min-w-[20px] h-5 flex items-center justify-center text-xs animate-pulse"
-                  data-testid={`badge-unread-${thread.user.id}`}
-                >
-                  {thread.unreadCount}
-                </Badge>
-              )}
-            </div>
+      {/* Archive indicator behind the thread item */}
+      <motion.div 
+        className="absolute inset-0 flex items-center justify-end pr-6"
+        style={{ opacity: archiveOpacity }}
+      >
+        {isArchived ? (
+          <ArchiveRestore className="w-5 h-5 text-destructive-foreground" />
+        ) : (
+          <Archive className="w-5 h-5 text-destructive-foreground" />
+        )}
+      </motion.div>
+      
+      <motion.button
+        onClick={onClick}
+        className={`w-full p-4 hover-elevate text-left transition-all duration-200 ${
+          isSelected ? "bg-accent" : "bg-background"
+        }`}
+        style={{ x }}
+        drag="x"
+        dragConstraints={{ left: -100, right: 0 }}
+        dragElastic={0.2}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex items-center gap-3">
+          {/* Avatar with online indicator */}
+          <div className="relative">
+            <Avatar>
+              <AvatarImage src={thread.user.profileImageUrl || undefined} />
+              <AvatarFallback>
+                {thread.user.firstName?.[0] || thread.user.email?.[0]}
+              </AvatarFallback>
+            </Avatar>
+            {/* Online/Offline indicator */}
+            <span
+              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
+                isOnline ? "bg-green-500" : "bg-muted-foreground/50"
+              }`}
+              data-testid={`status-online-${thread.user.id}`}
+            />
           </div>
-          {thread.lastMessage && (
-            <p 
-              className="text-sm text-muted-foreground truncate mt-0.5"
-              data-testid={`text-thread-preview-${thread.user.id}`}
-            >
-              {thread.lastMessage.content}
-            </p>
-          )}
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
+                {thread.user.firstName || thread.user.email}
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                {lastMessageTime && (
+                  <span 
+                    className="text-xs text-muted-foreground"
+                    data-testid={`text-thread-time-${thread.user.id}`}
+                  >
+                    {lastMessageTime}
+                  </span>
+                )}
+                {thread.unreadCount > 0 && (
+                  <Badge 
+                    variant="default" 
+                    className="min-w-[20px] h-5 flex items-center justify-center text-xs animate-pulse"
+                    data-testid={`badge-unread-${thread.user.id}`}
+                  >
+                    {thread.unreadCount}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            {thread.lastMessage && (
+              <p 
+                className="text-sm text-muted-foreground truncate mt-0.5"
+                data-testid={`text-thread-preview-${thread.user.id}`}
+              >
+                {thread.lastMessage.content}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
+      </motion.button>
+    </motion.div>
   );
 }
 
@@ -330,6 +557,46 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   );
 }
 
+// Disappearing messages settings component
+function DisappearingMessagesSettings({
+  userId,
+  currentSetting,
+  onUpdate
+}: {
+  userId: string;
+  currentSetting?: DisappearingMessageSetting;
+  onUpdate: (duration: number) => void;
+}) {
+  const currentValue = currentSetting?.duration?.toString() || "0";
+  
+  return (
+    <div className="flex items-center justify-between gap-2 p-3 bg-muted/50 rounded-lg" data-testid="settings-disappearing">
+      <div className="flex items-center gap-2">
+        <Timer className="h-4 w-4 text-muted-foreground" />
+        <div>
+          <p className="text-sm font-medium">Disappearing messages</p>
+          <p className="text-xs text-muted-foreground">Messages will auto-delete</p>
+        </div>
+      </div>
+      <Select 
+        value={currentValue} 
+        onValueChange={(val) => onUpdate(parseInt(val))}
+      >
+        <SelectTrigger className="w-[120px]" data-testid="select-disappearing-duration">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {DISAPPEARING_DURATIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export default function Messages() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
@@ -350,6 +617,9 @@ export default function Messages() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [showArchivedSection, setShowArchivedSection] = useState(false);
+  const [showConversationSettings, setShowConversationSettings] = useState(false);
+  const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, ReactionWithUser[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -381,11 +651,49 @@ export default function Messages() {
     enabled: !!selectedUser,
   });
 
+  // Fetch archived conversations
+  const { data: archivedConversations, isLoading: archivedLoading } = useQuery<(ArchivedConversation & { otherUser: User })[]>({
+    queryKey: ["/api/conversations/archived"],
+  });
+
+  // Fetch disappearing message settings for current conversation
+  const { data: disappearingSettings } = useQuery<DisappearingMessageSetting>({
+    queryKey: ["/api/conversations", selectedUser, "disappearing"],
+    enabled: !!selectedUser,
+  });
+
   // Fetch initial online status
   const { data: onlineStatusData } = useQuery<{ onlineUserIds: string[] }>({
     queryKey: ["/api/users/online-status"],
     refetchInterval: 30000, // Refetch every 30 seconds as backup
   });
+
+  // Fetch reactions for messages when conversation is loaded
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      // Fetch reactions for each message
+      const fetchReactions = async () => {
+        const reactionsMap: Record<string, ReactionWithUser[]> = {};
+        for (const message of messages) {
+          try {
+            const response = await fetch(`/api/messages/${message.id}/reactions`, {
+              credentials: 'include'
+            });
+            if (response.ok) {
+              const reactions = await response.json();
+              if (reactions.length > 0) {
+                reactionsMap[message.id] = reactions;
+              }
+            }
+          } catch (error) {
+            // Silently fail for individual reaction fetches
+          }
+        }
+        setMessageReactionsMap(reactionsMap);
+      };
+      fetchReactions();
+    }
+  }, [messages]);
 
   // Update onlineUserIds when API data changes
   useEffect(() => {
@@ -393,6 +701,115 @@ export default function Messages() {
       setOnlineUserIds(new Set(onlineStatusData.onlineUserIds));
     }
   }, [onlineStatusData]);
+
+  // Add reaction mutation
+  const addReactionMutation = useMutation({
+    mutationFn: async ({ messageId, reaction }: { messageId: string; reaction: string }) => {
+      return await apiRequest("POST", `/api/messages/${messageId}/reactions`, { reaction });
+    },
+    onSuccess: (_, { messageId }) => {
+      // Refetch reactions for this message
+      fetch(`/api/messages/${messageId}/reactions`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(reactions => {
+          setMessageReactionsMap(prev => ({ ...prev, [messageId]: reactions }));
+        });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add reaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Remove reaction mutation
+  const removeReactionMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await apiRequest("DELETE", `/api/messages/${messageId}/reactions`);
+    },
+    onSuccess: (_, messageId) => {
+      // Refetch reactions for this message
+      fetch(`/api/messages/${messageId}/reactions`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(reactions => {
+          setMessageReactionsMap(prev => ({ ...prev, [messageId]: reactions }));
+        });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to remove reaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Archive conversation mutation
+  const archiveMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest("POST", `/api/conversations/${userId}/archive`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations/archived"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+      toast({
+        title: "Archived",
+        description: "Conversation archived successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to archive conversation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Unarchive conversation mutation
+  const unarchiveMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest("DELETE", `/api/conversations/${userId}/archive`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations/archived"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+      toast({
+        title: "Unarchived",
+        description: "Conversation restored successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to unarchive conversation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Set disappearing messages mutation
+  const setDisappearingMutation = useMutation({
+    mutationFn: async ({ userId, duration }: { userId: string; duration: number }) => {
+      return await apiRequest("POST", `/api/conversations/${userId}/disappearing`, { duration });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedUser, "disappearing"] });
+      toast({
+        title: "Settings updated",
+        description: "Disappearing messages setting saved",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update disappearing messages setting",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Send message mutation with optimistic update
   const sendMutation = useMutation({
@@ -717,12 +1134,37 @@ export default function Messages() {
     textareaRef.current?.focus();
   };
 
+  const handleArchiveConversation = (userId: string) => {
+    archiveMutation.mutate(userId);
+  };
+
+  const handleUnarchiveConversation = (userId: string) => {
+    unarchiveMutation.mutate(userId);
+  };
+
+  const handleAddReaction = (messageId: string, reaction: string) => {
+    addReactionMutation.mutate({ messageId, reaction });
+  };
+
+  const handleRemoveReaction = (messageId: string) => {
+    removeReactionMutation.mutate(messageId);
+  };
+
+  const handleDisappearingUpdate = (duration: number) => {
+    if (selectedUser) {
+      setDisappearingMutation.mutate({ userId: selectedUser, duration });
+    }
+  };
+
   const selectedThread = threads?.find((t) => t.user.id === selectedUser);
 
-  // Filter threads based on search
+  // Filter threads based on search and exclude archived
+  const archivedUserIds = new Set(archivedConversations?.map(a => a.otherUserId) || []);
   const filteredThreads = threads?.filter((thread) => {
     const name = thread.user.firstName || thread.user.email || "";
-    return name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
+    const notArchived = !archivedUserIds.has(thread.user.id);
+    return matchesSearch && notArchived;
   });
 
   // Group messages by date
@@ -787,11 +1229,59 @@ export default function Messages() {
                 isSelected={selectedUser === thread.user.id}
                 onClick={() => handleSelectThread(thread.user.id)}
                 isOnline={onlineUserIds.has(thread.user.id)}
+                onArchive={() => handleArchiveConversation(thread.user.id)}
               />
             ))}
           </div>
         ) : (
           <EmptyConversationsState />
+        )}
+
+        {/* Archived conversations section */}
+        {archivedConversations && archivedConversations.length > 0 && (
+          <div className="border-t">
+            <button
+              onClick={() => setShowArchivedSection(!showArchivedSection)}
+              className="w-full p-4 flex items-center justify-between text-sm text-muted-foreground hover-elevate"
+              data-testid="button-toggle-archived"
+            >
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4" />
+                <span>Archived ({archivedConversations.length})</span>
+              </div>
+              {showArchivedSection ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+            
+            <AnimatePresence>
+              {showArchivedSection && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden divide-y"
+                >
+                  {archivedConversations.map((archived) => (
+                    <ThreadItem
+                      key={archived.otherUser.id}
+                      thread={{
+                        user: archived.otherUser,
+                        unreadCount: 0,
+                      }}
+                      isSelected={selectedUser === archived.otherUser.id}
+                      onClick={() => handleSelectThread(archived.otherUser.id)}
+                      isOnline={onlineUserIds.has(archived.otherUser.id)}
+                      onArchive={() => handleUnarchiveConversation(archived.otherUser.id)}
+                      isArchived={true}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
       </div>
     </div>
@@ -858,6 +1348,29 @@ export default function Messages() {
                 <WifiOff className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
+
+            {/* Settings button */}
+            <Popover open={showConversationSettings} onOpenChange={setShowConversationSettings}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  data-testid="button-conversation-settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72" align="end">
+                <div className="space-y-4">
+                  <h4 className="font-medium">Conversation Settings</h4>
+                  <DisappearingMessagesSettings
+                    userId={selectedUser}
+                    currentSetting={disappearingSettings}
+                    onUpdate={handleDisappearingUpdate}
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
             
             {/* User actions menu (mute/block/report) */}
             {selectedThread && (
@@ -890,6 +1403,10 @@ export default function Messages() {
                       message={item.message}
                       isOwn={item.message.senderId === currentUser?.id}
                       showTail={item.showTail}
+                      reactions={messageReactionsMap[item.message.id]}
+                      onAddReaction={handleAddReaction}
+                      onRemoveReaction={handleRemoveReaction}
+                      currentUserId={currentUser?.id}
                     />
                   );
                 })}
