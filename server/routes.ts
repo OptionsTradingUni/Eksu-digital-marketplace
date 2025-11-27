@@ -6141,10 +6141,30 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         return res.status(500).json({ message: "Failed to upload selfie" });
       }
 
-      // For now, simulate photo comparison with a random similarity score
-      // In production, use a face comparison API (AWS Rekognition, Azure Face API, etc.)
-      // This generates a score between 60-95 for demonstration
-      const similarityScore = Math.floor(Math.random() * 36) + 60; // 60-95 range
+      // FACE COMPARISON: SMEDATA.NG provides NIN verification but NOT face comparison.
+      // For production, integrate QoreID (https://docs.qoreid.com/docs/nin-face-match) or 
+      // IdentityPass (https://developer.myidentitypass.com) for NIN + Face verification.
+      // Alternatively, use AWS Rekognition or Azure Face API for standalone face comparison.
+      // 
+      // Example QoreID integration would call their API with the selfie and NIN, returning
+      // a match_score (0-100) with threshold of 70% for genuine face matching.
+      //
+      // Current implementation uses a placeholder random score for development/testing.
+      // TODO: Replace with real face comparison API (set FACE_API_KEY env var)
+      let similarityScore: number;
+      
+      // Check if a face comparison API is configured
+      if (process.env.QOREID_API_KEY) {
+        // Placeholder for QoreID integration - would make API call here
+        // const response = await fetch('https://api.qoreid.com/v1/ng/identities/face-verification/nin', {...})
+        // similarityScore = response.data.summary.face_verification_check.match_score
+        console.log("QoreID API key found - would use real face comparison here");
+        similarityScore = Math.floor(Math.random() * 36) + 60; // Placeholder until integrated
+      } else {
+        // Development/demo mode: generate random score between 60-95
+        console.log("No face comparison API configured - using simulated score for demo");
+        similarityScore = Math.floor(Math.random() * 36) + 60;
+      }
 
       // Determine verification result based on similarity score
       let status: "approved" | "manual_review" | "rejected";

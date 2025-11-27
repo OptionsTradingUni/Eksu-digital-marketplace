@@ -26,8 +26,8 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User roles enum
-export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "both", "admin"]);
+// User roles enum - Users must choose either buyer OR seller (no "both" option for cleaner UX)
+export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "admin"]);
 
 // User storage table (email/password authentication with marketplace features)
 export const users = pgTable("users", {
