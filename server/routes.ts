@@ -1997,12 +1997,13 @@ Happy trading!`;
   // Product routes
   app.get("/api/products", async (req, res) => {
     try {
-      const { search, category, condition, location } = req.query;
+      const { search, category, condition, location, sellerId } = req.query;
       const products = await storage.getProducts({
         search: search as string,
         categoryId: category as string,
         condition: condition as string,
         location: location as string,
+        sellerId: sellerId as string,
       });
       
       // Include seller's location settings for distance calculation
@@ -3889,7 +3890,7 @@ Happy trading!`;
         return res.status(403).json({ message: "You can only pin your own posts" });
       }
       
-      await storage.pinPost(postId);
+      await storage.pinSocialPost(postId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error pinning post:", error);
@@ -3912,7 +3913,7 @@ Happy trading!`;
         return res.status(403).json({ message: "You can only unpin your own posts" });
       }
       
-      await storage.unpinPost(postId);
+      await storage.unpinSocialPost(postId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error unpinning post:", error);
@@ -5005,7 +5006,7 @@ Happy trading!`;
 
       // Check if user has sufficient balance
       const wallet = await storage.getOrCreateWallet(userId);
-      const planPrice = parseFloat(plan.price);
+      const planPrice = parseFloat(plan.sellingPrice);
       const walletBalance = parseFloat(wallet.balance);
 
       if (walletBalance < planPrice) {
@@ -5110,13 +5111,14 @@ Happy trading!`;
             // Create VTU transaction record
             const transaction = await storage.createVtuTransaction({
               userId: gift.senderId,
-              serviceType: "data",
               planId: gift.planId,
               network: gift.network,
               phoneNumber: gift.recipientPhone,
-              amount: plan.price,
-              status: "completed",
-              reference: purchaseResult.reference,
+              amount: plan.sellingPrice,
+              costPrice: plan.costPrice,
+              profit: (parseFloat(plan.sellingPrice) - parseFloat(plan.costPrice)).toFixed(2),
+              status: "success",
+              smedataReference: purchaseResult.reference,
             });
 
             // Update gift as claimed with transaction reference
@@ -5238,7 +5240,7 @@ Happy trading!`;
       const { serviceType, billType, customerId, amount, packageCode, packageName } = validationResult.data;
 
       // Get user's wallet
-      const wallet = await storage.getWalletByUserId(userId);
+      const wallet = await storage.getOrCreateWallet(userId);
       if (!wallet) {
         return res.status(400).json({ message: "Wallet not found. Please contact support." });
       }
@@ -5275,16 +5277,15 @@ Happy trading!`;
 
           if (apiResult.success) {
             // Deduct from wallet
-            await storage.updateWalletBalance(userId, -amount, "bill_payment", `Bill payment: ${serviceType} - ${customerId}`);
+            await storage.updateWalletBalance(userId, amount.toString(), "subtract");
 
             // Create wallet transaction
             const walletTransaction = await storage.createTransaction({
               walletId: wallet.id,
-              type: "bill_payment",
+              type: "purchase",
               amount: (-amount).toString(),
-              description: `${billType === "cable" ? "Cable TV" : "Electricity"} bill payment - ${serviceType.toUpperCase()} - ${customerId}`,
+              description: `${billType === "cable" ? "Cable TV" : "Electricity"} bill payment - ${serviceType.toUpperCase()} - ${customerId} (Ref: ${apiResult.reference || 'N/A'})`,
               status: "completed",
-              reference: apiResult.reference,
             });
 
             // Update bill payment as successful
@@ -8191,7 +8192,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         }
         
         if (type === "video") {
-          mediaUrl = await uploadVideoToStorage(req.file.buffer, req.file.originalname);
+          mediaUrl = await uploadVideoToStorage(req.file, "stories") || undefined;
         } else {
           const urls = await uploadMultipleToObjectStorage([req.file]);
           mediaUrl = urls[0];

@@ -240,7 +240,7 @@ export interface IStorage {
   // Product operations
   createProduct(product: InsertProduct & { sellerId: string }): Promise<Product>;
   getProduct(id: string): Promise<(Product & { seller: User }) | undefined>;
-  getProducts(filters?: { search?: string; categoryId?: string; condition?: string; location?: string }): Promise<(Product & { seller: User })[]>;
+  getProducts(filters?: { search?: string; categoryId?: string; condition?: string; location?: string; sellerId?: string }): Promise<(Product & { seller: User })[]>;
   getSellerProducts(sellerId: string): Promise<Product[]>;
   getSellerProductsWithAnalytics(sellerId: string): Promise<(Product & { inquiryCount: number })[]>;
   updateProduct(id: string, data: UpdateProduct): Promise<Product>;
@@ -529,8 +529,8 @@ export interface IStorage {
   // Enhanced social post operations
   createSocialPostWithOptions(post: { authorId: string; content: string; images?: string[]; videos?: string[]; replyRestriction?: string; mentionedUserIds?: string[]; hashtags?: string[]; isFromSystemAccount?: boolean }): Promise<SocialPost>;
   updateSocialPost(postId: string, data: Partial<SocialPost>): Promise<SocialPost>;
-  pinPost(postId: string): Promise<void>;
-  unpinPost(postId: string): Promise<void>;
+  pinSocialPost(postId: string): Promise<void>;
+  unpinSocialPost(postId: string): Promise<void>;
   getUserPinnedPosts(userId: string): Promise<(SocialPost & { author: User })[]>;
   
   // Squad payment operations
@@ -699,7 +699,7 @@ export interface IStorage {
   getCommunityPosts(communityId: string): Promise<(CommunityPost & { author: User; isLiked?: boolean })[]>;
   updateCommunityPost(id: string, data: Partial<CommunityPost>): Promise<CommunityPost>;
   deleteCommunityPost(id: string): Promise<void>;
-  pinPost(id: string, isPinned: boolean): Promise<CommunityPost>;
+  pinCommunityPost(id: string, isPinned: boolean): Promise<CommunityPost>;
   lockPost(id: string, isLocked: boolean): Promise<CommunityPost>;
   
   // Community post like operations
@@ -953,15 +953,23 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getProducts(filters?: { search?: string; categoryId?: string; condition?: string; location?: string }): Promise<(Product & { seller: User })[]> {
+  async getProducts(filters?: { search?: string; categoryId?: string; condition?: string; location?: string; sellerId?: string }): Promise<(Product & { seller: User })[]> {
+    // Build WHERE conditions
+    const conditions = [
+      eq(products.isAvailable, true),
+      eq(products.isApproved, true)
+    ];
+    
+    // Add sellerId filter at the database level if provided
+    if (filters?.sellerId) {
+      conditions.push(eq(products.sellerId, filters.sellerId));
+    }
+    
     let query = db
       .select()
       .from(products)
       .leftJoin(users, eq(products.sellerId, users.id))
-      .where(and(
-        eq(products.isAvailable, true),
-        eq(products.isApproved, true)
-      ))
+      .where(and(...conditions))
       .orderBy(desc(products.createdAt));
 
     const results = await query;
@@ -974,7 +982,7 @@ export class DatabaseStorage implements IStorage {
         seller: r.users!,
       }));
 
-    // Apply filters
+    // Apply additional filters
     if (filters?.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(p => 
@@ -3703,11 +3711,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async pinPost(postId: string): Promise<void> {
+  async pinSocialPost(postId: string): Promise<void> {
     await db.update(socialPosts).set({ isPinned: true }).where(eq(socialPosts.id, postId));
   }
 
-  async unpinPost(postId: string): Promise<void> {
+  async unpinSocialPost(postId: string): Promise<void> {
     await db.update(socialPosts).set({ isPinned: false }).where(eq(socialPosts.id, postId));
   }
 
@@ -5312,7 +5320,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async pinPost(id: string, isPinned: boolean): Promise<CommunityPost> {
+  async pinCommunityPost(id: string, isPinned: boolean): Promise<CommunityPost> {
     const [post] = await db
       .update(communityPosts)
       .set({ isPinned })
@@ -5700,14 +5708,14 @@ export class DatabaseStorage implements IStorage {
     if (!room) throw new Error("Room not found");
     
     if (room.status !== "waiting") throw new Error("Game already started");
-    if (room.currentPlayers >= room.maxPlayers!) throw new Error("Room is full");
+    if ((room.currentPlayers ?? 0) >= room.maxPlayers!) throw new Error("Room is full");
     if (room.isPrivate && room.password !== password) throw new Error("Invalid password");
 
     // Check if already in room
     const existing = await this.getGameRoomPlayer(roomId, userId);
     if (existing) return existing;
 
-    const nextPlayerNumber = room.currentPlayers + 1;
+    const nextPlayerNumber = (room.currentPlayers ?? 0) + 1;
 
     const [player] = await db.insert(gameRoomPlayers).values({
       roomId,
@@ -5736,7 +5744,7 @@ export class DatabaseStorage implements IStorage {
       )
     );
 
-    const newCount = Math.max(0, room.currentPlayers - 1);
+    const newCount = Math.max(0, (room.currentPlayers ?? 0) - 1);
 
     if (newCount === 0 || room.hostId === userId) {
       // Delete room if empty or host left

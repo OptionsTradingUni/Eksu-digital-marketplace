@@ -26,8 +26,8 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User roles enum - Users must choose either buyer OR seller (no "both" option for cleaner UX)
-export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "admin"]);
+// User roles enum - Users can choose buyer, seller, both, or admin
+export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "both", "admin"]);
 
 // User storage table (email/password authentication with marketplace features)
 export const users = pgTable("users", {
@@ -1119,10 +1119,9 @@ export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit
 });
 
 // API-specific validation schemas
-// Note: "both" role is deprecated - users must choose buyer OR seller only
-// Existing "both" users are grandfathered but new selections not allowed
+// Role update schema - allows switching between buyer, seller, or both
 export const roleUpdateSchema = z.object({
-  role: z.enum(['buyer', 'seller']),
+  role: z.enum(['buyer', 'seller', 'both']),
 });
 
 export const createReferralSchema = z.object({
@@ -1715,7 +1714,7 @@ export const registerSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().optional(),
-  role: z.enum(["buyer", "seller"]).optional().default("buyer"),
+  role: z.enum(["buyer", "seller", "both"]).optional().default("buyer"),
   referralCode: z.string().optional(),
 });
 
