@@ -1,8 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Menu, Wallet, Users, Megaphone, Settings, LogOut, Home, LifeBuoy, Heart } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import NotificationBell from "@/components/NotificationBell";
 import { CartDrawer } from "@/components/CartDrawer";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,13 +16,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export function Header() {
   const { user, isAuthenticated, isSeller, isAdmin } = useAuth();
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const { theme, toggleTheme } = useTheme();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,31 +71,16 @@ export function Header() {
                 {/* Cart */}
                 <CartDrawer />
 
-                {/* Messages */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  asChild
-                  data-testid="button-messages"
-                >
-                  <Link href="/messages">
-                    <MessageSquare className="h-5 w-5" />
-                  </Link>
-                </Button>
-
                 {/* Notifications */}
                 <NotificationBell />
 
-                {/* Theme Toggle */}
-                <ThemeToggle />
-
-                {/* User Menu */}
+                {/* Profile Dropdown Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       className="relative h-9 w-9 rounded-full"
-                      data-testid="button-user-menu"
+                      data-testid="button-profile-menu"
                     >
                       <Avatar className="h-9 w-9">
                         <AvatarImage src={user?.profileImageUrl || undefined} />
@@ -105,33 +90,33 @@ export function Header() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>
-                      <div className="flex flex-col gap-1">
-                        <p className="text-sm font-medium">
-                          {user?.firstName || user?.email}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {user?.role}
-                          </Badge>
-                          {user?.isVerified && (
-                            <Badge variant="default" className="text-xs">
-                              Verified
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={user?.profileImageUrl || undefined} />
+                          <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-medium">
+                            {user?.firstName} {user?.lastName}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {user?.role}
                             </Badge>
-                          )}
+                            {user?.isVerified && (
+                              <Badge variant="default" className="text-xs">
+                                Verified
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/profile" data-testid="link-profile">
+                      <Link href="/profile" data-testid="link-my-profile">
                         <User className="mr-2 h-4 w-4" />
-                        Profile
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/wishlist" data-testid="link-wishlist">
-                        <Heart className="mr-2 h-4 w-4" />
-                        Wishlist
+                        My Profile
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -141,49 +126,62 @@ export function Header() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
+                      <Link href="/my-ads" data-testid="link-my-ads">
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        My Ads
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/vtu" data-testid="link-vtu-data">
+                        <Smartphone className="mr-2 h-4 w-4" />
+                        VTU Data
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings" data-testid="link-settings">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
                       <Link href="/referrals" data-testid="link-referrals">
                         <Users className="mr-2 h-4 w-4" />
                         Referrals
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/announcements" data-testid="link-announcements">
-                        <Megaphone className="mr-2 h-4 w-4" />
-                        Campus Updates
+                      <Link href="/notifications" data-testid="link-notifications">
+                        <Bell className="mr-2 h-4 w-4" />
+                        Notifications
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/support" data-testid="link-support">
-                        <LifeBuoy className="mr-2 h-4 w-4" />
-                        Support
-                      </Link>
-                    </DropdownMenuItem>
-                    {(isSeller || user?.role === "both") && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
-                          <Link href="/my-ads" data-testid="link-my-ads">
-                            <Megaphone className="mr-2 h-4 w-4" />
-                            My Ads
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/seller/dashboard" data-testid="link-seller-dashboard">
-                            <ShoppingBag className="mr-2 h-4 w-4" />
-                            Seller Dashboard
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
-                    )}
                     {isAdmin && (
                       <DropdownMenuItem asChild>
-                        <Link href="/admin" data-testid="link-admin">
+                        <Link href="/admin" data-testid="link-admin-panel">
                           <Settings className="mr-2 h-4 w-4" />
                           Admin Panel
                         </Link>
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={toggleTheme}
+                      className="cursor-pointer"
+                      data-testid="button-theme-toggle"
+                    >
+                      {theme === "dark" ? (
+                        <>
+                          <Sun className="mr-2 h-4 w-4" />
+                          Light Mode
+                        </>
+                      ) : (
+                        <>
+                          <Moon className="mr-2 h-4 w-4" />
+                          Dark Mode
+                        </>
+                      )}
+                    </DropdownMenuItem>
                     <DropdownMenuItem 
                       onClick={async () => {
                         try {
@@ -195,7 +193,7 @@ export function Header() {
                         }
                       }}
                       className="cursor-pointer text-destructive"
-                      data-testid="link-logout"
+                      data-testid="button-logout"
                     >
                       <LogOut className="mr-2 h-4 w-4" />
                       Logout
@@ -205,7 +203,26 @@ export function Header() {
               </>
             ) : (
               <>
-                <ThemeToggle />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-testid="button-theme-toggle-guest"
+                    >
+                      {theme === "dark" ? (
+                        <Sun className="h-5 w-5" />
+                      ) : (
+                        <Moon className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={toggleTheme}>
+                      {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button variant="ghost" asChild data-testid="button-login">
                   <a href="/api/login">Log In</a>
                 </Button>
@@ -214,167 +231,6 @@ export function Header() {
                 </Button>
               </>
             )}
-
-            {/* Mobile Menu */}
-            <Sheet>
-              <SheetTrigger asChild className="md:hidden">
-                <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-[300px]">
-                <nav className="flex flex-col gap-2 mt-8">
-                  <form onSubmit={handleSearch} className="mb-4">
-                    <Input
-                      type="search"
-                      placeholder="Search products..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      data-testid="input-search-mobile"
-                    />
-                  </form>
-                  
-                  {!isAuthenticated && (
-                    <>
-                      <Link href="/">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <Home className="mr-2 h-4 w-4" />
-                          Home
-                        </Button>
-                      </Link>
-                      <a href="#about">
-                        <Button variant="ghost" className="w-full justify-start">
-                          About
-                        </Button>
-                      </a>
-                      <a href="#features">
-                        <Button variant="ghost" className="w-full justify-start">
-                          Features
-                        </Button>
-                      </a>
-                      <a href="#how-it-works">
-                        <Button variant="ghost" className="w-full justify-start">
-                          How it Works
-                        </Button>
-                      </a>
-                      <div className="border-t my-2" />
-                      <a href="/auth/login">
-                        <Button variant="ghost" className="w-full justify-start">
-                          Login
-                        </Button>
-                      </a>
-                      <a href="/auth/signup">
-                        <Button className="w-full">
-                          Sign Up
-                        </Button>
-                      </a>
-                    </>
-                  )}
-                  
-                  {isAuthenticated && (
-                    <>
-                      <Link href="/">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <Home className="mr-2 h-4 w-4" />
-                          Home
-                        </Button>
-                      </Link>
-                      <Link href="/messages">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <MessageSquare className="mr-2 h-4 w-4" />
-                          Messages
-                        </Button>
-                      </Link>
-                      <Link href="/wallet">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <Wallet className="mr-2 h-4 w-4" />
-                          Wallet
-                        </Button>
-                      </Link>
-                      <Link href="/referrals">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <Users className="mr-2 h-4 w-4" />
-                          Referrals
-                        </Button>
-                      </Link>
-                      <Link href="/profile">
-                        <Button variant="ghost" className="w-full justify-start">
-                          <User className="mr-2 h-4 w-4" />
-                          Profile
-                        </Button>
-                      </Link>
-                      <Link href="/wishlist">
-                        <Button variant="ghost" className="w-full justify-start" data-testid="link-wishlist-mobile">
-                          <Heart className="mr-2 h-4 w-4" />
-                          Wishlist
-                        </Button>
-                      </Link>
-                      <Link href="/announcements">
-                        <Button variant="ghost" className="w-full justify-start" data-testid="link-announcements-mobile">
-                          <Megaphone className="mr-2 h-4 w-4" />
-                          Campus Updates
-                        </Button>
-                      </Link>
-                      <Link href="/support">
-                        <Button variant="ghost" className="w-full justify-start" data-testid="link-support-mobile">
-                          <LifeBuoy className="mr-2 h-4 w-4" />
-                          Support
-                        </Button>
-                      </Link>
-                      
-                      {(isSeller || user?.role === "both") && (
-                        <>
-                          <div className="border-t my-2" />
-                          <p className="px-3 text-xs font-medium text-muted-foreground uppercase">Seller</p>
-                          <Link href="/my-ads">
-                            <Button variant="ghost" className="w-full justify-start">
-                              <Megaphone className="mr-2 h-4 w-4" />
-                              My Ads
-                            </Button>
-                          </Link>
-                          <Link href="/seller/dashboard">
-                            <Button variant="ghost" className="w-full justify-start">
-                              <ShoppingBag className="mr-2 h-4 w-4" />
-                              Seller Dashboard
-                            </Button>
-                          </Link>
-                        </>
-                      )}
-                      
-                      {isAdmin && (
-                        <>
-                          <div className="border-t my-2" />
-                          <Link href="/admin">
-                            <Button variant="ghost" className="w-full justify-start">
-                              <Settings className="mr-2 h-4 w-4" />
-                              Admin Panel
-                            </Button>
-                          </Link>
-                        </>
-                      )}
-                      
-                      <div className="border-t my-2" />
-                      <Button 
-                        variant="ghost" 
-                        className="w-full justify-start text-destructive"
-                        onClick={async () => {
-                          try {
-                            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                            queryClient.clear();
-                            window.location.href = '/';
-                          } catch (error) {
-                            console.error('Logout failed:', error);
-                          }
-                        }}
-                      >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Logout
-                      </Button>
-                    </>
-                  )}
-                </nav>
-              </SheetContent>
-            </Sheet>
           </div>
         </div>
       </div>

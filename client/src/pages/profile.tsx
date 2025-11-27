@@ -52,8 +52,29 @@ import {
   EyeOff,
   UserPlus,
   UserMinus,
-  MessageCircle
+  MessageCircle,
+  Ban,
+  Flag,
+  AlertTriangle
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
@@ -71,6 +92,10 @@ export default function Profile() {
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showPreviewAfterSave, setShowPreviewAfterSave] = useState(false);
+  const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
 
   const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
 
@@ -346,6 +371,49 @@ export default function Profile() {
       toast({
         title: "Error",
         description: error.message || "Failed to unfollow user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const blockMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/users/${urlUserId}/block`, {});
+    },
+    onSuccess: () => {
+      setIsBlockDialogOpen(false);
+      toast({
+        title: "User Blocked",
+        description: "You will no longer see content from this user",
+      });
+      setLocation("/");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to block user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: async (data: { reason: string; description: string }) => {
+      return await apiRequest("POST", `/api/users/${urlUserId}/report`, data);
+    },
+    onSuccess: () => {
+      setIsReportDialogOpen(false);
+      setReportReason("");
+      setReportDescription("");
+      toast({
+        title: "Report Submitted",
+        description: "Thank you for helping keep our community safe",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit report",
         variant: "destructive",
       });
     },
@@ -841,6 +909,36 @@ export default function Profile() {
                       <MessageCircle className="h-4 w-4" />
                       Message
                     </Button>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          data-testid="button-user-actions-menu"
+                        >
+                          <MoreHorizontal className="h-5 w-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem 
+                          onClick={() => setIsBlockDialogOpen(true)}
+                          className="cursor-pointer text-destructive focus:text-destructive"
+                          data-testid="menu-item-block-user"
+                        >
+                          <Ban className="mr-2 h-4 w-4" />
+                          Block User
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => setIsReportDialogOpen(true)}
+                          className="cursor-pointer text-destructive focus:text-destructive"
+                          data-testid="menu-item-report-user"
+                        >
+                          <Flag className="mr-2 h-4 w-4" />
+                          Report User
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </>
                 )}
               </motion.div>
@@ -1193,6 +1291,109 @@ export default function Profile() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isBlockDialogOpen} onOpenChange={setIsBlockDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-destructive" />
+              Block User
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to block <span className="font-semibold">{fullName}</span>? 
+              They won't be able to message you, see your listings, or interact with your content. 
+              You can unblock them later from your settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-block">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => blockMutation.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={blockMutation.isPending}
+              data-testid="button-confirm-block"
+            >
+              {blockMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Blocking...
+                </>
+              ) : (
+                "Block User"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Flag className="h-5 w-5 text-destructive" />
+              Report User
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Help us keep Campuspluguni safe. Please tell us why you're reporting this user.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="report-reason">Reason for report</Label>
+              <Select value={reportReason} onValueChange={setReportReason}>
+                <SelectTrigger id="report-reason" data-testid="select-report-reason">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="spam">Spam or fake account</SelectItem>
+                  <SelectItem value="scam">Scam or fraud</SelectItem>
+                  <SelectItem value="harassment">Harassment or bullying</SelectItem>
+                  <SelectItem value="inappropriate">Inappropriate content</SelectItem>
+                  <SelectItem value="impersonation">Impersonation</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="report-description">Additional details (optional)</Label>
+              <Textarea
+                id="report-description"
+                placeholder="Provide any additional context that might help us investigate..."
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                rows={3}
+                data-testid="input-report-description"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setReportReason("");
+                setReportDescription("");
+              }}
+              data-testid="button-cancel-report"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => reportMutation.mutate({ reason: reportReason, description: reportDescription })}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!reportReason || reportMutation.isPending}
+              data-testid="button-submit-report"
+            >
+              {reportMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Report"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -32,6 +32,8 @@ const CheckoutPage = lazy(() => import("@/pages/checkout"));
 const ThePlugPage = lazy(() => import("@/pages/the-plug"));
 const PaymentCallbackPage = lazy(() => import("@/pages/payment-callback"));
 const WishlistPage = lazy(() => import("@/pages/wishlist"));
+const VtuPage = lazy(() => import("@/pages/vtu"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
 
 function PageLoadingSpinner() {
   return (
@@ -170,6 +172,16 @@ function Router() {
             <Route path="/wishlist" component={() => (
               <ErrorBoundary>
                 <WishlistPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/vtu" component={() => (
+              <ErrorBoundary>
+                <VtuPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/settings" component={() => (
+              <ErrorBoundary>
+                <SettingsPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (

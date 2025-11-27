@@ -40,10 +40,14 @@ import {
   insertNegotiationSchema,
   createOrderSchema,
   updateOrderStatusSchema,
+  purchaseVtuSchema,
+  updateUserSettingsSchema,
+  requestAccountDeletionSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
+import { purchaseData, isSMEDataConfigured, isValidNigerianPhone } from "./smedata";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -2514,6 +2518,97 @@ Happy trading!`;
     }
   });
 
+  // Block user route
+  app.post("/api/users/:id/block", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetUserId = req.params.id;
+      
+      if (userId === targetUserId) {
+        return res.status(400).json({ message: "You cannot block yourself" });
+      }
+
+      // Create block relationship
+      await storage.blockUser(userId, targetUserId);
+      
+      // Also unfollow in both directions
+      try {
+        await storage.unfollowUser(userId, targetUserId);
+        await storage.unfollowUser(targetUserId, userId);
+      } catch (e) {
+        // Ignore errors if not following
+      }
+
+      res.json({ message: "User blocked successfully" });
+    } catch (error: any) {
+      console.error("Error blocking user:", error);
+      res.status(400).json({ message: error.message || "Failed to block user" });
+    }
+  });
+
+  // Unblock user route
+  app.delete("/api/users/:id/block", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.unblockUser(userId, req.params.id);
+      res.json({ message: "User unblocked successfully" });
+    } catch (error: any) {
+      console.error("Error unblocking user:", error);
+      res.status(400).json({ message: error.message || "Failed to unblock user" });
+    }
+  });
+
+  // Report user route
+  app.post("/api/users/:id/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetUserId = req.params.id;
+      const { reason, description } = req.body;
+
+      if (userId === targetUserId) {
+        return res.status(400).json({ message: "You cannot report yourself" });
+      }
+
+      if (!reason) {
+        return res.status(400).json({ message: "Report reason is required" });
+      }
+
+      await storage.reportUser(userId, targetUserId, reason, description || "");
+      res.json({ message: "Report submitted successfully" });
+    } catch (error: any) {
+      console.error("Error reporting user:", error);
+      res.status(400).json({ message: error.message || "Failed to submit report" });
+    }
+  });
+
+  // Get blocked users route
+  app.get("/api/blocked-users", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const blockedUsers = await storage.getBlockedUsers(userId);
+      res.json(blockedUsers);
+    } catch (error: any) {
+      console.error("Error getting blocked users:", error);
+      res.status(500).json({ message: "Failed to get blocked users" });
+    }
+  });
+
   // Message routes
   app.get("/api/messages/threads", isAuthenticated, async (req: any, res) => {
     try {
@@ -3580,6 +3675,405 @@ Happy trading!`;
     } catch (error) {
       console.error("Error fetching performance metrics:", error);
       res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
+  // Admin - Get all platform settings
+  app.get("/api/admin/platform-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const settings = await storage.getAllPlatformSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching platform settings:", error);
+      res.status(500).json({ message: "Failed to fetch platform settings" });
+    }
+  });
+
+  // Admin - Update platform setting
+  app.patch("/api/admin/platform-settings/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { key } = req.params;
+      const { value } = req.body;
+
+      if (!key) {
+        return res.status(400).json({ message: "Setting key is required" });
+      }
+
+      if (typeof value !== "string") {
+        return res.status(400).json({ message: "Value must be a string" });
+      }
+
+      const setting = await storage.updatePlatformSetting(key, value, userId);
+      res.json(setting);
+    } catch (error) {
+      console.error("Error updating platform setting:", error);
+      res.status(500).json({ message: "Failed to update platform setting" });
+    }
+  });
+
+  // ==================== VTU API ROUTES ====================
+
+  // Get all VTU plans (optionally filter by network)
+  app.get("/api/vtu/plans", async (req, res) => {
+    try {
+      const { network } = req.query;
+      const plans = await storage.getVtuPlans(typeof network === "string" ? network : undefined);
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching VTU plans:", error);
+      res.status(500).json({ message: "Failed to fetch VTU plans" });
+    }
+  });
+
+  // Purchase VTU data
+  app.post("/api/vtu/purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validationResult = purchaseVtuSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { planId, phoneNumber } = validationResult.data;
+
+      // Validate Nigerian phone number
+      if (!isValidNigerianPhone(phoneNumber)) {
+        return res.status(400).json({ message: "Invalid Nigerian phone number" });
+      }
+
+      // Get the VTU plan
+      const plan = await storage.getVtuPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "VTU plan not found" });
+      }
+
+      if (!plan.isActive) {
+        return res.status(400).json({ message: "This VTU plan is currently unavailable" });
+      }
+
+      const planPrice = parseFloat(plan.price);
+
+      // Get user's wallet
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      // Check sufficient balance
+      if (walletBalance < planPrice) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance",
+          required: planPrice,
+          available: walletBalance
+        });
+      }
+
+      // Deduct from wallet
+      await storage.updateWalletBalance(userId, planPrice.toString(), "subtract");
+
+      // Create VTU transaction with pending status
+      const transaction = await storage.createVtuTransaction({
+        userId,
+        planId,
+        phoneNumber,
+        amount: plan.price,
+        network: plan.network,
+        dataAmount: plan.dataAmount,
+        status: "pending",
+      });
+
+      // Create wallet transaction record
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: "vtu_purchase",
+        amount: `-${planPrice}`,
+        status: "completed",
+        description: `VTU Data Purchase: ${plan.dataAmount} for ${phoneNumber}`,
+        reference: transaction.id,
+      });
+
+      // Process the actual purchase if API is configured
+      if (isSMEDataConfigured()) {
+        try {
+          const purchaseResult = await purchaseData(plan.network, phoneNumber, plan.planCode);
+          
+          if (purchaseResult.success) {
+            // Update transaction as successful
+            await storage.updateVtuTransaction(transaction.id, {
+              status: "completed",
+              providerReference: purchaseResult.reference,
+            });
+
+            res.json({
+              success: true,
+              message: "Data purchase successful",
+              transaction: {
+                ...transaction,
+                status: "completed",
+                providerReference: purchaseResult.reference,
+              },
+            });
+          } else {
+            // Purchase failed - refund the user
+            await storage.updateWalletBalance(userId, planPrice.toString(), "add");
+            await storage.updateVtuTransaction(transaction.id, {
+              status: "failed",
+              errorMessage: purchaseResult.message || purchaseResult.error,
+            });
+
+            // Create refund transaction record
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "vtu_refund",
+              amount: planPrice.toString(),
+              status: "completed",
+              description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - ${purchaseResult.message}`,
+              reference: transaction.id,
+            });
+
+            res.status(400).json({
+              success: false,
+              message: purchaseResult.message || "Data purchase failed. Amount refunded.",
+              error: purchaseResult.error,
+            });
+          }
+        } catch (apiError: any) {
+          // API call failed - refund the user
+          await storage.updateWalletBalance(userId, planPrice.toString(), "add");
+          await storage.updateVtuTransaction(transaction.id, {
+            status: "failed",
+            errorMessage: apiError.message || "API error",
+          });
+
+          // Create refund transaction record
+          await storage.createTransaction({
+            walletId: wallet.id,
+            type: "vtu_refund",
+            amount: planPrice.toString(),
+            status: "completed",
+            description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - API Error`,
+            reference: transaction.id,
+          });
+
+          console.error("VTU API error:", apiError);
+          res.status(500).json({
+            success: false,
+            message: "Data purchase failed due to network error. Amount refunded.",
+          });
+        }
+      } else {
+        // API not configured - mark as pending for manual processing
+        await storage.updateVtuTransaction(transaction.id, {
+          status: "pending",
+          errorMessage: "VTU service temporarily unavailable",
+        });
+
+        res.json({
+          success: true,
+          message: "Purchase request submitted. Your data will be delivered shortly.",
+          transaction,
+        });
+      }
+    } catch (error) {
+      console.error("Error processing VTU purchase:", error);
+      res.status(500).json({ message: "Failed to process VTU purchase" });
+    }
+  });
+
+  // Get user's VTU transactions
+  app.get("/api/vtu/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const transactions = await storage.getUserVtuTransactions(userId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching VTU transactions:", error);
+      res.status(500).json({ message: "Failed to fetch VTU transactions" });
+    }
+  });
+
+  // ==================== SETTINGS API ROUTES ====================
+
+  // Get user's settings
+  app.get("/api/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const settings = await storage.getOrCreateUserSettings(userId);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  // Update user's settings
+  app.patch("/api/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validationResult = updateUserSettingsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const settings = await storage.updateUserSettings(userId, validationResult.data);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Request account deletion
+  app.post("/api/settings/delete-account", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validationResult = requestAccountDeletionSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { usernameConfirmation } = validationResult.data;
+
+      // Get the user to verify the confirmation
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify the username/email confirmation
+      const expectedConfirmation = user.email.split("@")[0].toLowerCase();
+      if (usernameConfirmation.toLowerCase() !== expectedConfirmation && 
+          usernameConfirmation.toLowerCase() !== user.email.toLowerCase()) {
+        return res.status(400).json({ 
+          message: "Username confirmation does not match" 
+        });
+      }
+
+      const settings = await storage.requestAccountDeletion(userId);
+      res.json({
+        success: true,
+        message: "Account deletion requested. Your account will be deleted after the grace period.",
+        settings,
+      });
+    } catch (error) {
+      console.error("Error requesting account deletion:", error);
+      res.status(500).json({ message: "Failed to request account deletion" });
+    }
+  });
+
+  // Cancel account deletion
+  app.post("/api/settings/cancel-deletion", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const settings = await storage.cancelAccountDeletion(userId);
+      res.json({
+        success: true,
+        message: "Account deletion cancelled successfully.",
+        settings,
+      });
+    } catch (error) {
+      console.error("Error cancelling account deletion:", error);
+      res.status(500).json({ message: "Failed to cancel account deletion" });
+    }
+  });
+
+  // ==================== ADS API ROUTES ====================
+
+  // Get active sponsored ads
+  app.get("/api/ads", async (req, res) => {
+    try {
+      const { type } = req.query;
+      const ads = await storage.getActiveSponsoredAds(typeof type === "string" ? type : undefined);
+      res.json(ads);
+    } catch (error) {
+      console.error("Error fetching ads:", error);
+      res.status(500).json({ message: "Failed to fetch ads" });
+    }
+  });
+
+  // Record ad impression
+  app.post("/api/ads/:id/impression", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        return res.status(400).json({ message: "Ad ID is required" });
+      }
+
+      await storage.recordAdImpression(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error recording ad impression:", error);
+      res.status(500).json({ message: "Failed to record impression" });
+    }
+  });
+
+  // Record ad click
+  app.post("/api/ads/:id/click", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        return res.status(400).json({ message: "Ad ID is required" });
+      }
+
+      await storage.recordAdClick(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error recording ad click:", error);
+      res.status(500).json({ message: "Failed to record click" });
     }
   });
 

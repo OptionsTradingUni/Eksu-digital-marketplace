@@ -81,3 +81,42 @@ The EKSU Marketplace includes an official system account ("Campus Hub") that pro
 - The credentials file is excluded from git via `.gitignore`
 - Regular users cannot follow the system account (auto-followed on registration)
 - Regular users cannot send messages to the system account
+
+## Recent Changes (November 2025)
+
+### VTU (Virtual Top-Up) Data Sales
+- **Location:** `/vtu` page
+- **Description:** Integrated SMEDATA.NG API for data resale functionality
+- **Networks Supported:** MTN SME, GLO CG, Airtel CG, 9mobile
+- **Features:**
+  - Phone number validation with automatic network detection
+  - Data plans display with cost/selling prices
+  - Wallet integration for purchases
+  - Transaction history tracking
+- **Environment Variable:** `SME_API` for SMEDATA.NG API key
+
+### Settings Page
+- **Location:** `/settings` page
+- **3 Tabs:**
+  - **General:** Location visibility, distance from campus settings
+  - **Notifications:** Push, email, message, order, promotional notifications; Chat settings (typing status, read receipts, online status)
+  - **Account:** Account info, 30-day account deletion with username confirmation
+
+### Enhanced Navigation
+- **BottomNav:** Added Messages icon (now 6 items: Home, The Plug, Search, Messages, Games, Profile)
+- **Header:** Profile icon dropdown with VTU Data, Settings, and other links
+
+### User Safety Features
+- **Block User:** Prevents all interaction between users
+- **Report User:** Submit reports with categorized reasons (spam, scam, harassment, etc.)
+- **Location:** Profile page 3-dot menu (for other users' profiles)
+
+### Sponsored Ads System (Admin-controlled)
+- **Tables:** `sponsored_ads`, `platform_settings`
+- **Features:** Disabled by default; admin can enable via platform settings
+- **Metrics:** Impression and click tracking with cost calculations
+
+### KYC Verification (Pending Implementation)
+- **Tables:** `kyc_verifications`, `kyc_verification_logs`
+- **Flow:** 200 NGN fee, NIN verification, selfie matching (85%+ auto-approve, 70-84% manual review, <70% reject)
+- **Status:** Tables created, full implementation pending

@@ -50,6 +50,13 @@ import {
   userBlocks,
   userMutes,
   userReports,
+  vtuPlans,
+  vtuTransactions,
+  userSettings,
+  sponsoredAds,
+  platformSettings,
+  kycVerifications,
+  kycVerificationLogs,
   type User,
   type UpsertUser,
   type Product,
@@ -132,6 +139,18 @@ import {
   type InsertUserMute,
   type UserReport,
   type InsertUserReport,
+  type VtuPlan,
+  type InsertVtuPlan,
+  type VtuTransaction,
+  type InsertVtuTransaction,
+  type UserSettings,
+  type InsertUserSettings,
+  type SponsoredAd,
+  type InsertSponsoredAd,
+  type PlatformSetting,
+  type KycVerification,
+  type InsertKycVerification,
+  type KycVerificationLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -450,7 +469,39 @@ export interface IStorage {
   getBlockedUsers(userId: string): Promise<(UserBlock & { blockedUser: User })[]>;
   getMutedUsers(userId: string): Promise<(UserMute & { mutedUser: User })[]>;
   createUserReport(data: InsertUserReport): Promise<UserReport>;
+  reportUser(reporterId: string, reportedId: string, reason: string, description: string): Promise<UserReport>;
   getUserRelationship(userId: string, targetId: string): Promise<{ isBlocked: boolean; isMuted: boolean; isBlockedByTarget: boolean }>;
+  
+  // VTU (Virtual Top-Up) operations
+  getVtuPlans(network?: string): Promise<VtuPlan[]>;
+  getVtuPlan(id: string): Promise<VtuPlan | undefined>;
+  createVtuTransaction(data: InsertVtuTransaction): Promise<VtuTransaction>;
+  updateVtuTransaction(id: string, data: Partial<VtuTransaction>): Promise<VtuTransaction>;
+  getUserVtuTransactions(userId: string): Promise<VtuTransaction[]>;
+  
+  // User Settings operations
+  getOrCreateUserSettings(userId: string): Promise<UserSettings>;
+  updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings>;
+  requestAccountDeletion(userId: string): Promise<UserSettings>;
+  cancelAccountDeletion(userId: string): Promise<UserSettings>;
+  
+  // Sponsored Ads operations
+  getActiveSponsoredAds(type?: string): Promise<SponsoredAd[]>;
+  createSponsoredAd(data: InsertSponsoredAd): Promise<SponsoredAd>;
+  recordAdImpression(adId: string): Promise<void>;
+  recordAdClick(adId: string): Promise<void>;
+  
+  // Platform Settings operations
+  getAllPlatformSettings(): Promise<PlatformSetting[]>;
+  getPlatformSetting(key: string): Promise<PlatformSetting | undefined>;
+  updatePlatformSetting(key: string, value: string, updatedBy?: string): Promise<PlatformSetting>;
+  
+  // KYC Verification operations
+  createKycVerification(userId: string): Promise<KycVerification>;
+  getKycVerification(userId: string): Promise<KycVerification | undefined>;
+  updateKycVerification(id: string, data: Partial<KycVerification>): Promise<KycVerification>;
+  getPendingKycVerifications(): Promise<KycVerification[]>;
+  createKycLog(data: { kycId: string; userId: string; action: string; result?: string; similarityScore?: number; reviewedBy?: string; ipAddress?: string; userAgent?: string; metadata?: any }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3377,6 +3428,15 @@ export class DatabaseStorage implements IStorage {
     return report;
   }
 
+  async reportUser(reporterId: string, reportedId: string, reason: string, description: string): Promise<UserReport> {
+    return this.createUserReport({
+      reporterId,
+      reportedId,
+      reason,
+      description: description || "",
+    });
+  }
+
   async getUserRelationship(userId: string, targetId: string): Promise<{ isBlocked: boolean; isMuted: boolean; isBlockedByTarget: boolean }> {
     const [isBlockedResult, isMutedResult, isBlockedByTargetResult] = await Promise.all([
       this.isUserBlocked(userId, targetId),
@@ -3389,6 +3449,282 @@ export class DatabaseStorage implements IStorage {
       isMuted: isMutedResult,
       isBlockedByTarget: isBlockedByTargetResult,
     };
+  }
+
+  // VTU (Virtual Top-Up) operations
+  async getVtuPlans(network?: string): Promise<VtuPlan[]> {
+    if (network) {
+      return await db
+        .select()
+        .from(vtuPlans)
+        .where(and(eq(vtuPlans.isActive, true), eq(vtuPlans.network, network as any)))
+        .orderBy(vtuPlans.sortOrder);
+    }
+    return await db
+      .select()
+      .from(vtuPlans)
+      .where(eq(vtuPlans.isActive, true))
+      .orderBy(vtuPlans.sortOrder);
+  }
+
+  async getVtuPlan(id: string): Promise<VtuPlan | undefined> {
+    const [plan] = await db.select().from(vtuPlans).where(eq(vtuPlans.id, id));
+    return plan;
+  }
+
+  async createVtuTransaction(data: InsertVtuTransaction): Promise<VtuTransaction> {
+    const [transaction] = await db.insert(vtuTransactions).values(data).returning();
+    return transaction;
+  }
+
+  async updateVtuTransaction(id: string, data: Partial<VtuTransaction>): Promise<VtuTransaction> {
+    const [updated] = await db
+      .update(vtuTransactions)
+      .set({ ...data })
+      .where(eq(vtuTransactions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getUserVtuTransactions(userId: string): Promise<VtuTransaction[]> {
+    return await db
+      .select()
+      .from(vtuTransactions)
+      .where(eq(vtuTransactions.userId, userId))
+      .orderBy(desc(vtuTransactions.createdAt));
+  }
+
+  // User Settings operations
+  async getOrCreateUserSettings(userId: string): Promise<UserSettings> {
+    const [existing] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    
+    if (existing) {
+      return existing;
+    }
+    
+    const [settings] = await db
+      .insert(userSettings)
+      .values({ userId })
+      .returning();
+    return settings;
+  }
+
+  async updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings> {
+    const settings = await this.getOrCreateUserSettings(userId);
+    
+    const [updated] = await db
+      .update(userSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userSettings.id, settings.id))
+      .returning();
+    return updated;
+  }
+
+  async requestAccountDeletion(userId: string): Promise<UserSettings> {
+    const settings = await this.getOrCreateUserSettings(userId);
+    const now = new Date();
+    const scheduledFor = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+    
+    const [updated] = await db
+      .update(userSettings)
+      .set({
+        deletionRequestedAt: now,
+        deletionScheduledFor: scheduledFor,
+        deletionCancelledAt: null,
+        updatedAt: now,
+      })
+      .where(eq(userSettings.id, settings.id))
+      .returning();
+    return updated;
+  }
+
+  async cancelAccountDeletion(userId: string): Promise<UserSettings> {
+    const settings = await this.getOrCreateUserSettings(userId);
+    const now = new Date();
+    
+    const [updated] = await db
+      .update(userSettings)
+      .set({
+        deletionRequestedAt: null,
+        deletionScheduledFor: null,
+        deletionCancelledAt: now,
+        updatedAt: now,
+      })
+      .where(eq(userSettings.id, settings.id))
+      .returning();
+    return updated;
+  }
+
+  // Sponsored Ads operations
+  async getActiveSponsoredAds(type?: string): Promise<SponsoredAd[]> {
+    const now = new Date();
+    
+    if (type) {
+      return await db
+        .select()
+        .from(sponsoredAds)
+        .where(
+          and(
+            eq(sponsoredAds.status, "active"),
+            eq(sponsoredAds.type, type as any),
+            or(
+              sql`${sponsoredAds.startDate} IS NULL`,
+              sql`${sponsoredAds.startDate} <= ${now}`
+            ),
+            or(
+              sql`${sponsoredAds.endDate} IS NULL`,
+              sql`${sponsoredAds.endDate} >= ${now}`
+            ),
+            sql`CAST(${sponsoredAds.spent} AS DECIMAL) < CAST(${sponsoredAds.budget} AS DECIMAL)`
+          )
+        )
+        .orderBy(desc(sponsoredAds.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(sponsoredAds)
+      .where(
+        and(
+          eq(sponsoredAds.status, "active"),
+          or(
+            sql`${sponsoredAds.startDate} IS NULL`,
+            sql`${sponsoredAds.startDate} <= ${now}`
+          ),
+          or(
+            sql`${sponsoredAds.endDate} IS NULL`,
+            sql`${sponsoredAds.endDate} >= ${now}`
+          ),
+          sql`CAST(${sponsoredAds.spent} AS DECIMAL) < CAST(${sponsoredAds.budget} AS DECIMAL)`
+        )
+      )
+      .orderBy(desc(sponsoredAds.createdAt));
+  }
+
+  async createSponsoredAd(data: InsertSponsoredAd): Promise<SponsoredAd> {
+    const [ad] = await db.insert(sponsoredAds).values(data).returning();
+    return ad;
+  }
+
+  async recordAdImpression(adId: string): Promise<void> {
+    await db
+      .update(sponsoredAds)
+      .set({
+        impressions: sql`${sponsoredAds.impressions} + 1`,
+        spent: sql`CAST(${sponsoredAds.spent} AS DECIMAL) + CAST(${sponsoredAds.costPerImpression} AS DECIMAL)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sponsoredAds.id, adId));
+  }
+
+  async recordAdClick(adId: string): Promise<void> {
+    await db
+      .update(sponsoredAds)
+      .set({
+        clicks: sql`${sponsoredAds.clicks} + 1`,
+        spent: sql`CAST(${sponsoredAds.spent} AS DECIMAL) + CAST(${sponsoredAds.costPerClick} AS DECIMAL)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sponsoredAds.id, adId));
+  }
+
+  // Platform Settings operations
+  async getAllPlatformSettings(): Promise<PlatformSetting[]> {
+    return await db.select().from(platformSettings);
+  }
+
+  async getPlatformSetting(key: string): Promise<PlatformSetting | undefined> {
+    const [setting] = await db
+      .select()
+      .from(platformSettings)
+      .where(eq(platformSettings.key, key));
+    return setting;
+  }
+
+  async updatePlatformSetting(key: string, value: string, updatedBy?: string): Promise<PlatformSetting> {
+    const existing = await this.getPlatformSetting(key);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(platformSettings)
+        .set({ value, updatedAt: new Date(), updatedBy: updatedBy || null })
+        .where(eq(platformSettings.key, key))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db
+      .insert(platformSettings)
+      .values({ key, value, updatedBy: updatedBy || null })
+      .returning();
+    return created;
+  }
+
+  // KYC Verification operations
+  async createKycVerification(userId: string): Promise<KycVerification> {
+    const existing = await this.getKycVerification(userId);
+    if (existing) {
+      return existing;
+    }
+    
+    const [verification] = await db
+      .insert(kycVerifications)
+      .values({ userId })
+      .returning();
+    return verification;
+  }
+
+  async getKycVerification(userId: string): Promise<KycVerification | undefined> {
+    const [verification] = await db
+      .select()
+      .from(kycVerifications)
+      .where(eq(kycVerifications.userId, userId))
+      .orderBy(desc(kycVerifications.createdAt));
+    return verification;
+  }
+
+  async updateKycVerification(id: string, data: Partial<KycVerification>): Promise<KycVerification> {
+    const [updated] = await db
+      .update(kycVerifications)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(kycVerifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPendingKycVerifications(): Promise<KycVerification[]> {
+    return await db
+      .select()
+      .from(kycVerifications)
+      .where(eq(kycVerifications.status, "manual_review"))
+      .orderBy(kycVerifications.createdAt);
+  }
+
+  async createKycLog(data: {
+    kycId: string;
+    userId: string;
+    action: string;
+    result?: string;
+    similarityScore?: number;
+    reviewedBy?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    metadata?: any;
+  }): Promise<void> {
+    await db.insert(kycVerificationLogs).values({
+      kycId: data.kycId,
+      userId: data.userId,
+      action: data.action,
+      result: data.result,
+      similarityScore: data.similarityScore?.toString(),
+      reviewedBy: data.reviewedBy,
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent,
+      metadata: data.metadata,
+    });
   }
 }
 

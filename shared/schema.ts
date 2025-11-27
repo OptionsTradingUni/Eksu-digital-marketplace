@@ -1776,3 +1776,313 @@ export type InsertUserMute = z.infer<typeof insertUserMuteSchema>;
 export type UserReport = typeof userReports.$inferSelect;
 export type InsertUserReport = z.infer<typeof insertUserReportSchema>;
 export type CreateUserReportInput = z.infer<typeof createUserReportSchema>;
+
+// ===========================================
+// VTU (Virtual Top-Up) DATA SALES SYSTEM
+// ===========================================
+
+// VTU Network enum (MTN SME, GLO CG, Airtel CG)
+export const vtuNetworkEnum = pgEnum("vtu_network", ["mtn_sme", "glo_cg", "airtel_cg", "9mobile"]);
+
+// VTU Transaction status
+export const vtuStatusEnum = pgEnum("vtu_status", ["pending", "processing", "success", "failed", "refunded"]);
+
+// VTU Data Plans - stores available data plans from SMEDATA.NG
+export const vtuPlans = pgTable("vtu_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  network: vtuNetworkEnum("network").notNull(),
+  planName: varchar("plan_name", { length: 100 }).notNull(),
+  dataAmount: varchar("data_amount", { length: 50 }).notNull(), // e.g., "1GB", "2GB", "5GB"
+  validity: varchar("validity", { length: 50 }).notNull(), // e.g., "30 days", "7 days"
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(), // Price from SMEDATA.NG
+  sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }).notNull(), // Price we sell at
+  planCode: varchar("plan_code", { length: 50 }).notNull(), // SMEDATA.NG plan code
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("vtu_plans_network_idx").on(table.network),
+  index("vtu_plans_active_idx").on(table.isActive),
+]);
+
+// VTU Transactions - tracks all data purchases
+export const vtuTransactions = pgTable("vtu_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  planId: varchar("plan_id").notNull().references(() => vtuPlans.id, { onDelete: "restrict" }),
+  network: vtuNetworkEnum("network").notNull(),
+  phoneNumber: varchar("phone_number", { length: 20 }).notNull(), // Recipient phone number
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(), // Amount charged to user
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(), // Our cost from SMEDATA.NG
+  profit: decimal("profit", { precision: 10, scale: 2 }).notNull(), // Profit on this transaction
+  status: vtuStatusEnum("status").notNull().default("pending"),
+  smedataReference: varchar("smedata_reference", { length: 100 }), // SMEDATA.NG transaction reference
+  smedataResponse: jsonb("smedata_response"), // Full API response for debugging
+  errorMessage: text("error_message"),
+  walletTransactionId: varchar("wallet_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("vtu_transactions_user_idx").on(table.userId),
+  index("vtu_transactions_status_idx").on(table.status),
+  index("vtu_transactions_created_idx").on(table.createdAt),
+]);
+
+// VTU Insert schemas
+export const insertVtuPlanSchema = createInsertSchema(vtuPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVtuTransactionSchema = createInsertSchema(vtuTransactions).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+// VTU API schemas
+export const purchaseVtuSchema = z.object({
+  planId: z.string().min(1, "Plan ID is required"),
+  phoneNumber: z.string().min(10, "Valid phone number is required").max(15),
+});
+
+// VTU TypeScript types
+export type VtuPlan = typeof vtuPlans.$inferSelect;
+export type InsertVtuPlan = z.infer<typeof insertVtuPlanSchema>;
+export type VtuTransaction = typeof vtuTransactions.$inferSelect;
+export type InsertVtuTransaction = z.infer<typeof insertVtuTransactionSchema>;
+export type PurchaseVtuInput = z.infer<typeof purchaseVtuSchema>;
+
+// ===========================================
+// USER SETTINGS SYSTEM
+// ===========================================
+
+// User settings for preferences
+export const userSettings = pgTable("user_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  // Location settings
+  locationVisible: boolean("location_visible").default(true),
+  showDistanceFromCampus: boolean("show_distance_from_campus").default(true),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  // Notification settings
+  pushNotifications: boolean("push_notifications").default(true),
+  emailNotifications: boolean("email_notifications").default(true),
+  messageNotifications: boolean("message_notifications").default(true),
+  orderNotifications: boolean("order_notifications").default(true),
+  promotionalNotifications: boolean("promotional_notifications").default(false),
+  // Chat settings
+  showTypingStatus: boolean("show_typing_status").default(true),
+  showReadReceipts: boolean("show_read_receipts").default(true),
+  showOnlineStatus: boolean("show_online_status").default(true),
+  // Account settings
+  deletionRequestedAt: timestamp("deletion_requested_at"),
+  deletionScheduledFor: timestamp("deletion_scheduled_for"), // 30 days after request
+  deletionCancelledAt: timestamp("deletion_cancelled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User settings insert schema
+export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateUserSettingsSchema = z.object({
+  locationVisible: z.boolean().optional(),
+  showDistanceFromCampus: z.boolean().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  pushNotifications: z.boolean().optional(),
+  emailNotifications: z.boolean().optional(),
+  messageNotifications: z.boolean().optional(),
+  orderNotifications: z.boolean().optional(),
+  promotionalNotifications: z.boolean().optional(),
+  showTypingStatus: z.boolean().optional(),
+  showReadReceipts: z.boolean().optional(),
+  showOnlineStatus: z.boolean().optional(),
+});
+
+export const requestAccountDeletionSchema = z.object({
+  usernameConfirmation: z.string().min(1, "Username confirmation required"),
+});
+
+// User settings types
+export type UserSettings = typeof userSettings.$inferSelect;
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
+export type UpdateUserSettingsInput = z.infer<typeof updateUserSettingsSchema>;
+export type RequestAccountDeletionInput = z.infer<typeof requestAccountDeletionSchema>;
+
+// ===========================================
+// SPONSORED ADS / MONETIZATION SYSTEM
+// ===========================================
+
+// Sponsored ad types
+export const sponsoredAdTypeEnum = pgEnum("sponsored_ad_type", ["marketplace", "plug", "banner"]);
+export const sponsoredAdStatusEnum = pgEnum("sponsored_ad_status", ["pending", "active", "paused", "completed", "rejected"]);
+
+// Sponsored ads table
+export const sponsoredAds = pgTable("sponsored_ads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  advertiserId: varchar("advertiser_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: sponsoredAdTypeEnum("type").notNull().default("marketplace"),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  linkUrl: text("link_url"),
+  productId: varchar("product_id").references(() => products.id, { onDelete: "set null" }), // Optional: promote a specific product
+  budget: decimal("budget", { precision: 10, scale: 2 }).notNull(),
+  spent: decimal("spent", { precision: 10, scale: 2 }).default("0.00"),
+  costPerImpression: decimal("cost_per_impression", { precision: 10, scale: 4 }).default("0.0050"), // ~₦5 per 1000 views
+  costPerClick: decimal("cost_per_click", { precision: 10, scale: 2 }).default("1.00"), // ₦1 per click
+  impressions: integer("impressions").default(0),
+  clicks: integer("clicks").default(0),
+  status: sponsoredAdStatusEnum("status").notNull().default("pending"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  targetCategories: text("target_categories").array().default(sql`ARRAY[]::text[]`), // Category targeting
+  targetLocations: text("target_locations").array().default(sql`ARRAY[]::text[]`), // Location targeting
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("sponsored_ads_status_idx").on(table.status),
+  index("sponsored_ads_advertiser_idx").on(table.advertiserId),
+]);
+
+// Platform settings for admin controls
+export const platformSettings = pgTable("platform_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value").notNull(),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+// Sponsored ads insert schema
+export const insertSponsoredAdSchema = createInsertSchema(sponsoredAds).omit({
+  id: true,
+  impressions: true,
+  clicks: true,
+  spent: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createSponsoredAdSchema = z.object({
+  type: z.enum(["marketplace", "plug", "banner"]).optional().default("marketplace"),
+  title: z.string().min(1, "Title is required").max(200),
+  description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  linkUrl: z.string().optional(),
+  productId: z.string().optional(),
+  budget: z.number().min(500, "Minimum budget is ₦500"),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  targetCategories: z.array(z.string()).optional(),
+  targetLocations: z.array(z.string()).optional(),
+});
+
+// Sponsored ads types
+export type SponsoredAd = typeof sponsoredAds.$inferSelect;
+export type InsertSponsoredAd = z.infer<typeof insertSponsoredAdSchema>;
+export type CreateSponsoredAdInput = z.infer<typeof createSponsoredAdSchema>;
+export type PlatformSetting = typeof platformSettings.$inferSelect;
+
+// ===========================================
+// KYC VERIFICATION SYSTEM
+// ===========================================
+
+// KYC status enum
+export const kycStatusEnum = pgEnum("kyc_status", ["pending_payment", "pending_verification", "manual_review", "approved", "rejected", "refunded"]);
+
+// KYC verifications table
+export const kycVerifications = pgTable("kyc_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: kycStatusEnum("status").notNull().default("pending_payment"),
+  // Payment info
+  paymentReference: varchar("payment_reference"),
+  paymentAmount: decimal("payment_amount", { precision: 10, scale: 2 }).default("200.00"), // ₦200 fee
+  paymentStatus: varchar("payment_status", { length: 20 }).default("pending"),
+  paidAt: timestamp("paid_at"),
+  // NIN verification data
+  nin: varchar("nin", { length: 11 }), // Stored temporarily, deleted after verification
+  ninFirstName: varchar("nin_first_name"),
+  ninLastName: varchar("nin_last_name"),
+  ninDateOfBirth: varchar("nin_date_of_birth"),
+  ninPhotoUrl: text("nin_photo_url"), // Temporary, deleted after verification
+  // Selfie verification
+  selfieUrl: text("selfie_url"), // Temporary, deleted after verification
+  // Verification results
+  similarityScore: decimal("similarity_score", { precision: 5, scale: 2 }), // 0-100%
+  smedataResponse: jsonb("smedata_response"), // Full API response
+  // Consent
+  consentGiven: boolean("consent_given").default(false),
+  consentTimestamp: timestamp("consent_timestamp"),
+  // Review info
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  rejectionReason: text("rejection_reason"),
+  // Cleanup tracking
+  imagesDeletedAt: timestamp("images_deleted_at"), // When selfie/NIN photo were deleted
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("kyc_verifications_user_idx").on(table.userId),
+  index("kyc_verifications_status_idx").on(table.status),
+]);
+
+// KYC verification logs for audit trail (1 year retention)
+export const kycVerificationLogs = pgTable("kyc_verification_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  kycId: varchar("kyc_id").notNull().references(() => kycVerifications.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  action: varchar("action", { length: 50 }).notNull(), // payment_initiated, verification_started, auto_approved, manual_review, approved, rejected, refunded
+  result: varchar("result", { length: 50 }),
+  similarityScore: decimal("similarity_score", { precision: 5, scale: 2 }),
+  reviewedBy: varchar("reviewed_by"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// KYC insert schemas
+export const insertKycVerificationSchema = createInsertSchema(kycVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const initiateKycSchema = z.object({
+  nin: z.string().length(11, "NIN must be exactly 11 digits"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  dateOfBirth: z.string().min(1, "Date of birth is required"), // YYYY-MM-DD format
+  consent: z.boolean().refine(val => val === true, "You must agree to the verification terms"),
+});
+
+export const uploadKycSelfieSchema = z.object({
+  kycId: z.string().min(1, "KYC ID is required"),
+});
+
+export const reviewKycSchema = z.object({
+  kycId: z.string().min(1, "KYC ID is required"),
+  action: z.enum(["approve", "reject"]),
+  notes: z.string().optional(),
+  rejectionReason: z.string().optional(),
+});
+
+// KYC types
+export type KycVerification = typeof kycVerifications.$inferSelect;
+export type InsertKycVerification = z.infer<typeof insertKycVerificationSchema>;
+export type InitiateKycInput = z.infer<typeof initiateKycSchema>;
+export type ReviewKycInput = z.infer<typeof reviewKycSchema>;
+export type KycVerificationLog = typeof kycVerificationLogs.$inferSelect;
