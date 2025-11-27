@@ -922,6 +922,16 @@ export default function Profile() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
+                      {currentUser?.role === "admin" && (
+                        <DropdownMenuItem 
+                          onClick={() => setLocation("/admin-dashboard")}
+                          className="cursor-pointer"
+                          data-testid="link-admin-dashboard"
+                        >
+                          <Shield className="mr-2 h-4 w-4" />
+                          Admin Dashboard
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem 
                         onClick={copyUserId}
                         className="cursor-pointer"
