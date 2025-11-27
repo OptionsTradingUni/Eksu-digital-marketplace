@@ -1,0 +1,24 @@
+1. I clocked on AI voice stuff it's not working at all but shows it's on 
+2. The archive button in messages looks fade and it's not working 
+3. When I go to the plug to post, if I type a single this thing my keyboard will come down, it's not making sense also in
+Media uploads I can't take from gallery check it out 
+4. Failed to create a story check it and when story is posted text etc let it be like WhatsApp own
+5. In messages I got failed to create or add reaction and again the messages do come up I need to scroll I need to zoom to set to avoid bottom navigation from affecting it please solve this 
+6. When I try to send an image on messages I got omg56.png ready to upload but it didn't show and sending option not green not working 
+7. Disappearing messages nor working 
+When I go to my profile I saw selling but I see selling posts that are not posted by me please solve this 
+8. When I click on a customer product, it didn't show location like 2.3km stuff it's not working and location not set yet 
+9. I went to my profile , the "both" switch role is still three and I'm getting failed to update role 
+10. Failed to archive conversation 
+11. Also check the vtu stuff please I think the plans are not correct I just checked their website where did you see those prices you want to put me in debt please revise it and I don't know how their reseller stuff is please check well make navigation easy too please 
+12. Let there be different type of verification, for seller, buyer but for seller is compulsory, for some well known big brands too perhaps they get that from admin panel 
+13. When I did the /admin stuff, it worked but was redirected to homepage and I already serve my username please for those accounts whose stuff has been set as super admin, let admin dashboard appears in the profile stuff for easy access again my user ID is E461E9F4, hardcode this I'll update more in the var on render when it's time 
+Also when action is made it shows on the profile it should disappear itself too not until I try to make it disappear 
+14. Also for you I dunno if it's a good idea to include hashtag but prioritize recent posts and make sure algorithm works so much well please 
+15. Also when I add a posts to book marks where do I see it, let the plug has it own settings too for somethings too please 
+The profile place is getting too flooded with pages 
+
+16. If you want to go to another page it switch it take long 
+Also work on the games, work on whot, quick draw ,campus bingo,truth or dare, guess the price, typing speed 
+
+It’s showing coming soon
