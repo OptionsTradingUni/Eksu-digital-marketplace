@@ -1,0 +1,27 @@
+Search and home are the same 
+Remove search please 
+Here is some information regarding typical SME offerings and your concerns:
+1. What services are on SME Data plans?
+SME packages from major telecom providers like MTN usually offer much more than just data and airtime. They often include services tailored for businesses, such as:
+• Bulk SMS: For marketing and notifications.
+• Corporate Call Tariffs: Special rates for communication within the business team.
+• Cloud Services: Tools like cloud storage or collaboration software.
+• Customized Bundles: Plans that combine voice, data, and value-added services.
+2. Are there more plan options?
+Yes, it's highly likely. MTN offers a very wide array of plans (daily, weekly, monthly, and various customized enterprise bundles). If the "smedata" app is only showing you a few fixed plans, it could be that:
+• It is only integrated with a subset of the available plans.
+• It is tailored only for specific SME customer tiers.
+3. Why couldn't it detect my number 07048405740 as MTN?
+The first four digits of a mobile number typically identify the network provider in Nigeria. Based on standard prefix assignments, the 0804 prefix is generally not an MTN number. This prefix is commonly associated with networks like 9Mobile (formerly Etisalat/EMTS). This is the likely reason why the "smedata" app—which is probably designed to detect and service MTN numbers—failed to recognize your line.
+4. Search or Scroll Option:
+If the application's interface lacks a proper search bar or smooth scrolling for data plans, it's a design flaw in that specific app. For a comprehensive view of all MTN data and voice bundles, I recommend checking the official MTN Nigeria website or using the official USSD codes (like *131# for data) to see the full options list.
+When a customer sign up or login try to get their location so that determines the distance between the seller and buyer 
+It would say miles or ft away
+In switch roles 
+I think having buy and sell is okay nothing like both and whenever someone wants to be some a seller 
+Need to do some verification 
+Also add the support or help stuff 
+How about privacy policy terms and conditions faqs disclaimer etc
+Or if they want to  list an item 
+Create an ad 
+Seller must be verified
