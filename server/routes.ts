@@ -152,7 +152,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Memory storage for object storage uploads
+// Memory storage for object storage uploads (images only)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
@@ -161,6 +161,19 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error("Only images are allowed"));
+    }
+  },
+});
+
+// Memory storage for media uploads (images and videos)
+const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for videos
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only images and videos are allowed"));
     }
   },
 });
@@ -2268,6 +2281,28 @@ Happy trading!`;
     }
   });
 
+  // Update cover image
+  app.put("/api/users/:id/cover-image", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId || userId !== req.params.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { coverImageUrl } = req.body;
+      if (!coverImageUrl) {
+        return res.status(400).json({ message: "Cover image URL is required" });
+      }
+
+      const updated = await storage.updateUserProfile(req.params.id, { coverImageUrl });
+      const { password: _, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Error updating cover image:", error);
+      res.status(500).json({ message: "Failed to update cover image" });
+    }
+  });
+
   // Update user role
   app.put("/api/users/:id/role", isAuthenticated, async (req: any, res) => {
     try {
@@ -3166,7 +3201,7 @@ Happy trading!`;
   });
 
   // Create a new social post (supports images and videos)
-  app.post("/api/social-posts", isAuthenticated, upload.array("media", 10), async (req: any, res) => {
+  app.post("/api/social-posts", isAuthenticated, uploadMedia.array("media", 10), async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -3174,8 +3209,12 @@ Happy trading!`;
       }
 
       const { content } = req.body;
-      if (!content || content.trim().length === 0) {
-        return res.status(400).json({ message: "Content is required" });
+      const hasMedia = req.files && Array.isArray(req.files) && req.files.length > 0;
+      const hasContent = content && content.trim().length > 0;
+      
+      // Require either content or media (or both)
+      if (!hasContent && !hasMedia) {
+        return res.status(400).json({ message: "Please add some text or media to your post" });
       }
 
       // Upload media to object storage and separate images from videos
@@ -3186,25 +3225,30 @@ Happy trading!`;
         const prefix = `posts/${userId}/`;
         
         for (const file of req.files as Express.Multer.File[]) {
-          const mediaUrl = await uploadToObjectStorage(file, prefix);
+          let mediaUrl: string | null = null;
+          
+          // Use video upload for videos, regular upload for images
+          if (file.mimetype.startsWith('video/')) {
+            mediaUrl = await uploadVideoToStorage(file, prefix);
+            if (mediaUrl) {
+              videos.push(mediaUrl);
+            }
+          } else {
+            mediaUrl = await uploadToObjectStorage(file, prefix);
+            if (mediaUrl) {
+              images.push(mediaUrl);
+            }
+          }
           
           if (!mediaUrl) {
             console.error("Failed to upload media file:", file.originalname);
-            continue;
-          }
-          
-          // Check if file is video based on mimetype
-          if (file.mimetype.startsWith('video/')) {
-            videos.push(mediaUrl);
-          } else {
-            images.push(mediaUrl);
           }
         }
       }
 
       const post = await storage.createSocialPost({
         authorId: userId,
-        content: content.trim(),
+        content: hasContent ? content.trim() : "",
         images,
         videos,
       });

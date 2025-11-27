@@ -114,6 +114,13 @@ export default function Profile() {
     }
   }, [currentUser, form, isOwnProfile]);
 
+  // Load cover photo from database when user data loads
+  useEffect(() => {
+    if (displayUser?.coverImageUrl) {
+      setCoverPhoto(displayUser.coverImageUrl);
+    }
+  }, [displayUser?.coverImageUrl]);
+
   useEffect(() => {
     if (!authLoading && !currentUser) {
       toast({
@@ -253,6 +260,57 @@ export default function Profile() {
     },
   });
 
+  const uploadCoverMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to upload image");
+      }
+
+      const { url } = await response.json();
+
+      const updateResponse = await apiRequest("PUT", `/api/users/${currentUser?.id}/cover-image`, {
+        coverImageUrl: url,
+      });
+
+      return updateResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "Success",
+        description: "Cover photo updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload cover photo",
+        variant: "destructive",
+      });
+    },
+  });
+
   const followMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest("POST", `/api/users/${urlUserId}/follow`, {});
@@ -345,11 +403,11 @@ export default function Profile() {
       return;
     }
 
+    // Set local preview while uploading
     setCoverPhoto(URL.createObjectURL(file));
-    toast({
-      title: "Cover photo updated",
-      description: "Your cover photo has been changed",
-    });
+    
+    // Upload the cover photo to persist it
+    uploadCoverMutation.mutate(file);
   };
 
   const handleCancelUpload = () => {

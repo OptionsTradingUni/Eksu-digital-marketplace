@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  coverImageUrl: varchar("cover_image_url"), // Profile cover/banner image
   role: userRoleEnum("role").notNull().default("buyer"),
   // Referral code - unique 8-character alphanumeric code for sharing
   referralCode: varchar("referral_code", { length: 8 }).unique(),
