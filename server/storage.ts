@@ -42,6 +42,9 @@ import {
   socialPostLikes,
   socialPostComments,
   socialPostReposts,
+  blockedUsers,
+  postBookmarks,
+  feedEngagementScores,
   squadPayments,
   squadTransfers,
   negotiations,
@@ -127,6 +130,11 @@ import {
   type SocialPostComment,
   type InsertSocialPostComment,
   type SocialPostRepost,
+  type BlockedUser,
+  type InsertBlockedUser,
+  type PostBookmark,
+  type InsertPostBookmark,
+  type FeedEngagementScore,
   type SquadPayment,
   type InsertSquadPayment,
   type SquadTransfer,
@@ -441,6 +449,31 @@ export interface IStorage {
   unrepostSocialPost(postId: string, userId: string): Promise<void>;
   isPostReposted(postId: string, userId: string): Promise<boolean>;
   getPostReposts(postId: string): Promise<(SocialPostRepost & { reposter: User })[]>;
+  
+  // Post bookmark operations
+  bookmarkPost(userId: string, postId: string): Promise<PostBookmark>;
+  unbookmarkPost(userId: string, postId: string): Promise<void>;
+  isPostBookmarked(userId: string, postId: string): Promise<boolean>;
+  getUserBookmarks(userId: string): Promise<(PostBookmark & { post: SocialPost; author: User })[]>;
+  
+  // Smart feed algorithm operations  
+  getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following' }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string })[]>;
+  updatePostEngagementScore(postId: string): Promise<void>;
+  incrementPostViews(postId: string): Promise<void>;
+  incrementPostShares(postId: string): Promise<void>;
+  
+  // Username and system account operations
+  getUserByUsername(username: string): Promise<User | undefined>;
+  updateUsername(userId: string, username: string): Promise<User>;
+  getSystemAccount(type: string): Promise<User | undefined>;
+  createSystemAccount(data: { email: string; username: string; firstName: string; lastName: string; type: string; bio?: string; profileImageUrl?: string }): Promise<User>;
+  
+  // Enhanced social post operations
+  createSocialPostWithOptions(post: { authorId: string; content: string; images?: string[]; videos?: string[]; replyRestriction?: string; mentionedUserIds?: string[]; hashtags?: string[]; isFromSystemAccount?: boolean }): Promise<SocialPost>;
+  updateSocialPost(postId: string, data: Partial<SocialPost>): Promise<SocialPost>;
+  pinPost(postId: string): Promise<void>;
+  unpinPost(postId: string): Promise<void>;
+  getUserPinnedPosts(userId: string): Promise<(SocialPost & { author: User })[]>;
   
   // Squad payment operations
   createSquadPayment(payment: InsertSquadPayment): Promise<SquadPayment>;
@@ -3175,6 +3208,264 @@ export class DatabaseStorage implements IStorage {
       .map(r => ({
         ...r.social_post_reposts!,
         reposter: r.users!,
+      }));
+  }
+
+  // Post bookmark operations
+  async bookmarkPost(userId: string, postId: string): Promise<PostBookmark> {
+    const [existing] = await db
+      .select()
+      .from(postBookmarks)
+      .where(and(eq(postBookmarks.userId, userId), eq(postBookmarks.postId, postId)));
+    
+    if (existing) return existing;
+    
+    const [bookmark] = await db.insert(postBookmarks).values({ userId, postId }).returning();
+    return bookmark;
+  }
+
+  async unbookmarkPost(userId: string, postId: string): Promise<void> {
+    await db
+      .delete(postBookmarks)
+      .where(and(eq(postBookmarks.userId, userId), eq(postBookmarks.postId, postId)));
+  }
+
+  async isPostBookmarked(userId: string, postId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(postBookmarks)
+      .where(and(eq(postBookmarks.userId, userId), eq(postBookmarks.postId, postId)));
+    return !!result;
+  }
+
+  async getUserBookmarks(userId: string): Promise<(PostBookmark & { post: SocialPost; author: User })[]> {
+    const results = await db
+      .select()
+      .from(postBookmarks)
+      .leftJoin(socialPosts, eq(postBookmarks.postId, socialPosts.id))
+      .leftJoin(users, eq(socialPosts.authorId, users.id))
+      .where(eq(postBookmarks.userId, userId))
+      .orderBy(desc(postBookmarks.createdAt));
+
+    return results
+      .filter(r => r.post_bookmarks && r.social_posts && r.users)
+      .map(r => ({
+        ...r.post_bookmarks!,
+        post: r.social_posts!,
+        author: r.users!,
+      }));
+  }
+
+  // Smart feed algorithm operations
+  async getSocialPostsWithAlgorithm(options?: { userId?: string; feedType?: 'for_you' | 'following' }): Promise<(SocialPost & { author: User; isLiked?: boolean; isFollowingAuthor?: boolean; isReposted?: boolean; engagementScore?: string })[]> {
+    const feedType = options?.feedType || 'for_you';
+    
+    let query = db
+      .select()
+      .from(socialPosts)
+      .leftJoin(users, eq(socialPosts.authorId, users.id))
+      .leftJoin(feedEngagementScores, eq(socialPosts.id, feedEngagementScores.postId))
+      .where(eq(socialPosts.isVisible, true));
+    
+    // Get following list if feedType is 'following'
+    let followingIds: string[] = [];
+    if (options?.userId && feedType === 'following') {
+      const followingList = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(eq(follows.followerId, options.userId));
+      followingIds = followingList.map(f => f.followingId);
+    }
+    
+    const results = await query.orderBy(
+      feedType === 'for_you' 
+        ? desc(sql`COALESCE(${feedEngagementScores.engagementScore}, 0) + CASE WHEN ${socialPosts.createdAt} > NOW() - INTERVAL '24 hours' THEN 10 ELSE 0 END`)
+        : desc(socialPosts.createdAt)
+    ).limit(50);
+
+    let likedPostIds: string[] = [];
+    let repostedPostIds: string[] = [];
+    
+    if (options?.userId) {
+      const [likedResult, repostedResult] = await Promise.all([
+        db.select({ postId: socialPostLikes.postId })
+          .from(socialPostLikes)
+          .where(eq(socialPostLikes.userId, options.userId)),
+        db.select({ originalPostId: socialPostReposts.originalPostId })
+          .from(socialPostReposts)
+          .where(eq(socialPostReposts.reposterId, options.userId))
+      ]);
+      likedPostIds = likedResult.map(l => l.postId);
+      repostedPostIds = repostedResult.map(r => r.originalPostId);
+    }
+
+    return results
+      .filter(r => r.social_posts && r.users)
+      .filter(r => {
+        if (feedType === 'following' && options?.userId) {
+          return followingIds.includes(r.social_posts!.authorId) || r.social_posts!.authorId === options.userId;
+        }
+        return true;
+      })
+      .map(r => ({
+        ...r.social_posts!,
+        author: r.users!,
+        isLiked: likedPostIds.includes(r.social_posts!.id),
+        isFollowingAuthor: followingIds.includes(r.social_posts!.authorId),
+        isReposted: repostedPostIds.includes(r.social_posts!.id),
+        engagementScore: r.feed_engagement_scores?.engagementScore || "0",
+      }));
+  }
+
+  async updatePostEngagementScore(postId: string): Promise<void> {
+    const [post] = await db.select().from(socialPosts).where(eq(socialPosts.id, postId));
+    if (!post) return;
+
+    // Calculate engagement score based on likes, comments, reposts, shares, views
+    const likesWeight = 1;
+    const commentsWeight = 3;
+    const repostsWeight = 5;
+    const sharesWeight = 2;
+    const viewsWeight = 0.1;
+    
+    const score = (
+      (post.likesCount || 0) * likesWeight +
+      (post.commentsCount || 0) * commentsWeight +
+      (post.repostsCount || 0) * repostsWeight +
+      (post.sharesCount || 0) * sharesWeight +
+      (post.viewsCount || 0) * viewsWeight
+    );
+    
+    // Calculate velocity (engagement in last 24 hours)
+    const hoursOld = Math.max(1, (Date.now() - new Date(post.createdAt || Date.now()).getTime()) / (1000 * 60 * 60));
+    const velocity = score / hoursOld;
+    
+    // Recency bonus (decays over time)
+    const recencyBonus = Math.max(0, 10 - hoursOld / 2.4);
+    
+    const [existing] = await db.select().from(feedEngagementScores).where(eq(feedEngagementScores.postId, postId));
+    
+    if (existing) {
+      await db.update(feedEngagementScores)
+        .set({ 
+          engagementScore: score.toFixed(4), 
+          velocityScore: velocity.toFixed(4),
+          recencyBonus: recencyBonus.toFixed(4),
+          calculatedAt: new Date()
+        })
+        .where(eq(feedEngagementScores.postId, postId));
+    } else {
+      await db.insert(feedEngagementScores).values({
+        postId,
+        engagementScore: score.toFixed(4),
+        velocityScore: velocity.toFixed(4),
+        recencyBonus: recencyBonus.toFixed(4),
+      });
+    }
+  }
+
+  async incrementPostViews(postId: string): Promise<void> {
+    await db
+      .update(socialPosts)
+      .set({ viewsCount: sql`COALESCE(${socialPosts.viewsCount}, 0) + 1` })
+      .where(eq(socialPosts.id, postId));
+  }
+
+  async incrementPostShares(postId: string): Promise<void> {
+    await db
+      .update(socialPosts)
+      .set({ sharesCount: sql`COALESCE(${socialPosts.sharesCount}, 0) + 1` })
+      .where(eq(socialPosts.id, postId));
+  }
+
+  // Username and system account operations
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
+    return user;
+  }
+
+  async updateUsername(userId: string, username: string): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ username: username.toLowerCase(), updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async getSystemAccount(type: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.isSystemAccount, true), eq(users.systemAccountType, type)));
+    return user;
+  }
+
+  async createSystemAccount(data: { email: string; username: string; firstName: string; lastName: string; type: string; bio?: string; profileImageUrl?: string }): Promise<User> {
+    const [user] = await db.insert(users).values({
+      email: data.email,
+      username: data.username.toLowerCase(),
+      firstName: data.firstName,
+      lastName: data.lastName,
+      bio: data.bio,
+      profileImageUrl: data.profileImageUrl,
+      isSystemAccount: true,
+      systemAccountType: data.type,
+      isVerified: true,
+      isActive: true,
+    }).returning();
+    return user;
+  }
+
+  // Enhanced social post operations
+  async createSocialPostWithOptions(post: { authorId: string; content: string; images?: string[]; videos?: string[]; replyRestriction?: string; mentionedUserIds?: string[]; hashtags?: string[]; isFromSystemAccount?: boolean }): Promise<SocialPost> {
+    const [created] = await db.insert(socialPosts).values({
+      authorId: post.authorId,
+      content: post.content,
+      images: post.images || [],
+      videos: post.videos || [],
+      replyRestriction: (post.replyRestriction as any) || 'everyone',
+      mentionedUserIds: post.mentionedUserIds || [],
+      hashtags: post.hashtags || [],
+      isFromSystemAccount: post.isFromSystemAccount || false,
+    }).returning();
+    
+    // Calculate initial engagement score
+    await this.updatePostEngagementScore(created.id);
+    
+    return created;
+  }
+
+  async updateSocialPost(postId: string, data: Partial<SocialPost>): Promise<SocialPost> {
+    const [updated] = await db
+      .update(socialPosts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(socialPosts.id, postId))
+      .returning();
+    return updated;
+  }
+
+  async pinPost(postId: string): Promise<void> {
+    await db.update(socialPosts).set({ isPinned: true }).where(eq(socialPosts.id, postId));
+  }
+
+  async unpinPost(postId: string): Promise<void> {
+    await db.update(socialPosts).set({ isPinned: false }).where(eq(socialPosts.id, postId));
+  }
+
+  async getUserPinnedPosts(userId: string): Promise<(SocialPost & { author: User })[]> {
+    const results = await db
+      .select()
+      .from(socialPosts)
+      .leftJoin(users, eq(socialPosts.authorId, users.id))
+      .where(and(eq(socialPosts.authorId, userId), eq(socialPosts.isPinned, true)))
+      .orderBy(desc(socialPosts.createdAt));
+
+    return results
+      .filter(r => r.social_posts && r.users)
+      .map(r => ({
+        ...r.social_posts!,
+        author: r.users!,
       }));
   }
 

@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   password: varchar("password"), // Hashed password using bcrypt (nullable for migration from OAuth users)
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  username: varchar("username", { length: 30 }).unique(), // @username for mentions and profile URLs
   profileImageUrl: varchar("profile_image_url"),
   coverImageUrl: varchar("cover_image_url"), // Profile cover/banner image
   role: userRoleEnum("role").notNull().default("buyer"),
@@ -44,7 +45,13 @@ export const users = pgTable("users", {
   // Campus-specific fields
   phoneNumber: varchar("phone_number").unique(), // UNIQUE - one account per phone
   location: varchar("location"), // Campus area/hostel
+  latitude: decimal("latitude", { precision: 10, scale: 7 }), // GPS coordinates for real-time location
+  longitude: decimal("longitude", { precision: 10, scale: 7 }), // GPS coordinates for real-time location
+  lastLocationUpdate: timestamp("last_location_update"), // When location was last updated
   bio: text("bio"),
+  // System account flags
+  isSystemAccount: boolean("is_system_account").default(false), // @EKSUPlug official bot
+  systemAccountType: varchar("system_account_type", { length: 20 }), // "official_bot", "support", etc
   // Verification fields
   isVerified: boolean("is_verified").default(false),
   verificationBadges: text("verification_badges").array().default(sql`ARRAY[]::text[]`), // ["email", "phone", "student_id", "nin"]
@@ -1533,6 +1540,9 @@ export const completeGameSchema = z.object({
   winnerId: z.string(),
 });
 
+// Reply restriction enum - who can reply to posts (Twitter/X style)
+export const replyRestrictionEnum = pgEnum("reply_restriction", ["everyone", "verified", "followers", "mentioned"]);
+
 // Social feed posts ("The Plug")
 export const socialPosts = pgTable("social_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1543,12 +1553,20 @@ export const socialPosts = pgTable("social_posts", {
   likesCount: integer("likes_count").default(0),
   commentsCount: integer("comments_count").default(0),
   repostsCount: integer("reposts_count").default(0),
+  sharesCount: integer("shares_count").default(0), // Share/copy link count
+  viewsCount: integer("views_count").default(0), // Post impressions
+  replyRestriction: replyRestrictionEnum("reply_restriction").default("everyone"), // Who can reply
+  mentionedUserIds: text("mentioned_user_ids").array().default(sql`ARRAY[]::text[]`), // Users mentioned in post
+  hashtags: text("hashtags").array().default(sql`ARRAY[]::text[]`), // Extracted hashtags
+  isPinned: boolean("is_pinned").default(false), // Pinned to profile
+  isFromSystemAccount: boolean("is_from_system_account").default(false), // Posted by @EKSUPlug
   isVisible: boolean("is_visible").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_social_posts_author").on(table.authorId),
   index("idx_social_posts_created").on(table.createdAt),
+  index("idx_social_posts_system").on(table.isFromSystemAccount),
 ]);
 
 // Social post likes
@@ -1585,14 +1603,64 @@ export const socialPostReposts = pgTable("social_post_reposts", {
   index("idx_reposts_reposter").on(table.reposterId),
 ]);
 
+// Blocked users table - for user blocking functionality
+export const blockedUsers = pgTable("blocked_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  blockerId: varchar("blocker_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  blockedId: varchar("blocked_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason"), // Optional reason for blocking
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_blocked_blocker").on(table.blockerId),
+  index("idx_blocked_blocked").on(table.blockedId),
+]);
+
+// Post bookmarks (saved posts)
+export const postBookmarks = pgTable("post_bookmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_bookmarks_user").on(table.userId),
+  index("idx_bookmarks_post").on(table.postId),
+]);
+
+// Feed algorithm engagement scores
+export const feedEngagementScores = pgTable("feed_engagement_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  engagementScore: decimal("engagement_score", { precision: 10, scale: 4 }).default("0"), // Calculated score
+  velocityScore: decimal("velocity_score", { precision: 10, scale: 4 }).default("0"), // Recent engagement rate
+  recencyBonus: decimal("recency_bonus", { precision: 10, scale: 4 }).default("0"), // Time decay factor
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+}, (table) => [
+  index("idx_engagement_post").on(table.postId),
+  index("idx_engagement_score").on(table.engagementScore),
+]);
+
 // Insert schemas for social posts
 export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({
   id: true,
   likesCount: true,
   commentsCount: true,
   repostsCount: true,
+  sharesCount: true,
+  viewsCount: true,
   createdAt: true,
   updatedAt: true,
+});
+
+// Insert schemas for blocked users
+export const insertBlockedUserSchema = createInsertSchema(blockedUsers).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Insert schemas for post bookmarks
+export const insertPostBookmarkSchema = createInsertSchema(postBookmarks).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertSocialPostCommentSchema = createInsertSchema(socialPostComments).omit({
@@ -1613,6 +1681,11 @@ export type SocialPostComment = typeof socialPostComments.$inferSelect;
 export type InsertSocialPostComment = z.infer<typeof insertSocialPostCommentSchema>;
 export type SocialPostRepost = typeof socialPostReposts.$inferSelect;
 export type InsertSocialPostRepost = z.infer<typeof insertSocialPostRepostSchema>;
+export type BlockedUser = typeof blockedUsers.$inferSelect;
+export type InsertBlockedUser = z.infer<typeof insertBlockedUserSchema>;
+export type PostBookmark = typeof postBookmarks.$inferSelect;
+export type InsertPostBookmark = z.infer<typeof insertPostBookmarkSchema>;
+export type FeedEngagementScore = typeof feedEngagementScores.$inferSelect;
 
 // Password reset tokens table
 export const passwordResetTokens = pgTable("password_reset_tokens", {
