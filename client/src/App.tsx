@@ -35,7 +35,7 @@ const WishlistPage = lazy(() => import("@/pages/wishlist"));
 const VtuPage = lazy(() => import("@/pages/vtu"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
 const LegalPage = lazy(() => import("@/pages/legal"));
-const KycPage = lazy(() => import("@/pages/kyc"));
+const KYCVerification = lazy(() => import("@/pages/kyc-verification"));
 
 function PageLoadingSpinner() {
   return (
@@ -203,7 +203,7 @@ function Router() {
             )} />
             <Route path="/kyc" component={() => (
               <ErrorBoundary>
-                <KycPage />
+                <KYCVerification />
               </ErrorBoundary>
             )} />
             <Route component={() => (

@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [usernameConfirmation, setUsernameConfirmation] = useState("");
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<UserSettings>({
     queryKey: ["/api/settings"],
@@ -238,6 +239,66 @@ export default function SettingsPage() {
     requestDeletionMutation.mutate(usernameConfirmation);
   };
 
+  const handleGetLocation = () => {
+    setIsGettingLocation(true);
+
+    if (!navigator.geolocation) {
+      toast({
+        title: "Location Not Supported",
+        description: "Your browser does not support geolocation.",
+        variant: "destructive",
+      });
+      setIsGettingLocation(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        updateSettingsMutation.mutate(
+          { latitude: latitude.toString(), longitude: longitude.toString() },
+          {
+            onSuccess: () => {
+              toast({
+                title: "Location Updated",
+                description: "Your location has been successfully updated.",
+              });
+              setIsGettingLocation(false);
+            },
+            onError: () => {
+              setIsGettingLocation(false);
+            },
+          }
+        );
+      },
+      (error) => {
+        let errorMessage = "Failed to get your location.";
+        switch (error.code) {
+          case 1:
+            errorMessage = "Location access was denied. Please allow location access in your browser settings.";
+            break;
+          case 2:
+            errorMessage = "Location information is unavailable. Please try again later.";
+            break;
+          case 3:
+            errorMessage = "Location request timed out. Please try again.";
+            break;
+        }
+        toast({
+          title: "Location Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setIsGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const isLoading = authLoading || settingsLoading;
 
   if (isLoading || !user) {
@@ -362,6 +423,22 @@ export default function SettingsPage() {
                     </span>
                   </div>
                 )}
+                <Button
+                  onClick={handleGetLocation}
+                  disabled={isGettingLocation || updateSettingsMutation.isPending}
+                  className="mt-3 w-full"
+                  data-testid="button-update-location"
+                >
+                  {isGettingLocation ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <MapPin className="h-4 w-4 mr-2" />
+                  )}
+                  Update My Location
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Your location helps buyers see how close you are and estimate delivery times.
+                </p>
               </div>
             </CardContent>
           </Card>
