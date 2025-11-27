@@ -1,0 +1,127 @@
+You are a senior full-stack developer. Generate FULL working code (no placeholders, no "TODO", no mockups) for my live project: https://eksu-digital-marketplace.onrender.com
+
+Stack: React 18 + Vite + Tailwind CSS + Flask + Supabase + Render
+
+Implement ALL these ADVANCED features and fixes — 100% production-ready, mobile-perfect (Android Chrome):
+
+1. BULLETPROOF MULTI-EMAIL SYSTEM
+Create: server/utils/email_service.py
+- Use Resend, Brevo, Mailgun + Gmail fallback (toluchris95@gmail.com via app password)
+- Random pick → auto retry → track usage in Supabase "email_usage"
+- Never exceed free limits
+- Use for ALL emails
+
+2. FULL FACE + NIN VERIFICATION (Advanced)
+Create: src/pages/VerifyIdentity.jsx + server/routes/verification.py
+- Terms → Form → Pay ₦100 Paystack Inline
+- Real SMEDATA.NG API call → get NIN photo
+- Live selfie + blink liveness detection
+- face-api.js in-browser comparison
+- Auto-pending + admin final approval
+- On approve → Verified badge + show department/level/name
+- Hide section when verified
+
+3. DAILY LOGIN STREAK + FREE REWARD
+- Show "12 Day Streak"
+- Every 7 days → ₦20 auto wallet credit
+- Fire popup: "Keep it going!"
+
+4. INSTAGRAM STORIES (Premium)
+- Top bar with rings
+- Your Story first
+- Full-screen swipe + auto-delete 24h
+- Viewers list
+
+5. ANONYMOUS CONFESSION BOARD (Fess.ng Killer)
+- Mood emojis + anonymous replies
+- Reactions + share with WhatsApp preview
+- Viral confessions pinned
+
+6. LIVE FEED (The Plug) — TikTok Level
+- Auto refresh every 12s
+- New posts slide in with "New"
+- For You (smart algo + location) / Following
+- Pull to refresh
+
+7. SMART REAL-TIME LOCATION (Advanced & Silent)
+- Get lat/long silently on load (navigator.geolocation + high accuracy)
+- No permission popup — fallback to IP if denied
+- Smart display under every username:
+  → < 3km: "2.3km away · EKSU Campus"
+  → 3–15km: "In Ado-Ekiti"
+  → 15–100km: "In Ekiti State"
+  → >100km: "Far away · Outside Ekiti"
+  → On EKSU campus (within 1km of 7.6451, 5.2247): "On Campus · EKSU"
+- Use in feed ranking: campus users first
+
+8. INSANE GAMES SECTION (Advanced Multiplayer)
+Create: src/games/
+- Ludo: 2–4 players, 1/2/3 dice option, capture, safe zones, dice roll animation, voice chat, rematch
+- Whot: Full Nigerian rules, market, hold on, etc.
+- Word Battle: Timed, dictionary check, power-ups
+- Speed Typing: Race with live leaderboard
+- Quick Draw: Real-time drawing + guessing
+- Campus Trivia: EKSU-only questions (lecturers, hostels, events)
+- All real-time multiplayer via Supabase Realtime + presence
+
+9. MESSAGES (Full WhatsApp Clone)
+- Real-time (no refresh)
+- Delete for everyone
+- Disappearing messages (24h / 7 days)
+- Archive chats (swipe left)
+- Media upload + preview
+- iPhone emoji picker
+- Click user → profile popup
+
+10. REVIEWS + RATINGS
+- After transaction → both can rate 1–5 stars + comment
+- Show on profile: "4.9 ★ · 342 reviews"
+
+11. COMMUNITY TAB (In The Plug)
+- Sub-tabs: Events, Lost & Found, Buy/Sell Groups, Announcements
+- Pinned posts from @EKSUPlug
+
+12. OFFICIAL @EKSUPlug ACCOUNT
+- Auto-follow everyone
+- Auto welcome DM
+- Crown badge on posts
+
+13. CHATBOT (Pro)
+- Groq llama3-70b
+- Voice input + delete + "New Chat"
+- "Talk to Rep" → live queue
+
+14. PROFILE & NAVIGATION (Clean)
+- Group: Settings → Privacy, Legal, Help
+- Hide clutter
+- Fix "Selling" tab — only show actual seller posts
+
+15. WEB PUSH NOTIFICATIONS
+- Story view, confession reaction, new message, streak reward, game invite
+
+16. FIX ALL BUGS
+- MIME type lazy loading
+- 404 routes
+- Keyboard jumping
+- Block/report
+- Media upload
+- Lightning fast (React Query, skeletons, lazy images)
+
+Generate COMPLETE files with 100% working code:
+- All React components
+- Flask routes
+- Supabase schema SQL
+- Environment variables list
+- Paystack + SMEDATA + Groq + face-api.js
+- Multi-email system
+- Ludo with real dice animation
+- Smart location logic
+- Messages with archive + disappearing
+- Reviews + Community tab
+- Games with voice chat
+
+Code must run perfectly on Android Chrome.
+Make this the most addictive, smartest, fastest, most trusted campus app in Nigeria.
+Students must live inside it.
+Do it now — full working code only.
+Let algorithm be fear and work well too please
