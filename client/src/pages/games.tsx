@@ -67,6 +67,10 @@ import type { Game, User as UserType, Wallet } from "@shared/schema";
 import LudoGame from "@/components/games/LudoGame";
 import WordBattleGame from "@/components/games/WordBattleGame";
 import TriviaGame from "@/components/games/TriviaGame";
+import SpeedTypingGame from "@/components/games/SpeedTypingGame";
+import WhotGame from "@/components/games/WhotGame";
+import TruthOrDareGame from "@/components/games/TruthOrDareGame";
+import GuessThePriceGame from "@/components/games/GuessThePriceGame";
 
 type GameWithPlayer = Game & { player1: UserType };
 
@@ -173,10 +177,10 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
     description: "The classic party game! Reveal truths or complete dares.",
     icon: Heart,
     color: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    stakeAmounts: ["100", "200", "500"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000"],
     platformFee: 10,
-    playerType: "Multiplayer",
-    supportsSinglePlayer: false,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
     supportsMultiplayer: true,
   },
   guess_the_price: {
@@ -468,6 +472,14 @@ export default function GamesPage() {
         return <WordBattleGame {...commonProps} />;
       case "trivia":
         return <TriviaGame {...commonProps} />;
+      case "speed_typing":
+        return <SpeedTypingGame {...commonProps} />;
+      case "whot":
+        return <WhotGame {...commonProps} />;
+      case "truth_or_dare":
+        return <TruthOrDareGame {...commonProps} />;
+      case "guess_the_price":
+        return <GuessThePriceGame {...commonProps} />;
       default:
         return (
           <Card className="p-8 text-center">
