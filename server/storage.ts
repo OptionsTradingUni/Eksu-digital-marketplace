@@ -47,6 +47,9 @@ import {
   negotiations,
   orders,
   orderStatusHistory,
+  userBlocks,
+  userMutes,
+  userReports,
   type User,
   type UpsertUser,
   type Product,
@@ -123,6 +126,12 @@ import {
   type InsertOrder,
   type OrderStatusHistory,
   type InsertOrderStatusHistory,
+  type UserBlock,
+  type InsertUserBlock,
+  type UserMute,
+  type InsertUserMute,
+  type UserReport,
+  type InsertUserReport,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -430,6 +439,18 @@ export interface IStorage {
   updateOrderStatus(orderId: string, status: string, changedBy: string, notes?: string): Promise<Order>;
   addOrderStatusHistory(history: InsertOrderStatusHistory): Promise<OrderStatusHistory>;
   getOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]>;
+  
+  // User relationship operations (block/mute/report)
+  blockUser(blockerId: string, blockedId: string): Promise<UserBlock>;
+  unblockUser(blockerId: string, blockedId: string): Promise<void>;
+  muteUser(muterId: string, mutedId: string): Promise<UserMute>;
+  unmuteUser(muterId: string, mutedId: string): Promise<void>;
+  isUserBlocked(userId: string, targetId: string): Promise<boolean>;
+  isUserMuted(userId: string, targetId: string): Promise<boolean>;
+  getBlockedUsers(userId: string): Promise<(UserBlock & { blockedUser: User })[]>;
+  getMutedUsers(userId: string): Promise<(UserMute & { mutedUser: User })[]>;
+  createUserReport(data: InsertUserReport): Promise<UserReport>;
+  getUserRelationship(userId: string, targetId: string): Promise<{ isBlocked: boolean; isMuted: boolean; isBlockedByTarget: boolean }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3258,6 +3279,116 @@ export class DatabaseStorage implements IStorage {
       .from(orderStatusHistory)
       .where(eq(orderStatusHistory.orderId, orderId))
       .orderBy(desc(orderStatusHistory.createdAt));
+  }
+
+  // User relationship operations (block/mute/report)
+  async blockUser(blockerId: string, blockedId: string): Promise<UserBlock> {
+    const existing = await db
+      .select()
+      .from(userBlocks)
+      .where(and(eq(userBlocks.blockerId, blockerId), eq(userBlocks.blockedId, blockedId)));
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [block] = await db.insert(userBlocks).values({ blockerId, blockedId }).returning();
+    return block;
+  }
+
+  async unblockUser(blockerId: string, blockedId: string): Promise<void> {
+    await db
+      .delete(userBlocks)
+      .where(and(eq(userBlocks.blockerId, blockerId), eq(userBlocks.blockedId, blockedId)));
+  }
+
+  async muteUser(muterId: string, mutedId: string): Promise<UserMute> {
+    const existing = await db
+      .select()
+      .from(userMutes)
+      .where(and(eq(userMutes.muterId, muterId), eq(userMutes.mutedId, mutedId)));
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [mute] = await db.insert(userMutes).values({ muterId, mutedId }).returning();
+    return mute;
+  }
+
+  async unmuteUser(muterId: string, mutedId: string): Promise<void> {
+    await db
+      .delete(userMutes)
+      .where(and(eq(userMutes.muterId, muterId), eq(userMutes.mutedId, mutedId)));
+  }
+
+  async isUserBlocked(userId: string, targetId: string): Promise<boolean> {
+    const [block] = await db
+      .select()
+      .from(userBlocks)
+      .where(and(eq(userBlocks.blockerId, userId), eq(userBlocks.blockedId, targetId)));
+    return !!block;
+  }
+
+  async isUserMuted(userId: string, targetId: string): Promise<boolean> {
+    const [mute] = await db
+      .select()
+      .from(userMutes)
+      .where(and(eq(userMutes.muterId, userId), eq(userMutes.mutedId, targetId)));
+    return !!mute;
+  }
+
+  async getBlockedUsers(userId: string): Promise<(UserBlock & { blockedUser: User })[]> {
+    const blocks = await db
+      .select()
+      .from(userBlocks)
+      .where(eq(userBlocks.blockerId, userId))
+      .orderBy(desc(userBlocks.createdAt));
+    
+    const result: (UserBlock & { blockedUser: User })[] = [];
+    for (const block of blocks) {
+      const [blockedUser] = await db.select().from(users).where(eq(users.id, block.blockedId));
+      if (blockedUser) {
+        result.push({ ...block, blockedUser });
+      }
+    }
+    return result;
+  }
+
+  async getMutedUsers(userId: string): Promise<(UserMute & { mutedUser: User })[]> {
+    const mutes = await db
+      .select()
+      .from(userMutes)
+      .where(eq(userMutes.muterId, userId))
+      .orderBy(desc(userMutes.createdAt));
+    
+    const result: (UserMute & { mutedUser: User })[] = [];
+    for (const mute of mutes) {
+      const [mutedUser] = await db.select().from(users).where(eq(users.id, mute.mutedId));
+      if (mutedUser) {
+        result.push({ ...mute, mutedUser });
+      }
+    }
+    return result;
+  }
+
+  async createUserReport(data: InsertUserReport): Promise<UserReport> {
+    const [report] = await db.insert(userReports).values(data).returning();
+    return report;
+  }
+
+  async getUserRelationship(userId: string, targetId: string): Promise<{ isBlocked: boolean; isMuted: boolean; isBlockedByTarget: boolean }> {
+    const [isBlockedResult, isMutedResult, isBlockedByTargetResult] = await Promise.all([
+      this.isUserBlocked(userId, targetId),
+      this.isUserMuted(userId, targetId),
+      this.isUserBlocked(targetId, userId),
+    ]);
+    
+    return {
+      isBlocked: isBlockedResult,
+      isMuted: isMutedResult,
+      isBlockedByTarget: isBlockedByTargetResult,
+    };
   }
 }
 

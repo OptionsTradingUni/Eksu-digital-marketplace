@@ -26,6 +26,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
+import { UserActionsMenu } from "@/components/UserActionsMenu";
 import type { Message, User } from "@shared/schema";
 import { useSearch } from "wouter";
 
@@ -854,6 +855,14 @@ export default function Messages() {
                 <WifiOff className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
+            
+            {/* User actions menu (mute/block/report) */}
+            {selectedThread && (
+              <UserActionsMenu
+                targetUserId={selectedThread.user.id}
+                targetUserName={selectedThread.user.firstName || selectedThread.user.email || "User"}
+              />
+            )}
           </div>
 
           {/* Messages */}

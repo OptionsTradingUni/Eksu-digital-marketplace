@@ -4951,6 +4951,185 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
+  // ==================== USER RELATIONSHIPS (Block/Mute/Report) ====================
+
+  // Block a user
+  app.post("/api/users/:id/block", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      if (targetId === userId) {
+        return res.status(400).json({ message: "You cannot block yourself" });
+      }
+
+      const targetUser = await storage.getUser(targetId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const block = await storage.blockUser(userId, targetId);
+      res.json({ success: true, block });
+    } catch (error) {
+      console.error("Error blocking user:", error);
+      res.status(500).json({ message: "Failed to block user" });
+    }
+  });
+
+  // Unblock a user
+  app.delete("/api/users/:id/block", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      await storage.unblockUser(userId, targetId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unblocking user:", error);
+      res.status(500).json({ message: "Failed to unblock user" });
+    }
+  });
+
+  // Mute a user
+  app.post("/api/users/:id/mute", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      if (targetId === userId) {
+        return res.status(400).json({ message: "You cannot mute yourself" });
+      }
+
+      const targetUser = await storage.getUser(targetId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const mute = await storage.muteUser(userId, targetId);
+      res.json({ success: true, mute });
+    } catch (error) {
+      console.error("Error muting user:", error);
+      res.status(500).json({ message: "Failed to mute user" });
+    }
+  });
+
+  // Unmute a user
+  app.delete("/api/users/:id/mute", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      await storage.unmuteUser(userId, targetId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unmuting user:", error);
+      res.status(500).json({ message: "Failed to unmute user" });
+    }
+  });
+
+  // Report a user
+  app.post("/api/users/:id/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      if (targetId === userId) {
+        return res.status(400).json({ message: "You cannot report yourself" });
+      }
+
+      const targetUser = await storage.getUser(targetId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { reason, description } = req.body;
+      if (!reason) {
+        return res.status(400).json({ message: "Reason is required" });
+      }
+
+      const validReasons = ["spam", "harassment", "scam", "inappropriate", "other"];
+      if (!validReasons.includes(reason)) {
+        return res.status(400).json({ message: "Invalid reason" });
+      }
+
+      const report = await storage.createUserReport({
+        reporterId: userId,
+        reportedId: targetId,
+        reason,
+        description: description || null,
+      });
+
+      res.json({ success: true, report });
+    } catch (error) {
+      console.error("Error reporting user:", error);
+      res.status(500).json({ message: "Failed to report user" });
+    }
+  });
+
+  // Get list of blocked users
+  app.get("/api/users/blocked", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const blockedUsers = await storage.getBlockedUsers(userId);
+      res.json(blockedUsers);
+    } catch (error) {
+      console.error("Error fetching blocked users:", error);
+      res.status(500).json({ message: "Failed to fetch blocked users" });
+    }
+  });
+
+  // Get list of muted users
+  app.get("/api/users/muted", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const mutedUsers = await storage.getMutedUsers(userId);
+      res.json(mutedUsers);
+    } catch (error) {
+      console.error("Error fetching muted users:", error);
+      res.status(500).json({ message: "Failed to fetch muted users" });
+    }
+  });
+
+  // Get relationship status with a user
+  app.get("/api/users/:id/relationship", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const targetId = req.params.id;
+      const relationship = await storage.getUserRelationship(userId, targetId);
+      res.json(relationship);
+    } catch (error) {
+      console.error("Error fetching user relationship:", error);
+      res.status(500).json({ message: "Failed to fetch user relationship" });
+    }
+  });
+
   // Create HTTP server
   const httpServer = createServer(app);
 

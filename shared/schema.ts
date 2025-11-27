@@ -1713,3 +1713,66 @@ export type OrderStatusHistory = typeof orderStatusHistory.$inferSelect;
 export type InsertOrderStatusHistory = z.infer<typeof insertOrderStatusHistorySchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+
+// User blocks - prevents all interaction
+export const userBlocks = pgTable("user_blocks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  blockerId: varchar("blocker_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  blockedId: varchar("blocked_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("user_blocks_blocker_idx").on(table.blockerId)]);
+
+// User mutes - hides content, user can still message
+export const userMutes = pgTable("user_mutes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  muterId: varchar("muter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mutedId: varchar("muted_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("user_mutes_muter_idx").on(table.muterId)]);
+
+// User reports - for admin review
+export const userReports = pgTable("user_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reportedId: varchar("reported_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  description: text("description"),
+  status: varchar("status").notNull().default("pending"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Insert schemas for user blocks, mutes, reports
+export const insertUserBlockSchema = createInsertSchema(userBlocks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserMuteSchema = createInsertSchema(userMutes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserReportSchema = createInsertSchema(userReports).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+  reviewedBy: true,
+  reviewedAt: true,
+});
+
+// API schema for creating user reports
+export const createUserReportSchema = z.object({
+  reason: z.enum(["spam", "harassment", "scam", "inappropriate", "other"]),
+  description: z.string().optional(),
+});
+
+// TypeScript types for user blocks, mutes, reports
+export type UserBlock = typeof userBlocks.$inferSelect;
+export type InsertUserBlock = z.infer<typeof insertUserBlockSchema>;
+export type UserMute = typeof userMutes.$inferSelect;
+export type InsertUserMute = z.infer<typeof insertUserMuteSchema>;
+export type UserReport = typeof userReports.$inferSelect;
+export type InsertUserReport = z.infer<typeof insertUserReportSchema>;
+export type CreateUserReportInput = z.infer<typeof createUserReportSchema>;
