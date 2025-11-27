@@ -116,7 +116,47 @@ The EKSU Marketplace includes an official system account ("Campus Hub") that pro
 - **Features:** Disabled by default; admin can enable via platform settings
 - **Metrics:** Impression and click tracking with cost calculations
 
-### KYC Verification (Pending Implementation)
+### KYC Verification System
+- **Location:** `/kyc` page
 - **Tables:** `kyc_verifications`, `kyc_verification_logs`
-- **Flow:** 200 NGN fee, NIN verification, selfie matching (85%+ auto-approve, 70-84% manual review, <70% reject)
-- **Status:** Tables created, full implementation pending
+- **6-Step Wizard Flow:**
+  1. Terms & Conditions acceptance
+  2. Information collection (Full Name, DOB, NIN, Phone)
+  3. Payment (₦500 verification fee with mock PayStack)
+  4. Camera selfie capture with liveness detection prompts
+  5. Processing/verification step
+  6. Results display (verified badge or retry option)
+- **Features:** Camera access via getUserMedia, liveness prompts (blink, turn head, look up, smile), base64 image capture
+
+### X/Twitter-Style Social Features
+- **The Plug Feed:** Enhanced with For You/Following tabs, bookmark functionality, view/share tracking, EKSUPlug official badge styling
+- **Profile Page:** Cover photo, large avatar, username display, pinned posts section, Posts/Selling/Likes/Media tabs
+- **Feed Algorithm:** Smart scoring based on engagement, recency, and user relationships
+- **Database Schema:** Added `replyRestriction`, `locationLatitude`, `locationLongitude`, bookmarks table, post views/shares tracking
+
+### Privacy & Safety Settings
+- **Location:** `/settings` page, Privacy tab (4th tab)
+- **Blocked Accounts:** View and unblock users you've blocked
+- **Muted Accounts:** View and unmute users you've muted
+- **API Endpoints:** `/api/blocked-users`, `/api/users/muted`
+
+### Enhanced ChatBot
+- **Voice Input:** Web Speech API integration with microphone button
+- **Message Deletion:** Trash icon on hover for user messages
+- **Back Navigation:** Proper browser history navigation
+
+### Geolocation Feature
+- **Location:** Settings page, General tab
+- **Update Location Button:** Uses navigator.geolocation to get current coordinates
+- **Error Handling:** Permission denied, position unavailable, timeout, unsupported browsers
+- **Distance Display:** Shows distance from campus on product cards and profiles
+
+### Chat/Messages Routing
+- **Routes:** `/messages`, `/messages/:userId`, `/chat/:userId`
+- **Query Param Support:** Also supports `?user=userId` format
+
+### Performance Optimizations
+- **Code Splitting:** All pages use React.lazy() with Suspense fallback
+- **React Query Caching:** staleTime: 30s, gcTime: 5 minutes
+- **Image Lazy Loading:** All images use `loading="lazy"` attribute
+- **Skeleton Loaders:** Used across pages during data fetching
