@@ -45,12 +45,12 @@ export default function WalletPage() {
   });
 
   const { data: banks, isLoading: banksLoading } = useQuery<Bank[]>({
-    queryKey: ["/api/monnify/banks"],
+    queryKey: ["/api/squad/banks"],
   });
 
   const verifyAccountMutation = useMutation({
     mutationFn: async ({ accountNumber, bankCode }: { accountNumber: string; bankCode: string }) => {
-      const response = await fetch(`/api/monnify/verify-account?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
+      const response = await fetch(`/api/squad/verify-account?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -88,7 +88,7 @@ export default function WalletPage() {
 
   const depositMutation = useMutation({
     mutationFn: async (amount: string) => {
-      const response = await apiRequest("POST", "/api/monnify/initialize", { 
+      const response = await apiRequest("POST", "/api/squad/initialize", { 
         amount,
         purpose: "wallet_deposit",
         paymentDescription: `Wallet deposit of ₦${parseFloat(amount).toLocaleString()}`,
@@ -116,7 +116,7 @@ export default function WalletPage() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: { amount: string; bankName: string; accountNumber: string; accountName: string; bankCode: string }) => {
-      const response = await apiRequest("POST", "/api/monnify/withdraw", data);
+      const response = await apiRequest("POST", "/api/squad/withdraw", data);
       return response.json();
     },
     onSuccess: () => {

@@ -53,10 +53,10 @@ export default function CheckoutPage() {
   const walletBalance = wallet ? parseFloat(wallet.balance as string) : 0;
 
   const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE * 100) / 100;
-  const monnifyFeeEstimate = paymentMethod === "monnify" 
-    ? Math.min(Math.round((subtotal * 0.015 + (subtotal >= 2500 ? 50 : 0)) * 100) / 100, 2000) 
+  const squadFeeEstimate = paymentMethod === "squad" 
+    ? Math.min(Math.round(subtotal * 0.01 * 100) / 100, 1000)
     : 0;
-  const total = subtotal + platformFee + monnifyFeeEstimate;
+  const total = subtotal + platformFee + squadFeeEstimate;
 
   const createOrderMutation = useMutation({
     mutationFn: async (data: { 
@@ -81,13 +81,13 @@ export default function CheckoutPage() {
     },
   });
 
-  const initializeMonnifyMutation = useMutation({
+  const initializeSquadMutation = useMutation({
     mutationFn: async (data: {
       amount: string;
       purpose: string;
       paymentDescription: string;
     }) => {
-      const res = await apiRequest("POST", "/api/monnify/initialize", data);
+      const res = await apiRequest("POST", "/api/squad/initialize", data);
       return res.json();
     },
   });
@@ -161,9 +161,9 @@ export default function CheckoutPage() {
           deliveryNotes: deliveryNotes || undefined,
         }));
 
-        const result = await initializeMonnifyMutation.mutateAsync({
+        const result = await initializeSquadMutation.mutateAsync({
           amount: total.toFixed(2),
-          purpose: "escrow_payment",
+          purpose: "checkout_payment",
           paymentDescription: `Purchase of ${cartItems.length} item(s) from EKSU Marketplace`,
         });
 
@@ -267,7 +267,7 @@ export default function CheckoutPage() {
 
   const isProcessing = createOrderMutation.isPending || 
     walletPaymentMutation.isPending || 
-    initializeMonnifyMutation.isPending;
+    initializeSquadMutation.isPending;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -431,21 +431,22 @@ export default function CheckoutPage() {
                     </p>
                     {walletBalance < total && paymentMethod === "wallet" && (
                       <p className="text-sm text-destructive mt-1">
-                        Insufficient balance. Please fund your wallet or use Monnify.
+                        Insufficient balance. Please fund your wallet or use Bank Transfer.
                       </p>
                     )}
                   </Label>
                 </div>
 
-                <div className="flex items-center space-x-3 rounded-md border p-4 hover-elevate">
-                  <RadioGroupItem value="monnify" id="monnify" data-testid="radio-monnify" />
-                  <Label htmlFor="monnify" className="flex-1 cursor-pointer">
+                <div className="flex items-center space-x-3 rounded-md border-2 border-green-300 dark:border-green-600 p-4 bg-green-50 dark:bg-green-950/30 hover-elevate">
+                  <RadioGroupItem value="squad" id="squad" data-testid="radio-squad" />
+                  <Label htmlFor="squad" className="flex-1 cursor-pointer">
                     <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Pay with Monnify (Card/Transfer)</span>
+                      <CreditCard className="h-4 w-4 text-green-600" />
+                      <span className="font-medium text-green-700 dark:text-green-400">Pay with Bank Transfer</span>
+                      <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Instant</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Pay with debit card, bank transfer, or USSD
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                      Instant settlement (T+0) - Fastest option for order confirmation
                     </p>
                   </Label>
                 </div>
@@ -468,10 +469,10 @@ export default function CheckoutPage() {
                 <span className="text-muted-foreground">Platform Fee (3.5%)</span>
                 <span data-testid="text-platform-fee">₦{platformFee.toLocaleString()}</span>
               </div>
-              {paymentMethod === "monnify" && (
+              {paymentMethod === "squad" && (
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Monnify Fee</span>
-                  <span data-testid="text-monnify-fee">₦{monnifyFeeEstimate.toLocaleString()}</span>
+                  <span className="text-muted-foreground">Payment Fee</span>
+                  <span data-testid="text-payment-fee">₦{squadFeeEstimate.toLocaleString()}</span>
                 </div>
               )}
               <Separator />
@@ -508,7 +509,7 @@ export default function CheckoutPage() {
                     ) : (
                       <>
                         <CreditCard className="mr-2 h-4 w-4" />
-                        Pay with Monnify
+                        Pay ₦{total.toLocaleString()} (Instant)
                       </>
                     )}
                   </>
