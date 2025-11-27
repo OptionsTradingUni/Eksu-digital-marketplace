@@ -51,6 +51,7 @@ import {
   createGiftDataApiSchema,
   payBillSchema,
   validateCustomerSchema,
+  createStorySchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
@@ -7708,6 +7709,1013 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error recording ad click:", error);
       res.status(500).json({ message: "Failed to record click" });
+    }
+  });
+
+  // ========================================
+  // Stories API Routes (Instagram-like 24h stories)
+  // ========================================
+  
+  // POST /api/stories - Create new story (image, video, or text)
+  app.post("/api/stories", isAuthenticated, uploadMedia.single("media"), async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { type, textContent, backgroundColor, fontStyle } = req.body;
+      
+      if (!type || !["image", "video", "text"].includes(type)) {
+        return res.status(400).json({ message: "Invalid story type" });
+      }
+      
+      let mediaUrl: string | undefined;
+      
+      if (type === "image" || type === "video") {
+        if (!req.file) {
+          return res.status(400).json({ message: "Media file is required for image/video stories" });
+        }
+        
+        if (type === "video") {
+          mediaUrl = await uploadVideoToStorage(req.file.buffer, req.file.originalname);
+        } else {
+          const urls = await uploadMultipleToObjectStorage([req.file]);
+          mediaUrl = urls[0];
+        }
+      } else if (type === "text") {
+        if (!textContent || textContent.trim() === "") {
+          return res.status(400).json({ message: "Text content is required for text stories" });
+        }
+      }
+      
+      const story = await storage.createStory({
+        authorId: userId,
+        type: type as "image" | "video" | "text",
+        mediaUrl,
+        textContent: type === "text" ? textContent : undefined,
+        backgroundColor: backgroundColor || "#16a34a",
+        fontStyle: fontStyle || "sans-serif",
+      });
+      
+      const storyWithAuthor = await storage.getStory(story.id);
+      res.status(201).json(storyWithAuthor);
+    } catch (error) {
+      console.error("Error creating story:", error);
+      res.status(500).json({ message: "Failed to create story" });
+    }
+  });
+  
+  // GET /api/stories - Get stories from followed users and own stories
+  app.get("/api/stories", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const stories = await storage.getActiveStories(userId);
+      res.json(stories);
+    } catch (error) {
+      console.error("Error fetching stories:", error);
+      res.status(500).json({ message: "Failed to fetch stories" });
+    }
+  });
+  
+  // GET /api/stories/users - Get users with active stories (for the story ring UI)
+  app.get("/api/stories/users", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const usersWithStories = await storage.getUsersWithActiveStories(userId);
+      res.json(usersWithStories);
+    } catch (error) {
+      console.error("Error fetching users with stories:", error);
+      res.status(500).json({ message: "Failed to fetch users with stories" });
+    }
+  });
+  
+  // GET /api/stories/:id - Get single story
+  app.get("/api/stories/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const story = await storage.getStory(id);
+      
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      res.json(story);
+    } catch (error) {
+      console.error("Error fetching story:", error);
+      res.status(500).json({ message: "Failed to fetch story" });
+    }
+  });
+  
+  // GET /api/stories/user/:userId - Get user's active stories
+  app.get("/api/stories/user/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const { userId: targetUserId } = req.params;
+      const stories = await storage.getUserActiveStories(targetUserId);
+      res.json(stories);
+    } catch (error) {
+      console.error("Error fetching user stories:", error);
+      res.status(500).json({ message: "Failed to fetch user stories" });
+    }
+  });
+  
+  // POST /api/stories/:id/view - Mark story as viewed
+  app.post("/api/stories/:id/view", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      const view = await storage.viewStory(id, userId);
+      res.json(view);
+    } catch (error) {
+      console.error("Error viewing story:", error);
+      res.status(500).json({ message: "Failed to record story view" });
+    }
+  });
+  
+  // GET /api/stories/:id/views - Get story views
+  app.get("/api/stories/:id/views", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      // Only story author can see views
+      if (story.authorId !== userId) {
+        return res.status(403).json({ message: "Not authorized to view story views" });
+      }
+      
+      const views = await storage.getStoryViews(id);
+      res.json(views);
+    } catch (error) {
+      console.error("Error fetching story views:", error);
+      res.status(500).json({ message: "Failed to fetch story views" });
+    }
+  });
+  
+  // POST /api/stories/:id/react - React to story
+  app.post("/api/stories/:id/react", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      const { reaction } = req.body;
+      
+      if (!reaction) {
+        return res.status(400).json({ message: "Reaction is required" });
+      }
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      const storyReaction = await storage.reactToStory(id, userId, reaction);
+      
+      // Create notification for story author
+      if (story.authorId !== userId) {
+        const reactor = await storage.getUser(userId);
+        if (reactor) {
+          const reactorName = reactor.firstName && reactor.lastName 
+            ? `${reactor.firstName} ${reactor.lastName}` 
+            : reactor.email;
+          
+          await createAndBroadcastNotification({
+            userId: story.authorId,
+            type: "story_reaction",
+            title: "Story Reaction",
+            message: `${reactorName} reacted ${reaction} to your story`,
+            link: `/the-plug`,
+            relatedUserId: userId,
+          });
+        }
+      }
+      
+      res.json(storyReaction);
+    } catch (error) {
+      console.error("Error reacting to story:", error);
+      res.status(500).json({ message: "Failed to react to story" });
+    }
+  });
+  
+  // GET /api/stories/:id/reactions - Get story reactions
+  app.get("/api/stories/:id/reactions", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      const reactions = await storage.getStoryReactions(id);
+      res.json(reactions);
+    } catch (error) {
+      console.error("Error fetching story reactions:", error);
+      res.status(500).json({ message: "Failed to fetch story reactions" });
+    }
+  });
+  
+  // POST /api/stories/:id/reply - Reply to story
+  app.post("/api/stories/:id/reply", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      const { content } = req.body;
+      
+      if (!content || content.trim() === "") {
+        return res.status(400).json({ message: "Reply content is required" });
+      }
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      const reply = await storage.replyToStory(id, userId, content);
+      
+      // Create notification for story author
+      if (story.authorId !== userId) {
+        const sender = await storage.getUser(userId);
+        if (sender) {
+          const senderName = sender.firstName && sender.lastName 
+            ? `${sender.firstName} ${sender.lastName}` 
+            : sender.email;
+          
+          const replyPreview = content.length > 50 
+            ? content.substring(0, 50) + "..." 
+            : content;
+          
+          await createAndBroadcastNotification({
+            userId: story.authorId,
+            type: "story_reply",
+            title: "Story Reply",
+            message: `${senderName}: ${replyPreview}`,
+            link: `/messages/${userId}`,
+            relatedUserId: userId,
+          });
+        }
+      }
+      
+      res.json(reply);
+    } catch (error) {
+      console.error("Error replying to story:", error);
+      res.status(500).json({ message: "Failed to reply to story" });
+    }
+  });
+  
+  // GET /api/stories/:id/replies - Get story replies
+  app.get("/api/stories/:id/replies", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      // Only story author can see all replies
+      if (story.authorId !== userId) {
+        return res.status(403).json({ message: "Not authorized to view story replies" });
+      }
+      
+      const replies = await storage.getStoryReplies(id);
+      res.json(replies);
+    } catch (error) {
+      console.error("Error fetching story replies:", error);
+      res.status(500).json({ message: "Failed to fetch story replies" });
+    }
+  });
+  
+  // DELETE /api/stories/:id - Delete own story
+  app.delete("/api/stories/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const story = await storage.getStory(id);
+      if (!story) {
+        return res.status(404).json({ message: "Story not found" });
+      }
+      
+      if (story.authorId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this story" });
+      }
+      
+      await storage.deleteStory(id);
+      res.json({ message: "Story deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting story:", error);
+      res.status(500).json({ message: "Failed to delete story" });
+    }
+  });
+
+  // ==================== CONFESSIONS ROUTES (Anonymous Board) ====================
+
+  // Auto-approve pending confessions every minute
+  setInterval(async () => {
+    try {
+      const approved = await storage.autoApproveOldConfessions();
+      if (approved > 0) {
+        console.log(`Auto-approved ${approved} pending confessions`);
+      }
+    } catch (error) {
+      console.error("Error auto-approving confessions:", error);
+    }
+  }, 60 * 1000);
+
+  // POST /api/confessions - Create new confession
+  app.post("/api/confessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { content, category, isAnonymous } = req.body;
+
+      if (!content || content.trim().length < 10) {
+        return res.status(400).json({ message: "Confession must be at least 10 characters" });
+      }
+
+      if (content.length > 2000) {
+        return res.status(400).json({ message: "Confession must not exceed 2000 characters" });
+      }
+
+      const validCategories = ["general", "love", "academics", "drama", "advice", "funny", "secrets"];
+      const selectedCategory = category && validCategories.includes(category) ? category : "general";
+
+      const confession = await storage.createConfession({
+        authorId: userId,
+        content: content.trim(),
+        category: selectedCategory,
+        isAnonymous: isAnonymous !== false,
+      });
+
+      res.status(201).json(confession);
+    } catch (error) {
+      console.error("Error creating confession:", error);
+      res.status(500).json({ message: "Failed to create confession" });
+    }
+  });
+
+  // GET /api/confessions - Get approved confessions with pagination
+  app.get("/api/confessions", isAuthenticated, async (req, res) => {
+    try {
+      const { category, page, limit } = req.query;
+
+      const result = await storage.getConfessions({
+        category: category as string,
+        status: "approved",
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 20,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching confessions:", error);
+      res.status(500).json({ message: "Failed to fetch confessions" });
+    }
+  });
+
+  // GET /api/confessions/trending - Get trending confessions
+  app.get("/api/confessions/trending", isAuthenticated, async (req, res) => {
+    try {
+      const { limit } = req.query;
+      const trending = await storage.getTrendingConfessions(
+        limit ? parseInt(limit as string) : 10
+      );
+      res.json(trending);
+    } catch (error) {
+      console.error("Error fetching trending confessions:", error);
+      res.status(500).json({ message: "Failed to fetch trending confessions" });
+    }
+  });
+
+  // GET /api/confessions/:id - Get single confession with comments
+  app.get("/api/confessions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      const confession = await storage.getConfession(id);
+      if (!confession) {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      if (confession.status !== "approved" && confession.authorId !== userId) {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      const comments = await storage.getConfessionComments(id);
+      const userVote = await storage.getUserVote(id, userId);
+
+      res.json({
+        ...confession,
+        comments,
+        userVote: userVote?.voteType || null,
+        isOwner: confession.authorId === userId,
+      });
+    } catch (error) {
+      console.error("Error fetching confession:", error);
+      res.status(500).json({ message: "Failed to fetch confession" });
+    }
+  });
+
+  // POST /api/confessions/:id/vote - Like or dislike a confession
+  app.post("/api/confessions/:id/vote", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { voteType } = req.body;
+
+      if (!voteType || !["like", "dislike"].includes(voteType)) {
+        return res.status(400).json({ message: "Invalid vote type. Must be 'like' or 'dislike'" });
+      }
+
+      const confession = await storage.getConfession(id);
+      if (!confession || confession.status !== "approved") {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      const existingVote = await storage.getUserVote(id, userId);
+
+      if (existingVote && existingVote.voteType === voteType) {
+        await storage.removeVote(id, userId);
+        const updated = await storage.getConfession(id);
+        return res.json({ 
+          message: "Vote removed", 
+          likesCount: updated?.likesCount || 0,
+          dislikesCount: updated?.dislikesCount || 0,
+          userVote: null 
+        });
+      }
+
+      const vote = await storage.voteConfession(id, userId, voteType as 'like' | 'dislike');
+      const updated = await storage.getConfession(id);
+
+      res.json({ 
+        message: "Vote recorded", 
+        likesCount: updated?.likesCount || 0,
+        dislikesCount: updated?.dislikesCount || 0,
+        userVote: vote.voteType 
+      });
+    } catch (error: any) {
+      console.error("Error voting on confession:", error);
+      res.status(500).json({ message: error.message || "Failed to vote on confession" });
+    }
+  });
+
+  // POST /api/confessions/:id/comments - Add comment to confession
+  app.post("/api/confessions/:id/comments", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { content, isAnonymous, parentId } = req.body;
+
+      if (!content || content.trim().length < 1) {
+        return res.status(400).json({ message: "Comment content is required" });
+      }
+
+      if (content.length > 1000) {
+        return res.status(400).json({ message: "Comment must not exceed 1000 characters" });
+      }
+
+      const confession = await storage.getConfession(id);
+      if (!confession || confession.status !== "approved") {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      const comment = await storage.createConfessionComment({
+        confessionId: id,
+        authorId: userId,
+        content: content.trim(),
+        isAnonymous: isAnonymous === true,
+        parentId: parentId || undefined,
+      });
+
+      const user = await storage.getUser(userId);
+      const commentWithAuthor = {
+        ...comment,
+        author: isAnonymous ? null : (user ? {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImageUrl: user.profileImageUrl,
+        } : null),
+      };
+
+      res.status(201).json(commentWithAuthor);
+    } catch (error) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ message: "Failed to create comment" });
+    }
+  });
+
+  // POST /api/confessions/:id/report - Report confession
+  app.post("/api/confessions/:id/report", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { reason, description } = req.body;
+
+      if (!reason || reason.trim().length < 1) {
+        return res.status(400).json({ message: "Report reason is required" });
+      }
+
+      const validReasons = ["spam", "harassment", "inappropriate", "hate_speech", "self_harm", "other"];
+      if (!validReasons.includes(reason)) {
+        return res.status(400).json({ message: "Invalid report reason" });
+      }
+
+      const confession = await storage.getConfession(id);
+      if (!confession) {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      const report = await storage.createConfessionReport({
+        confessionId: id,
+        reporterId: userId,
+        reason,
+        description: description?.trim() || undefined,
+      });
+
+      res.status(201).json({ message: "Report submitted successfully", report });
+    } catch (error) {
+      console.error("Error reporting confession:", error);
+      res.status(500).json({ message: "Failed to report confession" });
+    }
+  });
+
+  // DELETE /api/confessions/:id - Delete own confession
+  app.delete("/api/confessions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      const confession = await storage.getConfession(id);
+      if (!confession) {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      if (confession.authorId !== userId && !await isAdminUser(userId)) {
+        return res.status(403).json({ message: "Not authorized to delete this confession" });
+      }
+
+      await storage.deleteConfession(id);
+      res.json({ message: "Confession deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting confession:", error);
+      res.status(500).json({ message: "Failed to delete confession" });
+    }
+  });
+
+  // GET /api/confessions/:id/comments - Get comments for a confession
+  app.get("/api/confessions/:id/comments", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const confession = await storage.getConfession(id);
+      if (!confession || confession.status !== "approved") {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+
+      const comments = await storage.getConfessionComments(id);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // =====================================================
+  // COMMUNITY ROUTES
+  // =====================================================
+
+  // POST /api/communities - Create new community
+  app.post("/api/communities", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { name, slug, description, iconUrl, coverUrl, type, category, rules } = req.body;
+
+      if (!name || name.trim().length < 3) {
+        return res.status(400).json({ message: "Community name must be at least 3 characters" });
+      }
+
+      if (!slug || slug.trim().length < 3) {
+        return res.status(400).json({ message: "Community slug must be at least 3 characters" });
+      }
+
+      const slugRegex = /^[a-z0-9-]+$/;
+      if (!slugRegex.test(slug.toLowerCase())) {
+        return res.status(400).json({ message: "Slug can only contain lowercase letters, numbers, and hyphens" });
+      }
+
+      const existing = await storage.getCommunityBySlug(slug);
+      if (existing) {
+        return res.status(400).json({ message: "A community with this slug already exists" });
+      }
+
+      const community = await storage.createCommunity({
+        name: name.trim(),
+        slug: slug.toLowerCase().trim(),
+        description: description?.trim() || undefined,
+        iconUrl: iconUrl || undefined,
+        coverUrl: coverUrl || undefined,
+        type: type || "public",
+        category: category || undefined,
+        rules: rules || [],
+        ownerId: userId,
+      });
+
+      const communityWithOwner = await storage.getCommunity(community.id);
+      res.status(201).json(communityWithOwner);
+    } catch (error: any) {
+      console.error("Error creating community:", error);
+      res.status(500).json({ message: error.message || "Failed to create community" });
+    }
+  });
+
+  // GET /api/communities - List all public communities
+  app.get("/api/communities", async (req, res) => {
+    try {
+      const communities = await storage.getPublicCommunities();
+      res.json(communities);
+    } catch (error) {
+      console.error("Error fetching communities:", error);
+      res.status(500).json({ message: "Failed to fetch communities" });
+    }
+  });
+
+  // GET /api/communities/joined - Get user's joined communities
+  app.get("/api/communities/joined", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const communities = await storage.getUserJoinedCommunities(userId);
+      res.json(communities);
+    } catch (error) {
+      console.error("Error fetching joined communities:", error);
+      res.status(500).json({ message: "Failed to fetch joined communities" });
+    }
+  });
+
+  // GET /api/communities/:slug - Get community details by slug
+  app.get("/api/communities/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const userId = getUserId(req);
+
+      const community = await storage.getCommunityBySlug(slug);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      let membership = null;
+      if (userId) {
+        membership = await storage.getCommunityMember(community.id, userId);
+      }
+
+      res.json({ ...community, membership });
+    } catch (error) {
+      console.error("Error fetching community:", error);
+      res.status(500).json({ message: "Failed to fetch community" });
+    }
+  });
+
+  // POST /api/communities/:id/join - Join a community
+  app.post("/api/communities/:id/join", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      const community = await storage.getCommunity(id);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      const existingMember = await storage.getCommunityMember(id, userId);
+      if (existingMember) {
+        if (existingMember.isBanned) {
+          return res.status(403).json({ message: "You are banned from this community" });
+        }
+        return res.status(400).json({ message: "Already a member of this community" });
+      }
+
+      if (community.type === "invite_only") {
+        return res.status(403).json({ message: "This community is invite-only" });
+      }
+
+      const membership = await storage.joinCommunity(id, userId);
+      res.status(201).json({ message: "Successfully joined the community", membership });
+    } catch (error: any) {
+      console.error("Error joining community:", error);
+      res.status(500).json({ message: error.message || "Failed to join community" });
+    }
+  });
+
+  // POST /api/communities/:id/leave - Leave a community
+  app.post("/api/communities/:id/leave", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      const community = await storage.getCommunity(id);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      const membership = await storage.getCommunityMember(id, userId);
+      if (!membership) {
+        return res.status(400).json({ message: "Not a member of this community" });
+      }
+
+      if (membership.role === "owner") {
+        return res.status(400).json({ message: "Owner cannot leave the community. Transfer ownership first." });
+      }
+
+      await storage.leaveCommunity(id, userId);
+      res.json({ message: "Successfully left the community" });
+    } catch (error: any) {
+      console.error("Error leaving community:", error);
+      res.status(500).json({ message: error.message || "Failed to leave community" });
+    }
+  });
+
+  // GET /api/communities/:id/posts - Get community posts
+  app.get("/api/communities/:id/posts", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = getUserId(req);
+
+      const community = await storage.getCommunity(id);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      const posts = await storage.getCommunityPosts(id);
+
+      const postsWithLikeStatus = await Promise.all(posts.map(async (post) => {
+        let isLiked = false;
+        if (userId) {
+          isLiked = await storage.hasLikedCommunityPost(post.id, userId);
+        }
+        return { ...post, isLiked };
+      }));
+
+      res.json(postsWithLikeStatus);
+    } catch (error) {
+      console.error("Error fetching community posts:", error);
+      res.status(500).json({ message: "Failed to fetch community posts" });
+    }
+  });
+
+  // POST /api/communities/:id/posts - Create post in community
+  app.post("/api/communities/:id/posts", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { title, content, images } = req.body;
+
+      if (!content || content.trim().length < 1) {
+        return res.status(400).json({ message: "Post content is required" });
+      }
+
+      const community = await storage.getCommunity(id);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      const membership = await storage.getCommunityMember(id, userId);
+      if (!membership) {
+        return res.status(403).json({ message: "Must be a member to post in this community" });
+      }
+
+      if (membership.isBanned) {
+        return res.status(403).json({ message: "You are banned from this community" });
+      }
+
+      const post = await storage.createCommunityPost({
+        communityId: id,
+        authorId: userId,
+        title: title?.trim() || undefined,
+        content: content.trim(),
+        images: images || [],
+      });
+
+      const postWithAuthor = await storage.getCommunityPost(post.id);
+      res.status(201).json(postWithAuthor);
+    } catch (error: any) {
+      console.error("Error creating community post:", error);
+      res.status(500).json({ message: error.message || "Failed to create post" });
+    }
+  });
+
+  // POST /api/community-posts/:id/like - Like/unlike a community post
+  app.post("/api/community-posts/:id/like", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      const post = await storage.getCommunityPost(id);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      const hasLiked = await storage.hasLikedCommunityPost(id, userId);
+
+      if (hasLiked) {
+        await storage.unlikeCommunityPost(id, userId);
+        const updated = await storage.getCommunityPost(id);
+        return res.json({ message: "Post unliked", isLiked: false, likesCount: updated?.likesCount || 0 });
+      } else {
+        await storage.likeCommunityPost(id, userId);
+        const updated = await storage.getCommunityPost(id);
+        return res.json({ message: "Post liked", isLiked: true, likesCount: updated?.likesCount || 0 });
+      }
+    } catch (error: any) {
+      console.error("Error liking post:", error);
+      res.status(500).json({ message: error.message || "Failed to like post" });
+    }
+  });
+
+  // GET /api/community-posts/:id/comments - Get comments for a post
+  app.get("/api/community-posts/:id/comments", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const post = await storage.getCommunityPost(id);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      const comments = await storage.getCommunityPostComments(id);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching post comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // POST /api/community-posts/:id/comments - Comment on post
+  app.post("/api/community-posts/:id/comments", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { content, parentId } = req.body;
+
+      if (!content || content.trim().length < 1) {
+        return res.status(400).json({ message: "Comment content is required" });
+      }
+
+      if (content.length > 2000) {
+        return res.status(400).json({ message: "Comment must not exceed 2000 characters" });
+      }
+
+      const post = await storage.getCommunityPost(id);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      if (post.isLocked) {
+        return res.status(403).json({ message: "This post is locked and cannot receive new comments" });
+      }
+
+      const membership = await storage.getCommunityMember(post.communityId, userId);
+      if (!membership) {
+        return res.status(403).json({ message: "Must be a member to comment" });
+      }
+
+      if (membership.isBanned) {
+        return res.status(403).json({ message: "You are banned from this community" });
+      }
+
+      const comment = await storage.createCommunityPostComment({
+        postId: id,
+        authorId: userId,
+        content: content.trim(),
+        parentId: parentId || undefined,
+      });
+
+      const user = await storage.getUser(userId);
+      res.status(201).json({ 
+        ...comment, 
+        author: user ? {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImageUrl: user.profileImageUrl,
+        } : null 
+      });
+    } catch (error: any) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ message: error.message || "Failed to create comment" });
+    }
+  });
+
+  // GET /api/communities/:id/members - Get community members
+  app.get("/api/communities/:id/members", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const community = await storage.getCommunity(id);
+      if (!community) {
+        return res.status(404).json({ message: "Community not found" });
+      }
+
+      const members = await storage.getCommunityMembers(id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching community members:", error);
+      res.status(500).json({ message: "Failed to fetch members" });
     }
   });
 

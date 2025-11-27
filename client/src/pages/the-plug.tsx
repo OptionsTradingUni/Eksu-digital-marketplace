@@ -47,6 +47,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
 import type { User, SocialPost, SponsoredAd } from "@shared/schema";
+import { StoriesBar } from "./stories";
 
 type PostWithAuthor = SocialPost & { 
   author: User; 
@@ -612,6 +613,15 @@ export default function ThePlugPage() {
               <p className="text-xs text-muted-foreground">Campus Social Feed</p>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-4 -mx-4 border-b"
+        >
+          <StoriesBar />
         </motion.div>
 
         <motion.div

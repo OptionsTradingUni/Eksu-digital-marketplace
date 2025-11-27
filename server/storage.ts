@@ -64,6 +64,10 @@ import {
   scheduledVtuPurchases,
   giftData,
   billPayments,
+  stories,
+  storyViews,
+  storyReactions,
+  storyReplies,
   type User,
   type UpsertUser,
   type Product,
@@ -171,6 +175,29 @@ import {
   type InsertGiftData,
   type BillPayment,
   type InsertBillPayment,
+  type Story,
+  type InsertStory,
+  type StoryView,
+  type StoryReaction,
+  type StoryReply,
+  confessions,
+  confessionVotes,
+  confessionComments,
+  confessionReports,
+  type Confession,
+  type InsertConfession,
+  type ConfessionVote,
+  type ConfessionComment,
+  communities,
+  communityMembers,
+  communityPosts,
+  communityPostComments,
+  communityPostLikes,
+  type Community,
+  type CommunityMember,
+  type CommunityPost,
+  type CommunityPostComment,
+  type CommunityPostLike,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -575,6 +602,85 @@ export interface IStorage {
   createBillPayment(data: InsertBillPayment): Promise<BillPayment>;
   updateBillPayment(id: string, data: Partial<BillPayment>): Promise<BillPayment>;
   getUserBillPayments(userId: string): Promise<BillPayment[]>;
+  
+  // Story operations
+  createStory(data: { authorId: string; type: "image" | "video" | "text"; mediaUrl?: string; textContent?: string; backgroundColor?: string; fontStyle?: string }): Promise<Story>;
+  getStory(id: string): Promise<(Story & { author: User }) | undefined>;
+  getActiveStories(userId: string): Promise<(Story & { author: User; hasViewed: boolean })[]>;
+  getUserActiveStories(userId: string): Promise<(Story & { author: User })[]>;
+  deleteStory(id: string): Promise<void>;
+  viewStory(storyId: string, viewerId: string): Promise<StoryView>;
+  hasViewedStory(storyId: string, viewerId: string): Promise<boolean>;
+  getStoryViews(storyId: string): Promise<(StoryView & { viewer: User })[]>;
+  reactToStory(storyId: string, reactorId: string, reaction: string): Promise<StoryReaction>;
+  getStoryReactions(storyId: string): Promise<(StoryReaction & { reactor: User })[]>;
+  replyToStory(storyId: string, senderId: string, content: string): Promise<StoryReply>;
+  getStoryReplies(storyId: string): Promise<(StoryReply & { sender: User })[]>;
+  getUsersWithActiveStories(currentUserId: string): Promise<{ user: User; storyCount: number; hasUnviewed: boolean; latestStoryAt: Date }[]>;
+  incrementStoryViews(storyId: string): Promise<void>;
+  incrementStoryLikes(storyId: string): Promise<void>;
+  decrementStoryLikes(storyId: string): Promise<void>;
+  
+  // Confession operations
+  createConfession(data: { authorId?: string; content: string; category?: string; isAnonymous?: boolean }): Promise<Confession>;
+  getConfession(id: string): Promise<(Confession & { author?: { id: string; firstName: string | null; lastName: string | null; profileImageUrl: string | null } | null }) | undefined>;
+  getConfessions(options?: { category?: string; status?: string; page?: number; limit?: number }): Promise<{ confessions: Confession[]; total: number }>;
+  getTrendingConfessions(limit?: number): Promise<Confession[]>;
+  deleteConfession(id: string): Promise<void>;
+  approveConfession(id: string, moderatedBy: string): Promise<Confession>;
+  rejectConfession(id: string, moderatedBy: string): Promise<Confession>;
+  flagConfession(id: string): Promise<Confession>;
+  autoApproveOldConfessions(): Promise<number>;
+  
+  // Confession vote operations
+  voteConfession(confessionId: string, voterId: string, voteType: 'like' | 'dislike'): Promise<ConfessionVote>;
+  removeVote(confessionId: string, voterId: string): Promise<void>;
+  getUserVote(confessionId: string, voterId: string): Promise<ConfessionVote | undefined>;
+  
+  // Confession comment operations
+  getConfessionComments(confessionId: string): Promise<(ConfessionComment & { author?: { id: string; firstName: string | null; lastName: string | null; profileImageUrl: string | null } | null })[]>;
+  createConfessionComment(data: { confessionId: string; authorId?: string; content: string; isAnonymous?: boolean; parentId?: string }): Promise<ConfessionComment>;
+  deleteConfessionComment(id: string): Promise<void>;
+  
+  // Confession report operations
+  createConfessionReport(data: { confessionId: string; reporterId: string; reason: string; description?: string }): Promise<any>;
+  getConfessionReports(confessionId: string): Promise<any[]>;
+
+  // Community operations
+  createCommunity(data: { name: string; slug: string; description?: string; iconUrl?: string; coverUrl?: string; type?: "public" | "private" | "invite_only"; category?: string; rules?: string[]; ownerId: string }): Promise<Community>;
+  getCommunity(id: string): Promise<(Community & { owner: User }) | undefined>;
+  getCommunityBySlug(slug: string): Promise<(Community & { owner: User }) | undefined>;
+  getPublicCommunities(): Promise<(Community & { owner: User })[]>;
+  getUserJoinedCommunities(userId: string): Promise<(Community & { owner: User; membership: CommunityMember })[]>;
+  updateCommunity(id: string, data: Partial<Community>): Promise<Community>;
+  deleteCommunity(id: string): Promise<void>;
+  
+  // Community member operations
+  joinCommunity(communityId: string, userId: string): Promise<CommunityMember>;
+  leaveCommunity(communityId: string, userId: string): Promise<void>;
+  getCommunityMember(communityId: string, userId: string): Promise<CommunityMember | undefined>;
+  getCommunityMembers(communityId: string): Promise<(CommunityMember & { user: User })[]>;
+  updateMemberRole(communityId: string, userId: string, role: "member" | "moderator" | "admin" | "owner"): Promise<CommunityMember>;
+  banMember(communityId: string, userId: string, reason: string, until?: Date): Promise<CommunityMember>;
+  
+  // Community post operations
+  createCommunityPost(data: { communityId: string; authorId: string; title?: string; content: string; images?: string[] }): Promise<CommunityPost>;
+  getCommunityPost(id: string): Promise<(CommunityPost & { author: User; community: Community }) | undefined>;
+  getCommunityPosts(communityId: string): Promise<(CommunityPost & { author: User; isLiked?: boolean })[]>;
+  updateCommunityPost(id: string, data: Partial<CommunityPost>): Promise<CommunityPost>;
+  deleteCommunityPost(id: string): Promise<void>;
+  pinPost(id: string, isPinned: boolean): Promise<CommunityPost>;
+  lockPost(id: string, isLocked: boolean): Promise<CommunityPost>;
+  
+  // Community post like operations
+  likeCommunityPost(postId: string, userId: string): Promise<CommunityPostLike>;
+  unlikeCommunityPost(postId: string, userId: string): Promise<void>;
+  hasLikedCommunityPost(postId: string, userId: string): Promise<boolean>;
+  
+  // Community post comment operations
+  createCommunityPostComment(data: { postId: string; authorId: string; content: string; parentId?: string }): Promise<CommunityPostComment>;
+  getCommunityPostComments(postId: string): Promise<(CommunityPostComment & { author: User })[]>;
+  deleteCommunityPostComment(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4244,6 +4350,894 @@ export class DatabaseStorage implements IStorage {
       .from(billPayments)
       .where(eq(billPayments.userId, userId))
       .orderBy(desc(billPayments.createdAt));
+  }
+
+  // Story operations
+  async createStory(data: { authorId: string; type: "image" | "video" | "text"; mediaUrl?: string; textContent?: string; backgroundColor?: string; fontStyle?: string }): Promise<Story> {
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+    
+    const [story] = await db.insert(stories).values({
+      ...data,
+      expiresAt,
+    }).returning();
+    return story;
+  }
+
+  async getStory(id: string): Promise<(Story & { author: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(stories)
+      .innerJoin(users, eq(stories.authorId, users.id))
+      .where(eq(stories.id, id));
+    
+    if (!result.length) return undefined;
+    return { ...result[0].stories, author: result[0].users };
+  }
+
+  async getActiveStories(userId: string): Promise<(Story & { author: User; hasViewed: boolean })[]> {
+    const now = new Date();
+    
+    const followedUserIds = await db
+      .select({ followingId: follows.followingId })
+      .from(follows)
+      .where(eq(follows.followerId, userId));
+    
+    const followedIds = followedUserIds.map(f => f.followingId);
+    followedIds.push(userId);
+    
+    if (followedIds.length === 0) {
+      return [];
+    }
+    
+    const activeStories = await db
+      .select()
+      .from(stories)
+      .innerJoin(users, eq(stories.authorId, users.id))
+      .leftJoin(storyViews, and(
+        eq(storyViews.storyId, stories.id),
+        eq(storyViews.viewerId, userId)
+      ))
+      .where(and(
+        gt(stories.expiresAt, now),
+        sql`${stories.authorId} IN (${sql.join(followedIds.map(id => sql`${id}`), sql`, `)})`
+      ))
+      .orderBy(desc(stories.createdAt));
+    
+    return activeStories.map(row => ({
+      ...row.stories,
+      author: row.users,
+      hasViewed: row.story_views !== null,
+    }));
+  }
+
+  async getUserActiveStories(userId: string): Promise<(Story & { author: User })[]> {
+    const now = new Date();
+    
+    const activeStories = await db
+      .select()
+      .from(stories)
+      .innerJoin(users, eq(stories.authorId, users.id))
+      .where(and(
+        eq(stories.authorId, userId),
+        gt(stories.expiresAt, now)
+      ))
+      .orderBy(desc(stories.createdAt));
+    
+    return activeStories.map(row => ({
+      ...row.stories,
+      author: row.users,
+    }));
+  }
+
+  async deleteStory(id: string): Promise<void> {
+    await db.delete(stories).where(eq(stories.id, id));
+  }
+
+  async viewStory(storyId: string, viewerId: string): Promise<StoryView> {
+    const existing = await db
+      .select()
+      .from(storyViews)
+      .where(and(
+        eq(storyViews.storyId, storyId),
+        eq(storyViews.viewerId, viewerId)
+      ));
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [view] = await db.insert(storyViews).values({
+      storyId,
+      viewerId,
+    }).returning();
+    
+    await this.incrementStoryViews(storyId);
+    
+    return view;
+  }
+
+  async hasViewedStory(storyId: string, viewerId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(storyViews)
+      .where(and(
+        eq(storyViews.storyId, storyId),
+        eq(storyViews.viewerId, viewerId)
+      ));
+    return result.length > 0;
+  }
+
+  async getStoryViews(storyId: string): Promise<(StoryView & { viewer: User })[]> {
+    const views = await db
+      .select()
+      .from(storyViews)
+      .innerJoin(users, eq(storyViews.viewerId, users.id))
+      .where(eq(storyViews.storyId, storyId))
+      .orderBy(desc(storyViews.viewedAt));
+    
+    return views.map(row => ({
+      ...row.story_views,
+      viewer: row.users,
+    }));
+  }
+
+  async reactToStory(storyId: string, reactorId: string, reaction: string): Promise<StoryReaction> {
+    const existing = await db
+      .select()
+      .from(storyReactions)
+      .where(and(
+        eq(storyReactions.storyId, storyId),
+        eq(storyReactions.reactorId, reactorId)
+      ));
+    
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(storyReactions)
+        .set({ reaction })
+        .where(eq(storyReactions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    const [reactionRecord] = await db.insert(storyReactions).values({
+      storyId,
+      reactorId,
+      reaction,
+    }).returning();
+    
+    await this.incrementStoryLikes(storyId);
+    
+    return reactionRecord;
+  }
+
+  async getStoryReactions(storyId: string): Promise<(StoryReaction & { reactor: User })[]> {
+    const reactions = await db
+      .select()
+      .from(storyReactions)
+      .innerJoin(users, eq(storyReactions.reactorId, users.id))
+      .where(eq(storyReactions.storyId, storyId))
+      .orderBy(desc(storyReactions.createdAt));
+    
+    return reactions.map(row => ({
+      ...row.story_reactions,
+      reactor: row.users,
+    }));
+  }
+
+  async replyToStory(storyId: string, senderId: string, content: string): Promise<StoryReply> {
+    const [reply] = await db.insert(storyReplies).values({
+      storyId,
+      senderId,
+      content,
+    }).returning();
+    return reply;
+  }
+
+  async getStoryReplies(storyId: string): Promise<(StoryReply & { sender: User })[]> {
+    const replies = await db
+      .select()
+      .from(storyReplies)
+      .innerJoin(users, eq(storyReplies.senderId, users.id))
+      .where(eq(storyReplies.storyId, storyId))
+      .orderBy(desc(storyReplies.createdAt));
+    
+    return replies.map(row => ({
+      ...row.story_replies,
+      sender: row.users,
+    }));
+  }
+
+  async getUsersWithActiveStories(currentUserId: string): Promise<{ user: User; storyCount: number; hasUnviewed: boolean; latestStoryAt: Date }[]> {
+    const now = new Date();
+    
+    const followedUserIds = await db
+      .select({ followingId: follows.followingId })
+      .from(follows)
+      .where(eq(follows.followerId, currentUserId));
+    
+    const followedIds = followedUserIds.map(f => f.followingId);
+    followedIds.push(currentUserId);
+    
+    if (followedIds.length === 0) {
+      return [];
+    }
+    
+    const usersWithStories = await db
+      .select({
+        user: users,
+        storyCount: sql<number>`count(distinct ${stories.id})::int`,
+        unviewedCount: sql<number>`count(distinct case when ${storyViews.id} is null then ${stories.id} end)::int`,
+        latestStoryAt: sql<Date>`max(${stories.createdAt})`,
+      })
+      .from(users)
+      .innerJoin(stories, and(
+        eq(stories.authorId, users.id),
+        gt(stories.expiresAt, now)
+      ))
+      .leftJoin(storyViews, and(
+        eq(storyViews.storyId, stories.id),
+        eq(storyViews.viewerId, currentUserId)
+      ))
+      .where(sql`${users.id} IN (${sql.join(followedIds.map(id => sql`${id}`), sql`, `)})`)
+      .groupBy(users.id)
+      .orderBy(sql`max(${stories.createdAt}) desc`);
+    
+    return usersWithStories.map(row => ({
+      user: row.user,
+      storyCount: row.storyCount,
+      hasUnviewed: row.unviewedCount > 0,
+      latestStoryAt: row.latestStoryAt,
+    }));
+  }
+
+  async incrementStoryViews(storyId: string): Promise<void> {
+    await db
+      .update(stories)
+      .set({ viewsCount: sql`${stories.viewsCount} + 1` })
+      .where(eq(stories.id, storyId));
+  }
+
+  async incrementStoryLikes(storyId: string): Promise<void> {
+    await db
+      .update(stories)
+      .set({ likesCount: sql`${stories.likesCount} + 1` })
+      .where(eq(stories.id, storyId));
+  }
+
+  async decrementStoryLikes(storyId: string): Promise<void> {
+    await db
+      .update(stories)
+      .set({ likesCount: sql`GREATEST(${stories.likesCount} - 1, 0)` })
+      .where(eq(stories.id, storyId));
+  }
+
+  // Confession operations
+  async createConfession(data: { authorId?: string; content: string; category?: string; isAnonymous?: boolean }): Promise<Confession> {
+    const [confession] = await db.insert(confessions).values({
+      authorId: data.authorId || null,
+      content: data.content,
+      category: data.category || "general",
+      isAnonymous: data.isAnonymous ?? true,
+      status: "pending",
+    }).returning();
+    return confession;
+  }
+
+  async getConfession(id: string): Promise<(Confession & { author?: { id: string; firstName: string | null; lastName: string | null; profileImageUrl: string | null } | null }) | undefined> {
+    const result = await db
+      .select()
+      .from(confessions)
+      .leftJoin(users, eq(confessions.authorId, users.id))
+      .where(eq(confessions.id, id));
+    
+    if (result.length === 0) return undefined;
+    
+    const confession = result[0].confessions;
+    const author = result[0].users;
+    
+    if (confession.isAnonymous || !author) {
+      return { ...confession, author: null };
+    }
+    
+    return {
+      ...confession,
+      author: {
+        id: author.id,
+        firstName: author.firstName,
+        lastName: author.lastName,
+        profileImageUrl: author.profileImageUrl,
+      },
+    };
+  }
+
+  async getConfessions(options?: { category?: string; status?: string; page?: number; limit?: number }): Promise<{ confessions: Confession[]; total: number }> {
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const offset = (page - 1) * limit;
+    
+    let conditions = [];
+    
+    if (options?.category && options.category !== 'all') {
+      conditions.push(eq(confessions.category, options.category));
+    }
+    
+    if (options?.status) {
+      conditions.push(sql`${confessions.status} = ${options.status}`);
+    } else {
+      conditions.push(sql`${confessions.status} = 'approved'`);
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(confessions)
+      .where(whereClause);
+    
+    const confessionList = await db
+      .select()
+      .from(confessions)
+      .where(whereClause)
+      .orderBy(desc(confessions.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      confessions: confessionList,
+      total: countResult?.count || 0,
+    };
+  }
+
+  async getTrendingConfessions(limit: number = 10): Promise<Confession[]> {
+    return await db
+      .select()
+      .from(confessions)
+      .where(and(
+        sql`${confessions.status} = 'approved'`,
+        eq(confessions.isTrending, true)
+      ))
+      .orderBy(desc(sql`${confessions.likesCount} + ${confessions.commentsCount}`))
+      .limit(limit);
+  }
+
+  async deleteConfession(id: string): Promise<void> {
+    await db.delete(confessions).where(eq(confessions.id, id));
+  }
+
+  async approveConfession(id: string, moderatedBy: string): Promise<Confession> {
+    const [updated] = await db
+      .update(confessions)
+      .set({ 
+        status: "approved",
+        moderatedBy,
+        moderatedAt: new Date(),
+      })
+      .where(eq(confessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async rejectConfession(id: string, moderatedBy: string): Promise<Confession> {
+    const [updated] = await db
+      .update(confessions)
+      .set({ 
+        status: "rejected",
+        moderatedBy,
+        moderatedAt: new Date(),
+      })
+      .where(eq(confessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async flagConfession(id: string): Promise<Confession> {
+    const [updated] = await db
+      .update(confessions)
+      .set({ status: "flagged" })
+      .where(eq(confessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async autoApproveOldConfessions(): Promise<number> {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    const result = await db
+      .update(confessions)
+      .set({ status: "approved" })
+      .where(and(
+        sql`${confessions.status} = 'pending'`,
+        sql`${confessions.createdAt} < ${fiveMinutesAgo}`
+      ))
+      .returning();
+    
+    return result.length;
+  }
+
+  // Confession vote operations
+  async voteConfession(confessionId: string, voterId: string, voteType: 'like' | 'dislike'): Promise<ConfessionVote> {
+    const existing = await this.getUserVote(confessionId, voterId);
+    
+    if (existing) {
+      if (existing.voteType === voteType) {
+        throw new Error("Already voted with this type");
+      }
+      
+      await db.delete(confessionVotes).where(eq(confessionVotes.id, existing.id));
+      
+      if (existing.voteType === 'like') {
+        await db.update(confessions).set({ 
+          likesCount: sql`GREATEST(${confessions.likesCount} - 1, 0)` 
+        }).where(eq(confessions.id, confessionId));
+      } else {
+        await db.update(confessions).set({ 
+          dislikesCount: sql`GREATEST(${confessions.dislikesCount} - 1, 0)` 
+        }).where(eq(confessions.id, confessionId));
+      }
+    }
+    
+    const [vote] = await db.insert(confessionVotes).values({
+      confessionId,
+      voterId,
+      voteType,
+    }).returning();
+    
+    if (voteType === 'like') {
+      await db.update(confessions).set({ 
+        likesCount: sql`${confessions.likesCount} + 1` 
+      }).where(eq(confessions.id, confessionId));
+      
+      const [confession] = await db.select().from(confessions).where(eq(confessions.id, confessionId));
+      if (confession && (confession.likesCount || 0) >= 5) {
+        await db.update(confessions).set({ isTrending: true }).where(eq(confessions.id, confessionId));
+      }
+    } else {
+      await db.update(confessions).set({ 
+        dislikesCount: sql`${confessions.dislikesCount} + 1` 
+      }).where(eq(confessions.id, confessionId));
+    }
+    
+    return vote;
+  }
+
+  async removeVote(confessionId: string, voterId: string): Promise<void> {
+    const existing = await this.getUserVote(confessionId, voterId);
+    
+    if (existing) {
+      await db.delete(confessionVotes).where(eq(confessionVotes.id, existing.id));
+      
+      if (existing.voteType === 'like') {
+        await db.update(confessions).set({ 
+          likesCount: sql`GREATEST(${confessions.likesCount} - 1, 0)` 
+        }).where(eq(confessions.id, confessionId));
+      } else {
+        await db.update(confessions).set({ 
+          dislikesCount: sql`GREATEST(${confessions.dislikesCount} - 1, 0)` 
+        }).where(eq(confessions.id, confessionId));
+      }
+    }
+  }
+
+  async getUserVote(confessionId: string, voterId: string): Promise<ConfessionVote | undefined> {
+    const [vote] = await db
+      .select()
+      .from(confessionVotes)
+      .where(and(
+        eq(confessionVotes.confessionId, confessionId),
+        eq(confessionVotes.voterId, voterId)
+      ));
+    return vote;
+  }
+
+  // Confession comment operations
+  async getConfessionComments(confessionId: string): Promise<(ConfessionComment & { author?: { id: string; firstName: string | null; lastName: string | null; profileImageUrl: string | null } | null })[]> {
+    const result = await db
+      .select()
+      .from(confessionComments)
+      .leftJoin(users, eq(confessionComments.authorId, users.id))
+      .where(eq(confessionComments.confessionId, confessionId))
+      .orderBy(desc(confessionComments.createdAt));
+    
+    return result.map(row => {
+      const comment = row.confession_comments;
+      const author = row.users;
+      
+      if (comment.isAnonymous || !author) {
+        return { ...comment, author: null };
+      }
+      
+      return {
+        ...comment,
+        author: {
+          id: author.id,
+          firstName: author.firstName,
+          lastName: author.lastName,
+          profileImageUrl: author.profileImageUrl,
+        },
+      };
+    });
+  }
+
+  async createConfessionComment(data: { confessionId: string; authorId?: string; content: string; isAnonymous?: boolean; parentId?: string }): Promise<ConfessionComment> {
+    const [comment] = await db.insert(confessionComments).values({
+      confessionId: data.confessionId,
+      authorId: data.authorId || null,
+      content: data.content,
+      isAnonymous: data.isAnonymous ?? false,
+      parentId: data.parentId || null,
+    }).returning();
+    
+    await db.update(confessions).set({
+      commentsCount: sql`${confessions.commentsCount} + 1`
+    }).where(eq(confessions.id, data.confessionId));
+    
+    return comment;
+  }
+
+  async deleteConfessionComment(id: string): Promise<void> {
+    const [comment] = await db.select().from(confessionComments).where(eq(confessionComments.id, id));
+    
+    if (comment) {
+      await db.delete(confessionComments).where(eq(confessionComments.id, id));
+      
+      await db.update(confessions).set({
+        commentsCount: sql`GREATEST(${confessions.commentsCount} - 1, 0)`
+      }).where(eq(confessions.id, comment.confessionId));
+    }
+  }
+
+  // Confession report operations
+  async createConfessionReport(data: { confessionId: string; reporterId: string; reason: string; description?: string }): Promise<any> {
+    const [report] = await db.insert(confessionReports).values({
+      confessionId: data.confessionId,
+      reporterId: data.reporterId,
+      reason: data.reason,
+      description: data.description || null,
+    }).returning();
+    
+    const [reportsCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(confessionReports)
+      .where(eq(confessionReports.confessionId, data.confessionId));
+    
+    if ((reportsCount?.count || 0) >= 3) {
+      await this.flagConfession(data.confessionId);
+    }
+    
+    return report;
+  }
+
+  async getConfessionReports(confessionId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(confessionReports)
+      .where(eq(confessionReports.confessionId, confessionId))
+      .orderBy(desc(confessionReports.createdAt));
+  }
+
+  // =====================================================
+  // COMMUNITY OPERATIONS
+  // =====================================================
+
+  async createCommunity(data: { name: string; slug: string; description?: string; iconUrl?: string; coverUrl?: string; type?: "public" | "private" | "invite_only"; category?: string; rules?: string[]; ownerId: string }): Promise<Community> {
+    const [community] = await db.insert(communities).values({
+      name: data.name,
+      slug: data.slug.toLowerCase(),
+      description: data.description || null,
+      iconUrl: data.iconUrl || null,
+      coverUrl: data.coverUrl || null,
+      type: data.type || "public",
+      category: data.category || null,
+      rules: data.rules || [],
+      ownerId: data.ownerId,
+      membersCount: 1,
+    }).returning();
+
+    await db.insert(communityMembers).values({
+      communityId: community.id,
+      userId: data.ownerId,
+      role: "owner",
+    });
+
+    return community;
+  }
+
+  async getCommunity(id: string): Promise<(Community & { owner: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(communities)
+      .innerJoin(users, eq(communities.ownerId, users.id))
+      .where(eq(communities.id, id));
+
+    if (result.length === 0) return undefined;
+    return { ...result[0].communities, owner: result[0].users };
+  }
+
+  async getCommunityBySlug(slug: string): Promise<(Community & { owner: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(communities)
+      .innerJoin(users, eq(communities.ownerId, users.id))
+      .where(eq(communities.slug, slug.toLowerCase()));
+
+    if (result.length === 0) return undefined;
+    return { ...result[0].communities, owner: result[0].users };
+  }
+
+  async getPublicCommunities(): Promise<(Community & { owner: User })[]> {
+    const result = await db
+      .select()
+      .from(communities)
+      .innerJoin(users, eq(communities.ownerId, users.id))
+      .where(and(
+        eq(communities.isActive, true),
+        eq(communities.type, "public")
+      ))
+      .orderBy(desc(communities.membersCount));
+
+    return result.map(row => ({ ...row.communities, owner: row.users }));
+  }
+
+  async getUserJoinedCommunities(userId: string): Promise<(Community & { owner: User; membership: CommunityMember })[]> {
+    const result = await db
+      .select()
+      .from(communities)
+      .innerJoin(users, eq(communities.ownerId, users.id))
+      .innerJoin(communityMembers, eq(communities.id, communityMembers.communityId))
+      .where(and(
+        eq(communityMembers.userId, userId),
+        eq(communityMembers.isBanned, false)
+      ))
+      .orderBy(desc(communityMembers.joinedAt));
+
+    return result.map(row => ({
+      ...row.communities,
+      owner: row.users,
+      membership: row.community_members,
+    }));
+  }
+
+  async updateCommunity(id: string, data: Partial<Community>): Promise<Community> {
+    const [community] = await db
+      .update(communities)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(communities.id, id))
+      .returning();
+    return community;
+  }
+
+  async deleteCommunity(id: string): Promise<void> {
+    await db.delete(communities).where(eq(communities.id, id));
+  }
+
+  // Community member operations
+  async joinCommunity(communityId: string, userId: string): Promise<CommunityMember> {
+    const [member] = await db.insert(communityMembers).values({
+      communityId,
+      userId,
+      role: "member",
+    }).returning();
+
+    await db.update(communities)
+      .set({ membersCount: sql`${communities.membersCount} + 1` })
+      .where(eq(communities.id, communityId));
+
+    return member;
+  }
+
+  async leaveCommunity(communityId: string, userId: string): Promise<void> {
+    await db.delete(communityMembers).where(and(
+      eq(communityMembers.communityId, communityId),
+      eq(communityMembers.userId, userId)
+    ));
+
+    await db.update(communities)
+      .set({ membersCount: sql`GREATEST(${communities.membersCount} - 1, 0)` })
+      .where(eq(communities.id, communityId));
+  }
+
+  async getCommunityMember(communityId: string, userId: string): Promise<CommunityMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(communityMembers)
+      .where(and(
+        eq(communityMembers.communityId, communityId),
+        eq(communityMembers.userId, userId)
+      ));
+    return member;
+  }
+
+  async getCommunityMembers(communityId: string): Promise<(CommunityMember & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(communityMembers)
+      .innerJoin(users, eq(communityMembers.userId, users.id))
+      .where(eq(communityMembers.communityId, communityId))
+      .orderBy(communityMembers.joinedAt);
+
+    return result.map(row => ({ ...row.community_members, user: row.users }));
+  }
+
+  async updateMemberRole(communityId: string, userId: string, role: "member" | "moderator" | "admin" | "owner"): Promise<CommunityMember> {
+    const [member] = await db
+      .update(communityMembers)
+      .set({ role })
+      .where(and(
+        eq(communityMembers.communityId, communityId),
+        eq(communityMembers.userId, userId)
+      ))
+      .returning();
+    return member;
+  }
+
+  async banMember(communityId: string, userId: string, reason: string, until?: Date): Promise<CommunityMember> {
+    const [member] = await db
+      .update(communityMembers)
+      .set({ isBanned: true, banReason: reason, bannedUntil: until || null })
+      .where(and(
+        eq(communityMembers.communityId, communityId),
+        eq(communityMembers.userId, userId)
+      ))
+      .returning();
+    return member;
+  }
+
+  // Community post operations
+  async createCommunityPost(data: { communityId: string; authorId: string; title?: string; content: string; images?: string[] }): Promise<CommunityPost> {
+    const [post] = await db.insert(communityPosts).values({
+      communityId: data.communityId,
+      authorId: data.authorId,
+      title: data.title || null,
+      content: data.content,
+      images: data.images || [],
+    }).returning();
+
+    await db.update(communities)
+      .set({ postsCount: sql`${communities.postsCount} + 1` })
+      .where(eq(communities.id, data.communityId));
+
+    return post;
+  }
+
+  async getCommunityPost(id: string): Promise<(CommunityPost & { author: User; community: Community }) | undefined> {
+    const result = await db
+      .select()
+      .from(communityPosts)
+      .innerJoin(users, eq(communityPosts.authorId, users.id))
+      .innerJoin(communities, eq(communityPosts.communityId, communities.id))
+      .where(eq(communityPosts.id, id));
+
+    if (result.length === 0) return undefined;
+    return { ...result[0].community_posts, author: result[0].users, community: result[0].communities };
+  }
+
+  async getCommunityPosts(communityId: string): Promise<(CommunityPost & { author: User; isLiked?: boolean })[]> {
+    const result = await db
+      .select()
+      .from(communityPosts)
+      .innerJoin(users, eq(communityPosts.authorId, users.id))
+      .where(eq(communityPosts.communityId, communityId))
+      .orderBy(desc(communityPosts.isPinned), desc(communityPosts.createdAt));
+
+    return result.map(row => ({ ...row.community_posts, author: row.users }));
+  }
+
+  async updateCommunityPost(id: string, data: Partial<CommunityPost>): Promise<CommunityPost> {
+    const [post] = await db
+      .update(communityPosts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(communityPosts.id, id))
+      .returning();
+    return post;
+  }
+
+  async deleteCommunityPost(id: string): Promise<void> {
+    const [post] = await db.select().from(communityPosts).where(eq(communityPosts.id, id));
+    
+    if (post) {
+      await db.delete(communityPosts).where(eq(communityPosts.id, id));
+      await db.update(communities)
+        .set({ postsCount: sql`GREATEST(${communities.postsCount} - 1, 0)` })
+        .where(eq(communities.id, post.communityId));
+    }
+  }
+
+  async pinPost(id: string, isPinned: boolean): Promise<CommunityPost> {
+    const [post] = await db
+      .update(communityPosts)
+      .set({ isPinned })
+      .where(eq(communityPosts.id, id))
+      .returning();
+    return post;
+  }
+
+  async lockPost(id: string, isLocked: boolean): Promise<CommunityPost> {
+    const [post] = await db
+      .update(communityPosts)
+      .set({ isLocked })
+      .where(eq(communityPosts.id, id))
+      .returning();
+    return post;
+  }
+
+  // Community post like operations
+  async likeCommunityPost(postId: string, userId: string): Promise<CommunityPostLike> {
+    const existing = await this.hasLikedCommunityPost(postId, userId);
+    if (existing) {
+      throw new Error("Already liked this post");
+    }
+
+    const [like] = await db.insert(communityPostLikes).values({
+      postId,
+      userId,
+    }).returning();
+
+    await db.update(communityPosts)
+      .set({ likesCount: sql`${communityPosts.likesCount} + 1` })
+      .where(eq(communityPosts.id, postId));
+
+    return like;
+  }
+
+  async unlikeCommunityPost(postId: string, userId: string): Promise<void> {
+    await db.delete(communityPostLikes).where(and(
+      eq(communityPostLikes.postId, postId),
+      eq(communityPostLikes.userId, userId)
+    ));
+
+    await db.update(communityPosts)
+      .set({ likesCount: sql`GREATEST(${communityPosts.likesCount} - 1, 0)` })
+      .where(eq(communityPosts.id, postId));
+  }
+
+  async hasLikedCommunityPost(postId: string, userId: string): Promise<boolean> {
+    const [like] = await db
+      .select()
+      .from(communityPostLikes)
+      .where(and(
+        eq(communityPostLikes.postId, postId),
+        eq(communityPostLikes.userId, userId)
+      ));
+    return !!like;
+  }
+
+  // Community post comment operations
+  async createCommunityPostComment(data: { postId: string; authorId: string; content: string; parentId?: string }): Promise<CommunityPostComment> {
+    const [comment] = await db.insert(communityPostComments).values({
+      postId: data.postId,
+      authorId: data.authorId,
+      content: data.content,
+      parentId: data.parentId || null,
+    }).returning();
+
+    await db.update(communityPosts)
+      .set({ commentsCount: sql`${communityPosts.commentsCount} + 1` })
+      .where(eq(communityPosts.id, data.postId));
+
+    return comment;
+  }
+
+  async getCommunityPostComments(postId: string): Promise<(CommunityPostComment & { author: User })[]> {
+    const result = await db
+      .select()
+      .from(communityPostComments)
+      .innerJoin(users, eq(communityPostComments.authorId, users.id))
+      .where(eq(communityPostComments.postId, postId))
+      .orderBy(communityPostComments.createdAt);
+
+    return result.map(row => ({ ...row.community_post_comments, author: row.users }));
+  }
+
+  async deleteCommunityPostComment(id: string): Promise<void> {
+    const [comment] = await db.select().from(communityPostComments).where(eq(communityPostComments.id, id));
+    
+    if (comment) {
+      await db.delete(communityPostComments).where(eq(communityPostComments.id, id));
+      await db.update(communityPosts)
+        .set({ commentsCount: sql`GREATEST(${communityPosts.commentsCount} - 1, 0)` })
+        .where(eq(communityPosts.id, comment.postId));
+    }
   }
 }
 

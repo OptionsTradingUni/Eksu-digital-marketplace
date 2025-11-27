@@ -2396,3 +2396,541 @@ export type BillPayment = typeof billPayments.$inferSelect;
 export type InsertBillPayment = z.infer<typeof insertBillPaymentSchema>;
 export type PayBillInput = z.infer<typeof payBillSchema>;
 export type ValidateCustomerInput = z.infer<typeof validateCustomerSchema>;
+
+// ===========================================
+// STORIES SYSTEM (Instagram-like, 24h expiry)
+// ===========================================
+
+export const storyTypeEnum = pgEnum("story_type", ["image", "video", "text"]);
+
+export const stories = pgTable("stories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: storyTypeEnum("type").notNull().default("image"),
+  mediaUrl: text("media_url"),
+  textContent: text("text_content"),
+  backgroundColor: varchar("background_color", { length: 20 }).default("#16a34a"),
+  fontStyle: varchar("font_style", { length: 50 }).default("sans-serif"),
+  viewsCount: integer("views_count").default(0),
+  likesCount: integer("likes_count").default(0),
+  expiresAt: timestamp("expires_at").notNull(),
+  isHighlight: boolean("is_highlight").default(false),
+  highlightName: varchar("highlight_name", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("stories_author_idx").on(table.authorId),
+  index("stories_expires_idx").on(table.expiresAt),
+  index("stories_highlight_idx").on(table.isHighlight),
+]);
+
+export const storyViews = pgTable("story_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storyId: varchar("story_id").notNull().references(() => stories.id, { onDelete: "cascade" }),
+  viewerId: varchar("viewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  viewedAt: timestamp("viewed_at").defaultNow(),
+}, (table) => [
+  index("story_views_story_idx").on(table.storyId),
+  index("story_views_viewer_idx").on(table.viewerId),
+]);
+
+export const storyReactions = pgTable("story_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storyId: varchar("story_id").notNull().references(() => stories.id, { onDelete: "cascade" }),
+  reactorId: varchar("reactor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reaction: varchar("reaction", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("story_reactions_story_idx").on(table.storyId),
+]);
+
+export const storyReplies = pgTable("story_replies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storyId: varchar("story_id").notNull().references(() => stories.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("story_replies_story_idx").on(table.storyId),
+]);
+
+export const insertStorySchema = createInsertSchema(stories).omit({
+  id: true,
+  viewsCount: true,
+  likesCount: true,
+  createdAt: true,
+});
+
+export const createStorySchema = z.object({
+  type: z.enum(["image", "video", "text"]),
+  mediaUrl: z.string().optional(),
+  textContent: z.string().max(500).optional(),
+  backgroundColor: z.string().optional(),
+  fontStyle: z.string().optional(),
+});
+
+export type Story = typeof stories.$inferSelect;
+export type InsertStory = z.infer<typeof insertStorySchema>;
+export type CreateStoryInput = z.infer<typeof createStorySchema>;
+export type StoryView = typeof storyViews.$inferSelect;
+export type StoryReaction = typeof storyReactions.$inferSelect;
+export type StoryReply = typeof storyReplies.$inferSelect;
+
+// ===========================================
+// CONFESSIONS SYSTEM (Anonymous Board)
+// ===========================================
+
+export const confessionStatusEnum = pgEnum("confession_status", ["pending", "approved", "rejected", "flagged"]);
+
+export const confessions = pgTable("confessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").references(() => users.id, { onDelete: "set null" }),
+  content: text("content").notNull(),
+  category: varchar("category", { length: 50 }).default("general"),
+  isAnonymous: boolean("is_anonymous").default(true),
+  status: confessionStatusEnum("status").default("pending"),
+  likesCount: integer("likes_count").default(0),
+  dislikesCount: integer("dislikes_count").default(0),
+  commentsCount: integer("comments_count").default(0),
+  viewsCount: integer("views_count").default(0),
+  isTrending: boolean("is_trending").default(false),
+  moderatedBy: varchar("moderated_by").references(() => users.id, { onDelete: "set null" }),
+  moderatedAt: timestamp("moderated_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("confessions_status_idx").on(table.status),
+  index("confessions_trending_idx").on(table.isTrending),
+  index("confessions_created_idx").on(table.createdAt),
+]);
+
+export const confessionVotes = pgTable("confession_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  confessionId: varchar("confession_id").notNull().references(() => confessions.id, { onDelete: "cascade" }),
+  voterId: varchar("voter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  voteType: varchar("vote_type", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("confession_votes_confession_idx").on(table.confessionId),
+  index("confession_votes_voter_idx").on(table.voterId),
+]);
+
+export const confessionComments = pgTable("confession_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  confessionId: varchar("confession_id").notNull().references(() => confessions.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").references(() => users.id, { onDelete: "set null" }),
+  content: text("content").notNull(),
+  isAnonymous: boolean("is_anonymous").default(false),
+  parentId: varchar("parent_id"),
+  likesCount: integer("likes_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("confession_comments_confession_idx").on(table.confessionId),
+]);
+
+export const confessionReports = pgTable("confession_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  confessionId: varchar("confession_id").notNull().references(() => confessions.id, { onDelete: "cascade" }),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: varchar("reason", { length: 100 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertConfessionSchema = createInsertSchema(confessions).omit({
+  id: true,
+  likesCount: true,
+  dislikesCount: true,
+  commentsCount: true,
+  viewsCount: true,
+  isTrending: true,
+  moderatedBy: true,
+  moderatedAt: true,
+  createdAt: true,
+});
+
+export const createConfessionSchema = z.object({
+  content: z.string().min(10, "Confession must be at least 10 characters").max(2000),
+  category: z.enum(["general", "love", "academics", "drama", "advice", "funny", "secrets"]).optional(),
+  isAnonymous: z.boolean().optional().default(true),
+});
+
+export type Confession = typeof confessions.$inferSelect;
+export type InsertConfession = z.infer<typeof insertConfessionSchema>;
+export type CreateConfessionInput = z.infer<typeof createConfessionSchema>;
+export type ConfessionVote = typeof confessionVotes.$inferSelect;
+export type ConfessionComment = typeof confessionComments.$inferSelect;
+
+// ===========================================
+// COMMUNITY SYSTEM (Groups & Discussions)
+// ===========================================
+
+export const communityTypeEnum = pgEnum("community_type", ["public", "private", "invite_only"]);
+export const communityMemberRoleEnum = pgEnum("community_member_role", ["member", "moderator", "admin", "owner"]);
+
+export const communities = pgTable("communities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  slug: varchar("slug", { length: 100 }).unique().notNull(),
+  description: text("description"),
+  iconUrl: text("icon_url"),
+  coverUrl: text("cover_url"),
+  type: communityTypeEnum("type").default("public"),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 50 }),
+  membersCount: integer("members_count").default(1),
+  postsCount: integer("posts_count").default(0),
+  isVerified: boolean("is_verified").default(false),
+  isActive: boolean("is_active").default(true),
+  rules: text("rules").array().default(sql`ARRAY[]::text[]`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("communities_slug_idx").on(table.slug),
+  index("communities_owner_idx").on(table.ownerId),
+  index("communities_type_idx").on(table.type),
+]);
+
+export const communityMembers = pgTable("community_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  communityId: varchar("community_id").notNull().references(() => communities.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: communityMemberRoleEnum("role").default("member"),
+  isBanned: boolean("is_banned").default(false),
+  bannedUntil: timestamp("banned_until"),
+  banReason: text("ban_reason"),
+  joinedAt: timestamp("joined_at").defaultNow(),
+}, (table) => [
+  index("community_members_community_idx").on(table.communityId),
+  index("community_members_user_idx").on(table.userId),
+]);
+
+export const communityPosts = pgTable("community_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  communityId: varchar("community_id").notNull().references(() => communities.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 300 }),
+  content: text("content").notNull(),
+  images: text("images").array().default(sql`ARRAY[]::text[]`),
+  isPinned: boolean("is_pinned").default(false),
+  isLocked: boolean("is_locked").default(false),
+  likesCount: integer("likes_count").default(0),
+  commentsCount: integer("comments_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("community_posts_community_idx").on(table.communityId),
+  index("community_posts_author_idx").on(table.authorId),
+  index("community_posts_pinned_idx").on(table.isPinned),
+]);
+
+export const communityPostComments = pgTable("community_post_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => communityPosts.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  parentId: varchar("parent_id"),
+  likesCount: integer("likes_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("community_post_comments_post_idx").on(table.postId),
+]);
+
+export const communityPostLikes = pgTable("community_post_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => communityPosts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("community_post_likes_post_idx").on(table.postId),
+  index("community_post_likes_user_idx").on(table.userId),
+]);
+
+export const insertCommunitySchema = createInsertSchema(communities).omit({
+  id: true,
+  membersCount: true,
+  postsCount: true,
+  isVerified: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createCommunitySchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters").max(100),
+  slug: z.string().min(3).max(100).regex(/^[a-z0-9-]+$/, "Slug must be lowercase letters, numbers, and hyphens only"),
+  description: z.string().max(1000).optional(),
+  type: z.enum(["public", "private", "invite_only"]).optional(),
+  category: z.string().optional(),
+  rules: z.array(z.string()).optional(),
+});
+
+export const createCommunityPostSchema = z.object({
+  communityId: z.string().min(1),
+  title: z.string().max(300).optional(),
+  content: z.string().min(1, "Content is required").max(10000),
+  images: z.array(z.string()).optional(),
+});
+
+export const createCommunityPostCommentSchema = z.object({
+  postId: z.string().min(1),
+  content: z.string().min(1, "Comment is required").max(2000),
+  parentId: z.string().optional(),
+});
+
+export type Community = typeof communities.$inferSelect;
+export type InsertCommunity = z.infer<typeof insertCommunitySchema>;
+export type CreateCommunityInput = z.infer<typeof createCommunitySchema>;
+export type CommunityMember = typeof communityMembers.$inferSelect;
+export type CommunityPost = typeof communityPosts.$inferSelect;
+export type CreateCommunityPostInput = z.infer<typeof createCommunityPostSchema>;
+export type CommunityPostComment = typeof communityPostComments.$inferSelect;
+export type CreateCommunityPostCommentInput = z.infer<typeof createCommunityPostCommentSchema>;
+export type CommunityPostLike = typeof communityPostLikes.$inferSelect;
+
+// ===========================================
+// WEB PUSH NOTIFICATIONS SYSTEM
+// ===========================================
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dhKey: text("p256dh_key").notNull(),
+  authKey: text("auth_key").notNull(),
+  userAgent: text("user_agent"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastUsed: timestamp("last_used").defaultNow(),
+}, (table) => [
+  index("push_subscriptions_user_idx").on(table.userId),
+  index("push_subscriptions_active_idx").on(table.isActive),
+]);
+
+export const pushNotificationHistory = pgTable("push_notification_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  subscriptionId: varchar("subscription_id").references(() => pushSubscriptions.id, { onDelete: "set null" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  body: text("body").notNull(),
+  icon: text("icon"),
+  url: text("url"),
+  data: jsonb("data"),
+  status: varchar("status", { length: 20 }).default("sent"),
+  sentAt: timestamp("sent_at").defaultNow(),
+  clickedAt: timestamp("clicked_at"),
+}, (table) => [
+  index("push_history_user_idx").on(table.userId),
+  index("push_history_sent_idx").on(table.sentAt),
+]);
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  isActive: true,
+  createdAt: true,
+  lastUsed: true,
+});
+
+export const subscribePushSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string(),
+    auth: z.string(),
+  }),
+});
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type SubscribePushInput = z.infer<typeof subscribePushSchema>;
+export type PushNotificationHistory = typeof pushNotificationHistory.$inferSelect;
+
+// ===========================================
+// ENHANCED MESSAGING FEATURES
+// ===========================================
+
+export const messageStatusEnum = pgEnum("message_status", ["sent", "delivered", "read"]);
+
+export const messageReactions = pgTable("message_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reaction: varchar("reaction", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("message_reactions_message_idx").on(table.messageId),
+]);
+
+export const archivedConversations = pgTable("archived_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  otherUserId: varchar("other_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  archivedAt: timestamp("archived_at").defaultNow(),
+}, (table) => [
+  index("archived_conversations_user_idx").on(table.userId),
+]);
+
+export const disappearingMessageSettings = pgTable("disappearing_message_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  otherUserId: varchar("other_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  duration: integer("duration").notNull(),
+  isEnabled: boolean("is_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("disappearing_settings_user_idx").on(table.userId),
+]);
+
+export const messageReadReceipts = pgTable("message_read_receipts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  readerId: varchar("reader_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").defaultNow(),
+}, (table) => [
+  index("message_read_receipts_message_idx").on(table.messageId),
+]);
+
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type ArchivedConversation = typeof archivedConversations.$inferSelect;
+export type DisappearingMessageSetting = typeof disappearingMessageSettings.$inferSelect;
+export type MessageReadReceipt = typeof messageReadReceipts.$inferSelect;
+
+// ===========================================
+// WEEKLY LOGIN REWARDS (₦20 per week streak)
+// ===========================================
+
+export const weeklyLoginRewards = pgTable("weekly_login_rewards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  weekNumber: integer("week_number").notNull(),
+  year: integer("year").notNull(),
+  daysLoggedIn: integer("days_logged_in").default(0),
+  rewardAmount: decimal("reward_amount", { precision: 10, scale: 2 }).default("0.00"),
+  rewardClaimed: boolean("reward_claimed").default(false),
+  claimedAt: timestamp("claimed_at"),
+  lastLoginDate: timestamp("last_login_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("weekly_login_rewards_user_idx").on(table.userId),
+  index("weekly_login_rewards_week_idx").on(table.weekNumber, table.year),
+]);
+
+export type WeeklyLoginReward = typeof weeklyLoginRewards.$inferSelect;
+
+// ===========================================
+// MULTIPLAYER GAME ROOMS (Real-time WebSocket)
+// ===========================================
+
+export const gameRoomStatusEnum = pgEnum("game_room_status", ["waiting", "ready", "playing", "paused", "finished", "abandoned"]);
+
+export const gameRooms = pgTable("game_rooms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gameType: gameTypeEnum("game_type").notNull(),
+  roomCode: varchar("room_code", { length: 8 }).unique().notNull(),
+  hostId: varchar("host_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: gameRoomStatusEnum("status").default("waiting"),
+  maxPlayers: integer("max_players").default(4),
+  currentPlayers: integer("current_players").default(1),
+  stakeAmount: decimal("stake_amount", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  isPrivate: boolean("is_private").default(false),
+  password: varchar("password", { length: 50 }),
+  gameState: jsonb("game_state"),
+  settings: jsonb("settings"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+}, (table) => [
+  index("game_rooms_code_idx").on(table.roomCode),
+  index("game_rooms_host_idx").on(table.hostId),
+  index("game_rooms_status_idx").on(table.status),
+]);
+
+export const gameRoomPlayers = pgTable("game_room_players", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: varchar("room_id").notNull().references(() => gameRooms.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  playerNumber: integer("player_number").notNull(),
+  isReady: boolean("is_ready").default(false),
+  isConnected: boolean("is_connected").default(true),
+  score: integer("score").default(0),
+  position: integer("position"),
+  playerState: jsonb("player_state"),
+  joinedAt: timestamp("joined_at").defaultNow(),
+  leftAt: timestamp("left_at"),
+}, (table) => [
+  index("game_room_players_room_idx").on(table.roomId),
+  index("game_room_players_user_idx").on(table.userId),
+]);
+
+export const gameChatMessages = pgTable("game_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: varchar("room_id").notNull().references(() => gameRooms.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  type: varchar("type", { length: 20 }).default("text"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("game_chat_messages_room_idx").on(table.roomId),
+]);
+
+export const insertGameRoomSchema = createInsertSchema(gameRooms).omit({
+  id: true,
+  currentPlayers: true,
+  createdAt: true,
+  startedAt: true,
+  finishedAt: true,
+});
+
+export const createGameRoomSchema = z.object({
+  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]),
+  stakeAmount: z.number().min(0).default(0),
+  maxPlayers: z.number().min(2).max(10).default(4),
+  isPrivate: z.boolean().optional(),
+  password: z.string().optional(),
+  settings: z.record(z.any()).optional(),
+});
+
+export const joinGameRoomSchema = z.object({
+  roomCode: z.string().length(8),
+  password: z.string().optional(),
+});
+
+export type GameRoom = typeof gameRooms.$inferSelect;
+export type InsertGameRoom = z.infer<typeof insertGameRoomSchema>;
+export type CreateGameRoomInput = z.infer<typeof createGameRoomSchema>;
+export type JoinGameRoomInput = z.infer<typeof joinGameRoomSchema>;
+export type GameRoomPlayer = typeof gameRoomPlayers.$inferSelect;
+export type GameChatMessage = typeof gameChatMessages.$inferSelect;
+
+// ===========================================
+// PRO CHATBOT CONVERSATIONS
+// ===========================================
+
+export const chatbotConversations = pgTable("chatbot_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }),
+  isActive: boolean("is_active").default(true),
+  messageCount: integer("message_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("chatbot_conversations_user_idx").on(table.userId),
+]);
+
+export const chatbotMessages = pgTable("chatbot_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatbotConversations.id, { onDelete: "cascade" }),
+  role: varchar("role", { length: 20 }).notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("chatbot_messages_conversation_idx").on(table.conversationId),
+]);
+
+export const createChatbotMessageSchema = z.object({
+  conversationId: z.string().optional(),
+  message: z.string().min(1, "Message is required").max(4000),
+});
+
+export type ChatbotConversation = typeof chatbotConversations.$inferSelect;
+export type ChatbotMessage = typeof chatbotMessages.$inferSelect;
+export type CreateChatbotMessageInput = z.infer<typeof createChatbotMessageSchema>;

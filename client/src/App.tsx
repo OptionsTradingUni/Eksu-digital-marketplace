@@ -36,6 +36,9 @@ const VtuPage = lazy(() => import("@/pages/vtu"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
 const LegalPage = lazy(() => import("@/pages/legal"));
 const KYCVerification = lazy(() => import("@/pages/kyc-verification"));
+const StoriesPage = lazy(() => import("@/pages/stories"));
+const ConfessionsPage = lazy(() => import("@/pages/confessions"));
+const CommunitiesPage = lazy(() => import("@/pages/communities"));
 
 function PageLoadingSpinner() {
   return (
@@ -204,6 +207,21 @@ function Router() {
             <Route path="/kyc" component={() => (
               <ErrorBoundary>
                 <KYCVerification />
+              </ErrorBoundary>
+            )} />
+            <Route path="/stories" component={() => (
+              <ErrorBoundary>
+                <StoriesPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/confessions" component={() => (
+              <ErrorBoundary>
+                <ConfessionsPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/communities" component={() => (
+              <ErrorBoundary>
+                <CommunitiesPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (
