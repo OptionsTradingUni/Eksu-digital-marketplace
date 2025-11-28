@@ -268,7 +268,7 @@ export default function SendSecretPage() {
                       Want to create your own secret message link?
                     </p>
                     <Button 
-                      variant="link" 
+                      variant="ghost" 
                       className="text-purple-400 text-sm"
                       onClick={() => window.location.href = "/"}
                       data-testid="button-create-own-link"

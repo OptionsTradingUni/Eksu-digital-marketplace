@@ -7,6 +7,13 @@ export function useAuth() {
     retry: false,
   });
 
+  // Check if user is super admin via environment variable
+  const isSuperAdmin = (() => {
+    if (!user?.id) return false;
+    const adminIds = import.meta.env.VITE_SUPER_ADMIN_IDS?.split(',').map((id: string) => id.trim()) || [];
+    return adminIds.includes(user.id);
+  })();
+
   return {
     user,
     isLoading,
@@ -14,7 +21,7 @@ export function useAuth() {
     isAuthenticated: !!user && !isError,
     isSeller: user?.role === "seller" || user?.role === "admin",
     isBuyer: user?.role === "buyer" || user?.role === "admin",
-    isAdmin: user?.role === "admin",
+    isAdmin: user?.role === "admin" || isSuperAdmin,
     isVerified: user?.isVerified || user?.ninVerified || false,
   };
 }
