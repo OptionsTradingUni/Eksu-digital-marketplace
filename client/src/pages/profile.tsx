@@ -62,7 +62,8 @@ import {
   Heart,
   Image,
   Pin,
-  FileText
+  FileText,
+  ChevronDown
 } from "lucide-react";
 import {
   AlertDialog,
@@ -567,7 +568,7 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Followed",
@@ -590,7 +591,7 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Unfollowed",
