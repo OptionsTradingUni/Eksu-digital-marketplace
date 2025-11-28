@@ -1,0 +1,447 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+You are fixing a React Native mobile app called EKSU Marketplace (campus buying/selling platform for Ekiti State University students). It's a full-stack app: React Native frontend (JS/TS), Node.js/Express backend, Supabase/Postgres DB, Squad API for payments, and features like user profiles, posts/feed, messages, anonymous confessions, wallet deposits/withdrawals, stories, and The Plug (discovery feed).
+
+Current bugs/issues from user screenshots and reports (November 28, 2025):
+1. Image upload: Only allows 1 image per post/listing. Implement multi-image upload (up to 5) using react-native-image-picker or expo-image-picker, store in Supabase Storage, display as carousel in feed.
+2. Product image on home feed: Images too large (desktop-like sizing on mobile). Fix responsive sizing: Use Image component with style {width: '100%', height: 200, resizeMode: 'cover'} and Flexbox for containers. Test on iOS/Android simulators.
+3. Location/distance: Not showing km away from buyer. Add real-time location using @react-native-geolocation/geolocation or Expo Location. Store user lat/lng in DB on signup, calculate Haversine distance in backend, display "X km away" in listings. If unavailable, show "Location not shared" with toggle.
+4. Follow persistence: Shows "Following" on profile but "Follow" button reappears in The Plug feed. Fix state sync: Use Redux/Context for follow state, update DB on follow/unfollow, refetch on feed load.
+5. Views counter: Increases uncontrollably (not 1 per user). Implement unique views: Use Supabase edge function to track IP/user_id per post (e.g., upsert in a views table, count distinct), cap at 1 view per 24h per user.
+6. Posting with + button: Keyboard dismisses on type, post fails. Fix: Use KeyboardAvoidingView wrapper, prevent dismiss on input focus. Redesign post modal to full-screen overlay like Twitter/X compose (use Modal with transparent background, full height, centered text input with toolbar for media/emojis).
+7. Stories: Followers can't see my stories; can't view others' stories on profile (like Instagram). Implement: Add stories table in DB (expires in 24h), circular viewer component with swipe navigation, fetch via user_id, show ring indicator on profile avatars.
+8. Squad API errors: 500 "Unknown error" on deposit/withdrawal. Check integration: Ensure x-api-key and x-private-key are env vars (no hardcode), handle retries with exponential backoff. Mock for testing if keys invalid. Update curl/HTTP calls in backend (e.g., /api/deposit) to log errors server-side.
+9. Error handling: Don't show raw 400/500 to users. Wrap all API calls in try-catch, show user-friendly toasts (e.g., "Something went wrong—try again" via react-native-toast-message). For critical errors, log to Sentry or email engineer (use nodemailer to your Gmail on 5xx).
+10. Anonymous messages UI: Blurry/stupid, not attractive. Redesign: Use clean dark-themed modal with gradient background, emoji picker, character counter, preview before send. Add features: Report/block anonymous sender, threaded replies.
+11. Branding: Replace all "CampusPlug" with "EKSU Marketplace" (search/replace in code, strings, titles).
+12. Guest access for secret links: Allow anonymous create/view without account (use temp session_id in localStorage). Save as "Anonymous" in DB. Add floating signup/login CTA (e.g., "Join to save & follow").
+13. Auth: Add email verification on signup (send link via nodemailer or Supabase auth). For login, send OTP code. Validate emails with regex + API (e.g., email-verifier npm). Block fake emails (e.g., 10minutemail.com).
+14. Anonymous confessions: Can't vote/comment, worst UI. Fix: Allow guest votes (IP-based), add comment thread under each. Redesign UI: Card-based feed with like/dislike buttons, collapsible comments, dark mode toggle.
+15. Views (duplicate): Already fixed in #5—ensure consistency.
+16. Messages UI: Unbalanced, need manual drag to scroll/align. Fix: Use FlatList for chat bubbles with auto-scroll to bottom on new msg, justifyContent: 'flex-end' for alignment, KeyboardAvoidingView for input.
+17. Themes: Add more dark mode options like Twitter (e.g., Dim, Lights Out). Use react-native-appearance for system theme, add manual toggle in settings with color schemes (primary: #00A676 green for EKSU).
+18. Username uniqueness: On signup, check DB for existing @handle via Supabase query, show "Taken—try another" error.
+19. Bio decoration: Allow color codes (e.g., #FF0000 for red text) and Unicode (stars ★, planets 🌟) in bio. Render with react-native-render-html or custom Text with style parsing.
+
+Tech stack assumptions: React Native 0.75+, Expo, Supabase JS client, Axios for APIs, Redux Toolkit for state. Backend: Node/Express on Render, env for Squad keys.
+
+Steps:
+- Generate fixed code files (e.g., PostScreen.js, MessageScreen.js, Wallet.js).
+- Test each fix: Simulate mobile (iOS), check API calls, run end-to-end (e.g., post with images, deposit flow).
+- Output: Diffs of changes, full updated files, deployment script for Render.
+- Prioritize: Start with #8 (Squad) and #1 (images) as critical.
+
+Build and test now—report any unfixable issues.
+
+/**
+ * EKSU Digital Marketplace Issues Report (V8 - FINAL INSTRUCTIONS)
+ * Incorporating ALL critical bugs, full X/Twitter redesign,
+ * Squad Payment fixes, and new Confessions/Messaging UX requirements.
+ * Generated on: 2025-11-28
+ * TARGET GOAL: Continuous, Uninterrupted Implementation.
+ */
+const projectBrief = {
+    // --- 0. CORE BRANDING, ACCOUNT, AND GLOBAL FIXES ---
+    coreSetup: {
+        id: 'SETUP_GLOBAL_BRANDING_AND_ACCOUNT',
+        description: 'Update branding, set official accounts, and implement global branding changes.',
+        details: {
+            officialEmail: 'eksucampusmarketplace@gmail.com',
+            officialAccountName: 'Eksu marketplace',
+            brandingChange: 'Change ALL instances of "CampusPlug" to "Eksu marketplace".', // Instruction #12
+        }
+    },
+
+    // --- 1. CRITICAL DATABASE & API BUGS (500 ERRORS) ---
+    criticalBugs: [
+        {
+            id: 'BUG_DB_COMMUNITY_OWNER_ID_MISSING',
+            location: 'Community Creation Form (Image)',
+            description: 'CRITICAL: Fix schema missing column. Server fails with "500: column communities.owner_id does not exist". Add `owner_id` (UUID, FK to users table) to `communities` table.',
+            priority: 'Critical'
+        },
+        {
+            id: 'BUG_DB_COMMUNITY_IS_BANNED_MISSING',
+            location: 'Community Creation Form (Image)',
+            description: 'CRITICAL: Fix schema missing column. Server fails with "500: column \"is_banned\" of relation \"community_members\" does not exist". Add `is_banned` (BOOLEAN) to `community_members` table.',
+            priority: 'Critical'
+        },
+        {
+            id: 'BUG_CONFESSION_POST_FAILURE',
+            location: 'New Confession Form (Image)',
+            description: 'CRITICAL: Fails consistently with "Error: Failed to post confession". This is likely a backend schema or validation error related to the missing fields/tables.',
+            priority: 'High'
+        },
+        {
+            id: 'BUG_STORY_CREATION_FAILURE',
+            location: 'Story Creation UI (Image)',
+            description: 'CRITICAL: Fails with "Error: Failed to create story". Debug and fix the story creation and upload endpoint.',
+            priority: 'High'
+        },
+        {
+            id: 'BUG_CONFESSION_VOTE_FAILURE',
+            location: 'Confessions Feed (Image)',
+            description: 'CRITICAL: Fails with "Error: Failed to vote". Fix the upvote/downvote endpoint logic and ensure the user can only vote once per confession.', // Instruction #15
+            priority: 'High'
+        },
+    ],
+
+    // --- 2. SQUAD PAYMENT INTEGRATION FIX & ERROR HANDLING ---
+    squadIntegration: {
+        id: 'TECH_PLAN_SQUAD_PAYMENT_FIXES',
+        description: 'Fix the current Squad API "Deposit failed: 500: {"message":"Squad API error: Unknown error"}" (Image) and implement robust error handling.',
+        priority: 'Critical (Revenue)',
+        requirements: [
+            'Ensure the backend uses the **Squad Secret Key** for all deposit/payout calls.',
+            'Verify the `createVirtualAccount` endpoint is correctly passing all required parameters (account name, email, amount) in kobo.',
+            'Implement the full API Client as provided in V6 for all deposit/withdrawal/transfer functions.',
+        ],
+        // Instruction #9:
+        errorHandling: {
+            userDisplay: 'When an error occurs (e.g., Squad API error, network fail), **DO NOT** show raw errors like "Error 400" or "500: {JSON...}". Display a professional, user-friendly message (e.g., "Payment processing failed. Please try again later.")',
+            engineerReport: 'If the error is a **5xx server error** or a **critical external API failure (Squad)**, automatically send an engineer report (stack trace, error JSON, user ID) to the official email: `eksucampusmarketplace@gmail.com`. (Instruction #10)',
+        }
+    },
+
+    // --- 3. UI/UX REDESIGN & FRONTEND STABILITY ---
+    uiUxRedesign: [
+        // GLOBAL REDESIGN (X/TWITTER)
+        {
+            id: 'REDESIGN_FULL_X_EMULATION',
+            location: 'Global',
+            description: 'Complete UI/UX overhaul to visually and functionally resemble **X (Twitter)**.',
+            priority: 'Highest (Design Mandate)'
+        },
+        // MESSAGE BOX/KEYBOARD FIX (Instruction #7, #17)
+        {
+            id: 'UI_KEYBOARD_FOCUS_LOSS_AND_POST_MODAL',
+            location: 'Chat View / New Post Modal',
+            description: 'CRITICAL BUG: The keyboard frequently **cancels** or **dismisses** when typing a post or message (e.g., typing "h"). Fix the focus management. Redesign the **New Post modal** to cover the **whole screen** (like Twitter\'s compose view) to be balanced and stable.',
+            priority: 'Critical'
+        },
+        // CHAT BALANCE FIX (Instruction #17)
+        {
+            id: 'UI_CHAT_BALANCE_FIX',
+            location: 'Messages (Chat View) (Images)',
+            description: 'The chat interface is **unbalanced** and requires manual scrolling up/down to stabilize. Redesign the layout to be stable and balanced, resembling X/Twitter\'s chat view.',
+            priority: 'High'
+        },
+        // PRODUCT IMAGE SIZE FIX (Instruction #3)
+        {
+            id: 'UI_PRODUCT_IMAGE_SIZE_FIX',
+            location: 'Product Details Page',
+            description: 'BUG: The main product image is **too big**, making the interface look stretched/like a desktop view. Implement proper responsiveness to fit mobile screen size without distortion.',
+            priority: 'Medium'
+        },
+        // DARK MODE ENHANCEMENT (Instruction #18)
+        {
+            id: 'UI_DARK_MODE_THEMES',
+            location: 'Settings/Profile',
+            description: 'Add **more theme options** in dark mode (e.g., `Dim`, `Lights Out`) to give the user more choice, similar to Twitter/X.',
+            priority: 'Medium'
+        },
+    ],
+
+    // --- 4. FEATURE IMPLEMENTATION & LOGIC FIXES ---
+    featureRequests: [
+        // CONFESSIONS REDESIGN (Instruction #11, #13, #15)
+        {
+            id: 'FEATURE_CONFESSIONS_ANONYMITY_AND_GUEST_ACCESS',
+            location: 'Confessions',
+            description: 'Major Redesign: UI is currently "stupid and blur." Make the UI attractive and sensible for students. **Add Guest Access:** Allow users without an account to use the anonymous message link/section to drop messages. **Allow Guests to create a link** (saved anonymously to DB). **Enable Comments and Voting** (currently failing) with the improved UI.',
+            features: ['Attractive UI/UX', 'Full Guest Access to Anonymous Message Link Creator/Dropper', 'Enable Voting/Commenting (Functional)', 'Show Sign Up/Sign In icons for Guests.'],
+            priority: 'Critical'
+        },
+        // GEOLOCATION & DISTANCE (Instruction #4)
+        {
+            id: 'FEATURE_GEOLOCATION_AND_DISTANCE_CALC',
+            location: 'Global/User Profile',
+            description: 'Implement real-time geolocation to show the user\'s current major location (Ado Ekiti, Iworoko, EKSU, Osekita). **Calculate and display the distance (km) away** from the buyer on product pages. If location is unavailable, display a relevant "Location Not Available" message.',
+            priority: 'High'
+        },
+        // FOLLOWING/STORY PERSISTENCE (Instruction #5, #8)
+        {
+            id: 'FIX_FOLLOW_PERSISTENCE_AND_STORY_VIEWING',
+            location: 'Profile/The Plug/Stories',
+            description: 'FIX: The **Follow status is not persistent**. If a user is following, the "Follow" button should **NOT** reappear on "The Plug" feed. FIX: Implement **Story Viewing** logic. Followers must see the user\'s story, and users should be able to view stories from people they follow on their profile (like Instagram).',
+            priority: 'High'
+        },
+        // VIEW COUNT FIX (Instruction #6, #16)
+        {
+            id: 'FIX_VIEW_COUNT_LOGIC',
+            location: 'Posts/Products',
+            description: 'CRITICAL BUG: Views are increasing uncontrollably. Implement logic to ensure it counts **1 view per unique user** (IP/User ID) per post/product within a defined timeframe (e.g., 24 hours).',
+            priority: 'High'
+        },
+        // USERNAME AVAILABILITY (Instruction #19)
+        {
+            id: 'FIX_USERNAME_AVAILABILITY_CHECK',
+            location: 'Sign Up / Profile Settings',
+            description: 'Implement a real-time check when setting a username to detect if the desired username is **already available** in the database before final submission.',
+            priority: 'Medium'
+        },
+        // BIO COLOR CODE (Instruction #20)
+        {
+            id: 'FEATURE_BIO_COLOR_CODE_SUPPORT',
+            location: 'User Bio/Profile',
+            description: 'Implement support for **color codes** (e.g., `#FF0000`), **star emojis**, and other visual planet/star **decorations** in the user\'s bio text field, likely by allowing HTML/rich text rendering or sanitizing for allowed visual characters.',
+            priority: 'Low'
+        }
+    ],
+
+    // --- 5. EMAIL AND AUTHENTICATION SERVICES ---
+    emailNotificationServices: {
+        id: 'SERVICE_EMAIL_INTEGRATION_AND_VALIDATION',
+        description: 'Implement full Auth and Email validation and services.',
+        priority: 'High',
+        // Instruction #14:
+        requirements: [
+            '**Sign Up**: Implement **Email Verification** (verification link sent to Gmail) using Supabase Auth.',
+            '**Sign In**: Implement **Verification Code/OTP** sent to the registered email for secure login.',
+            '**Email Validation**: Always test or check if the entered email is **valid** (preventing users from entering "rubbish email").'
+        ],
+        notificationService: 'Custom **Nodemailer** service for activity notifications (New message, new follow) remains a requirement (as detailed in V7).'
+    }
+};
+
+console.log(JSON.stringify(projectBrief, null, 2));
+
+
+
+
+text/html' is not a valid JavaScript MIME type.
+
+Component Stack:
+oe@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:299:59415
+component
+ie@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:49:3290
+$k@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:49:4136
+Suspense
+main
+h3@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:355:8758
+TooltipProviderProvider@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:49:45699
+TooltipProvider@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:299:50455
+nj@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:299:56913
+lR@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:49:40239
+oe@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:299:59415
+p3@https://eksu-digital-marketplace.onrender.com/assets/index-Dd0X5jXu.js:355:11672
+
+express] GET /api/categories 304 in 2174ms :: [{"id":"dd464c48-a197-4a4d-8705-fb11a889c3…
+Error fetching stories: error: column story_views.viewed_at does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getActiveStories (file:///opt/render/project/src/dist/index.js:5232:27)
+    at async file:///opt/render/project/src/dist/index.js:14207:24 {
+  length: 189,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: 'Perhaps you meant to reference the column "story_views.viewer_id".',
+  position: '1516',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3729',
+  routine: 'errorMissingColumn'
+}
+8:07:14 AM [express] GET /api/stories 500 in 725ms :: {"message":"Failed to fetch stories"}
+8:07:15 AM [express] GET /api/ads/active 304 in 1018ms :: []
+8:07:16 AM [express] GET /api/feed 200 in 1908ms :: [{"id":"14a4c377-ed36-4a06-b2ff-152ee89de393","a…
+Error fetching stories: error: column story_views.viewed_at does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getActiveStories (file:///opt/render/project/src/dist/index.js:5232:27)
+    at async file:///opt/render/project/src/dist/index.js:14207:24 {
+  length: 189,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: 'Perhaps you meant to reference the column "story_views.viewer_id".',
+  position: '1516',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3729',
+  routine: 'errorMissingColumn'
+}
+8:07:17 AM [express] GET /api/stories 500 in 724ms :: {"message":"Failed to fetch stories"}
+8:07:17 AM [express] POST /api/social-posts/14a4c377-ed36-4a06-b2ff-152ee89de393/view 200 in 1028ms …
+8:07:22 AM [express] POST /api/social-posts/27608883-2930-4261-937e-9d38aba3db6c/view 200 in 1026ms …
+8:07:26 AM [express] POST /api/social-posts/0c320dbe-694c-433e-8709-da8bf83c71ec/view 200 in 1024ms …
+8:07:26 AM [express] POST /api/social-posts/4b13d70a-f280-4b82-b9fe-d014740571c1/view 200 in 1009ms …
+8:07:27 AM [express] POST /api/social-posts/d824d942-cdae-4e47-a7b3-b74ebeb62d0b/view 200 in 1915ms …
+8:07:27 AM [express] POST /api/social-posts/07a13880-3b12-4fca-9d9c-9a1cc4d8fb0b/view 200 in 1450ms …
+8:07:29 AM [express] POST /api/users/c0107279-7055-4f96-80b8-2ca60f4649c1/follow 200 in 889ms :: {"i…
+8:07:31 AM [express] GET /api/feed 200 in 1474ms :: [{"id":"14a4c377-ed36-4a06-b2ff-152ee89de393","a…
+8:07:33 AM [express] GET /api/notifications 304 in 716ms :: [{"id":"99840456-3246-4207-a850-be6fe12e…
+8:07:37 AM [express] GET /api/auth/user 304 in 575ms :: {"id":"e461e9f4-6a83-413f-a2e9-ab346d268f44"…
+8:07:38 AM [express] GET /api/settings 304 in 1429ms :: {"id":"70c7a39d-cb6f-468a-841e-42ce82c8813c"…
+8:07:38 AM [express] GET /api/cart 304 in 1427ms :: [{"id":"ec1c6765-9017-42e5-b631-b320f6b840f4","u…
+8:07:38 AM [express] GET /api/users/c0107279-7055-4f96-80b8-2ca60f4649c1/follow-stats 304 in 573ms :…
+8:07:38 AM [express] GET /api/products/efc04c11-4a44-4fcd-a0d0-13c62648e5cd 304 in 875ms :: {"id":"e…
+8:07:38 AM [express] GET /api/watchlist 304 in 2306ms :: [{"id":"f941002c-5be8-4f95-8ead-88d3c49a98e…
+Error fetching stories: error: column story_views.viewed_at does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getActiveStories (file:///opt/render/project/src/dist/index.js:5232:27)
+    at async file:///opt/render/project/src/dist/index.js:14207:24 {
+  length: 189,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: 'Perhaps you meant to reference the column "story_views.viewer_id".',
+  position: '1516',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3729',
+  routine: 'errorMissingColumn'
+}
+8:07:43 AM [express] GET /api/stories 500 in 726ms :: {"message":"Failed to fetch stories"}
+8:07:43 AM [express] POST /api/social-posts/d824d942-cdae-4e47-a7b3-b74ebeb62d0b/view 200 in 1005ms …
+8:07:43 AM [express] POST /api/social-posts/0c320dbe-694c-433e-8709-da8bf83c71ec/view 200 in 1009ms …
+8:07:43 AM [express] POST /api/social-posts/4b13d70a-f280-4b82-b9fe-d014740571c1/view 200 in 998ms :…
+8:07:44 AM [express] POST /api/social-posts/27608883-2930-4261-937e-9d38aba3db6c/view 200 in 1428ms …
+8:07:44 AM [express] POST /api/social-posts/c8496a21-60f2-44a2-ac7b-03de141bdb85/view 200 in 1001ms …
+8:07:45 AM [express] POST /api/social-posts/14a4c377-ed36-4a06-b2ff-152ee89de393/view 200 in 1000ms …
+Error fetching stories: error: column story_views.viewed_at does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getActiveStories (file:///opt/render/project/src/dist/index.js:5232:27)
+    at async file:///opt/render/project/src/dist/index.js:14207:24 {
+  length: 189,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: 'Perhaps you meant to reference the column "story_views.viewer_id".',
+  position: '1516',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3729',
+  routine: 'errorMissingColumn'
+}
+8:07:45 AM [express] GET /api/stories 500 in 714ms :: {"message":"Failed to fetch stories"}
+8:07:50 AM [express] GET /api/users/online-status 304 in 426ms :: {"onlineUserIds":[]}
+8:07:50 AM [express] GET /api/auth/ws-token 200 in 428ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ik…
+8:07:50 AM [express] GET /api/conversations/archived 304 in 572ms :: []
+8:07:51 AM [express] GET /api/messages/threads 200 in 1286ms :: [{"user":{"id":"c0107279-7055-4f96-8…
+WebSocket authenticated for user: e461e9f4-6a83-413f-a2e9-ab346d268f44 (connection added)
+User e461e9f4-6a83-413f-a2e9-ab346d268f44 is now online - status broadcast sent
+WebSocket disconnected for user: e461e9f4-6a83-413f-a2e9-ab346d268f44 (connection removed)
+User e461e9f4-6a83-413f-a2e9-ab346d268f44 is now offline - status broadcast sent
+8:07:53 AM [express] GET /api/auth/ws-token 200 in 430ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ik…
+8:07:53 AM [express] GET /api/conversations/c0107279-7055-4f96-80b8-2ca60f4649c1/disappearing 304 in…
+8:07:53 AM [express] GET /api/messages/c0107279-7055-4f96-80b8-2ca60f4649c1 200 in 863ms :: [{"id":"…
+8:07:54 AM [express] GET /api/users/c0107279-7055-4f96-80b8-2ca60f4649c1/relationship 304 in 1026ms …
+WebSocket authenticated for user: e461e9f4-6a83-413f-a2e9-ab346d268f44 (connection added)
+User e461e9f4-6a83-413f-a2e9-ab346d268f44 is now online - status broadcast sent
+8:07:55 AM [express] GET /api/messages/3ddde731-b1f4-4118-b007-cc067490a880/reactions 304 in 1148ms …
+8:07:55 AM [express] GET /api/messages/629445fd-dd51-4461-8ddf-fdd3b0534884/reactions 304 in 1155ms …
+8:07:55 AM [express] GET /api/messages/bb580a5c-3840-488f-a8ff-15e5dd67df41/reactions 304 in 1171ms …
+8:07:55 AM [express] GET /api/messages/0ed4d418-b2b7-4d22-a39d-419f880ae3c9/reactions 304 in 1182ms …
+8:07:55 AM [express] GET /api/messages/e5016540-7a25-476a-915a-068373e0def5/reactions 304 in 1158ms …
+8:07:55 AM [express] GET /api/messages/b8a7ca90-227c-4713-bd9d-295b83d7a966/reactions 304 in 1162ms …
+8:07:55 AM [express] GET /api/messages/1b5d07e3-424a-465d-8f95-74a75b0eae36/reactions 304 in 1165ms …
+8:07:55 AM [express] GET /api/messages/988be5cd-735f-4bf8-b7d7-d1bc0b95282f/reactions 304 in 1166ms …
+8:07:55 AM [express] GET /api/messages/98d2a6a9-5235-4199-9be3-3271aa22cb98/reactions 304 in 1167ms …
+8:07:55 AM [express] GET /api/messages/5c87b539-e94f-415a-864c-72e3d33e7b50/reactions 304 in 1253ms …
+8:07:55 AM [express] GET /api/messages/e677a015-30e1-4337-bbe4-42ad7374aed4/reactions 304 in 1263ms …
+8:07:55 AM [express] GET /api/messages/d0ed6c56-3036-4375-9267-79408757697b/reactions 304 in 1264ms …
+8:07:55 AM [express] GET /api/messages/53bdeb5f-6521-4179-98aa-ca110ca61574/reactions 304 in 1278ms …
+8:07:55 AM [express] GET /api/messages/c1aecbc0-0079-40b2-8d1f-a1ce064f1104/reactions 304 in 1283ms …
+8:07:55 AM [express] GET /api/messages/b00588b4-01dc-4fdb-9ef4-978f3984985f/reactions 304 in 1306ms …
+8:07:55 AM [express] GET /api/messages/41f969ca-24de-4d43-9e03-c0877a8ef0cf/reactions 304 in 1309ms …
+8:07:55 AM [express] GET /api/messages/fceaf25d-4520-4583-bb64-5ecb3c7ddbde/reactions 304 in 1304ms …
+8:07:55 AM [express] GET /api/messages/c3c99c5f-c2da-4280-a785-948a01f6be93/reactions 304 in 1305ms …
+8:07:55 AM [express] GET /api/messages/1f4ca8c6-1c39-4968-a91c-8c811ff1b521/reactions 304 in 1306ms …
+8:07:55 AM [express] GET /api/messages/a48f3862-deff-48a4-a56f-9384697a84e5/reactions 304 in 1398ms …
+8:07:55 AM [express] GET /api/messages/f5b60370-ead1-427c-8482-1a843a04800d/reactions 304 in 1419ms …
+8:07:55 AM [express] GET /api/messages/ad5f2bbf-408b-440f-9ebb-3be930827e14/reactions 304 in 1414ms …
+8:07:55 AM [express] GET /api/messages/360550af-2ea1-4aa0-b263-0c5ab6763a66/reactions 304 in 1430ms …
+8:07:56 AM [express] GET /api/messages/13e7e443-fab8-4161-8d7f-4f341cade38d/reactions 304 in 1547ms …
+8:07:56 AM [express] GET /api/messages/6ce9495d-5325-45f2-ba7f-8e6c054e6d72/reactions 304 in 1550ms …
+8:07:56 AM [express] GET /api/messages/731a3f0e-7472-439b-9078-9dffd30be9f9/reactions 304 in 1552ms …
+8:07:56 AM [express] GET /api/messages/7c6acce4-975e-498d-9782-644c7bef2815/reactions 304 in 1517ms …
+8:07:56 AM [express] GET /api/messages/73bdab5c-cd57-49cf-a6b1-aa3d63d7d758/reactions 304 in 1447ms …
+8:07:56 AM [express] GET /api/messages/eddd54f9-d244-40e3-816e-6dda9d3de2ce/reactions 304 in 1602ms …
+8:07:56 AM [express] GET /api/messages/473886ea-909f-4467-9927-6239259e3e67/reactions 304 in 1609ms …
+8:07:56 AM [express] GET /api/messages/31e3d387-4bc1-4eaa-9748-2a5723672eb3/reactions 304 in 1611ms …
+8:07:56 AM [express] GET /api/messages/2c91f9a3-c05f-4fdb-842a-92883e04881e/reactions 304 in 1685ms …
+8:07:56 AM [express] GET /api/messages/18814fb7-5dd5-41a0-b74c-3c23eeb45fc6/reactions 304 in 1705ms …
+8:07:56 AM [express] GET /api/messages/4d8c8063-d52a-439e-ac5e-ff532a043e44/reactions 304 in 1712ms …
+8:07:56 AM [express] GET /api/messages/35055c90-f22c-4cd9-980e-f1b698fdeaf1/reactions 304 in 1538ms …
+Troubleshooting “Deposit failed 500: ‘message’:‘Squad API error: Unknown error’” in Squad.co
+This is a 500 Internal Server Error from Squad’s API, wrapped in your app’s custom message (“Squad API error: Unknown error”). It’s frustrating because Squad’s docs (as of November 28, 2025) are light on error details — they focus on getting started rather than deep troubleshooting — but based on standard API patterns, Squad’s error handling, and common developer reports, this typically points to a server-side issue on Squad’s end or a misconfigured request from your code. It’s not user-facing (e.g., insufficient funds); it’s technical.
+I’ll explain the likely causes, deep diagnosis, and fixes step-by-step. Since you’re using TypeScript/Flask with Squad, I’ll include code snippets to test/debug. If it’s persistent, contact Squad support (support@squadco.com) with your reference ID — they’re responsive for Nigerian devs.
+1. Likely Causes (Ranked by Probability)
+From Squad’s API behavior (REST with Bearer auth) and similar fintech errors (e.g., Paystack/Flutterwave 500s):
+•  High Probability (70%): Server-Side Failure on Squad (Transient). Squad’s backend crashed (e.g., high load, DB issue). “Unknown error” is their generic 500 catch-all — docs don’t list it, but it’s common in sandbox/live during peaks.
+•  Medium (20%): Invalid/Expired Request Data. Malformed payload (e.g., amount not in kobo, invalid email format) or expired token. Squad rejects with 500 instead of 400 sometimes.
+•  Low (10%): Your Code/Network Issue. Axios/Flask timeout, wrong base URL (sandbox vs live), or unhandled exception bubbling up as “Unknown”.
+•  Rare: Webhook misconfig (but this is for deposits, so unlikely) or rate limit (Squad caps 100/min, but throws 429, not 500).
+No specific “Unknown error” in Squad docs — their error responses are usually { "error": { "code": "INVALID_AMOUNT", "message": "..." } } for 4xx. 500 means Squad’s server errored internally.
+2. Deep Diagnosis Steps (Test in 5 Minutes)
+1.  Check Squad Dashboard:
+	•  Log in to squadco.com/dashboard → Transactions → Search by reference (from your logs).
+	•  Look for “Failed” status with details (e.g., “Server error at 14:32”). If pending, it’s transient — retry in 5 mins.
+2.  Inspect Your Logs:
+	•  In Render dashboard → Logs → Search “Squad”. Look for full error (e.g., Axios response: error.response.status === 500).
+	•  Console: console.log(error.response.data) in your TS catch block.
+3.  Test with Postman/Curl (Bypass Your Code):
+
+	•  Check webhook hits your Render URL (use ngrok for local).
+	•  Verify in dashboard: Txn status “successful”.
+2.  Common 500 Pitfalls & Fixes:
+	•  Payload Mismatch: Amount must be kobo (1000 = ₦10). Fix: Math.round(amount * 100).
+	•  Token Expired: Regenerate keys. Fix: Dashboard → API Keys → New.
+	•  Network/Timeout: Add timeout: 30s in axios. Fix: timeout: 30000.
+	•  Invalid Bank Code: Use Squad’s list (044 Access, 063 Access Trust). Fix: Validate client-side.
+	•  Webhook Fail: Signature mismatch. Fix: Use exact payload string for HMAC (no extra spaces).
+3.  Monitoring:
+	•  Render logs for 500s.
+	•  Squad dashboard alerts for failed txns.
+	•  Supabase logs for wallet updates.
+4.  Scaling Notes:
+	•  Bulk payouts: /bulk-payouts for 100+ (CSV upload).
+	•  Compliance: For >₦50k, call /kyc/verify with BVN.
+	•  Costs: Free sandbox. Live: 0.5% collections, ₦10 payouts.
+This is deeper than Squad’s docs — full TS/Flask, validation, retries, webhooks. Test a deposit now. If 500 persists, share logs/reference — I’ll debug. Your EKSU payments are bulletproof! 🚀
