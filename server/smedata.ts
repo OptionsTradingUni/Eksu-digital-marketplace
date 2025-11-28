@@ -1,7 +1,8 @@
 // SMEDATA.NG API Integration for VTU Data Sales
 // API Documentation: https://smedata.ng/api-documentation
+// Correct endpoint: https://smedata.ng/wp-json/api/v1/
 
-const SMEDATA_BASE_URL = "https://smedata.ng/api/v1";
+const SMEDATA_BASE_URL = "https://smedata.ng/wp-json/api/v1";
 const SME_API_KEY = process.env.SME_API || "";
 
 interface SMEDataResponse {
@@ -63,18 +64,18 @@ export async function getSMEDataBalance(): Promise<{ balance: number; success: b
   }
 
   try {
-    const response = await fetch(`${SMEDATA_BASE_URL}/user`, {
+    // SME Data API uses token parameter instead of Bearer header
+    const response = await fetch(`${SMEDATA_BASE_URL}/user?token=${encodeURIComponent(SME_API_KEY)}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${SME_API_KEY}`,
         "Content-Type": "application/json",
       },
     });
 
     const data = await response.json();
     
-    if (data.success) {
-      return { balance: parseFloat(data.data?.balance || "0"), success: true };
+    if (data.success || data.status === "success") {
+      return { balance: parseFloat(data.data?.balance || data.balance || "0"), success: true };
     }
     
     return { balance: 0, success: false };
@@ -84,11 +85,12 @@ export async function getSMEDataBalance(): Promise<{ balance: number; success: b
   }
 }
 
-// Purchase data from SMEDATA
+// Purchase data from SMEDATA using GET method with token parameter
+// API docs: https://smedata.ng/mtn-sme-data-api-documentation-for-developers/
 export async function purchaseData(
   network: string,
   phoneNumber: string,
-  planCode: string
+  dataSize: string // Data size like "1GB", "500MB", "2GB" etc.
 ): Promise<SMEDataResponse> {
   if (!isSMEDataConfigured()) {
     return {
@@ -101,32 +103,42 @@ export async function purchaseData(
   // Normalize phone number (remove country code, add 0 prefix if needed)
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   
-  // Map our network to SMEDATA network
-  const smedataNetwork = NETWORK_MAP[network] || network.toUpperCase();
+  // Map our network to SMEDATA network (uppercase for API)
+  const smedataNetwork = network === "mtn_sme" ? "MTN" : 
+                         network === "glo_cg" ? "GLO" :
+                         network === "airtel_cg" ? "AIRTEL" :
+                         network === "9mobile" ? "9MOBILE" :
+                         network.toUpperCase();
 
   try {
-    const response = await fetch(`${SMEDATA_BASE_URL}/data`, {
-      method: "POST",
+    // SME Data API uses GET method with size parameter
+    const params = new URLSearchParams({
+      token: SME_API_KEY,
+      network: smedataNetwork,
+      phone: normalizedPhone,
+      size: dataSize.toUpperCase(), // e.g., "1GB", "500MB"
+    });
+
+    console.log("SME Data API Request:", `${SMEDATA_BASE_URL}/data?${params.toString().replace(SME_API_KEY, "***")}`);
+
+    const response = await fetch(`${SMEDATA_BASE_URL}/data?${params.toString()}`, {
+      method: "GET",
       headers: {
-        Authorization: `Bearer ${SME_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        network: smedataNetwork,
-        phone: normalizedPhone,
-        plan_code: planCode,
-        bypass: false, // Don't bypass network validation
-      } as DataPurchaseRequest),
     });
 
     const data = await response.json();
+    console.log("SME Data API Response:", JSON.stringify(data));
+    
+    const isSuccess = data.code === "success" || data.success || data.status === "success";
     
     return {
-      success: data.success || data.status === "success",
-      message: data.message || "Data purchase processed",
-      reference: data.reference || data.data?.reference,
-      data: data.data,
-      error: data.error,
+      success: isSuccess,
+      message: data.message || (isSuccess ? "Data purchase successful" : "Data purchase failed"),
+      reference: data.data?.order_id?.toString() || data.reference || data.transid,
+      data: data.data || data,
+      error: isSuccess ? undefined : (data.message || data.error),
     };
   } catch (error: any) {
     console.error("SMEDATA purchase error:", error);

@@ -5010,7 +5010,8 @@ Happy trading!`;
       // Process the actual purchase if API is configured
       if (isSMEDataConfigured()) {
         try {
-          const purchaseResult = await purchaseData(plan.network, phoneNumber, plan.planCode);
+          // Use dataAmount (e.g., "1GB", "500MB") for SME Data API, not planCode
+          const purchaseResult = await purchaseData(plan.network, phoneNumber, plan.dataAmount);
           
           if (purchaseResult.success) {
             // Update transaction as successful

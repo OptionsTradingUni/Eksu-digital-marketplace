@@ -4912,7 +4912,7 @@ export class DatabaseStorage implements IStorage {
       content: data.content,
       category: data.category || "general",
       isAnonymous: data.isAnonymous ?? true,
-      status: "pending",
+      status: "approved", // Auto-approve confessions immediately (no moderation)
     }).returning();
     return confession;
   }
