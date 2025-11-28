@@ -228,6 +228,32 @@ export default function ThePlugPage() {
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Handle scroll lock for mobile composer
+  useEffect(() => {
+    if (showMobileComposer) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${window.scrollY}px`;
+    } else {
+      const scrollY = document.body.style.top;
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
+    }
+    
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+    };
+  }, [showMobileComposer]);
+
   // Handle tab change and update URL
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
@@ -814,19 +840,18 @@ export default function ThePlugPage() {
                       </div>
                       
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {post.authorId !== user?.id && (
+                        {post.authorId !== user?.id && !isUserFollowed(post.authorId, post) && (
                           <Button
-                            variant={isUserFollowed(post.authorId, post) ? "outline" : "default"}
+                            variant="default"
                             size="sm"
                             onClick={() => {
-                              const currentlyFollowing = isUserFollowed(post.authorId, post);
-                              followMutation.mutate({ userId: post.authorId, isCurrentlyFollowing: currentlyFollowing || false });
+                              followMutation.mutate({ userId: post.authorId, isCurrentlyFollowing: false });
                             }}
                             disabled={followMutation.isPending}
                             className="h-7 rounded-full text-xs font-semibold px-3"
                             data-testid={`button-follow-${post.authorId}`}
                           >
-                            {isUserFollowed(post.authorId, post) ? "Following" : "Follow"}
+                            Follow
                           </Button>
                         )}
                         {post.authorId === user?.id && (
@@ -1069,22 +1094,151 @@ export default function ThePlugPage() {
         <Plus className="h-6 w-6" />
       </motion.button>
 
-      <Dialog open={showMobileComposer} onOpenChange={setShowMobileComposer}>
-        <DialogContent 
-          className="sm:max-w-[500px] p-0"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onPointerDownOutside={(e) => e.preventDefault()}
-        >
-          <DialogHeader className="p-4 border-b">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-lg font-bold">New Post</DialogTitle>
-            </div>
-          </DialogHeader>
-          <div className="p-4">
-            <PostComposer isMobile />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AnimatePresence>
+        {showMobileComposer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background md:bg-black/50 md:flex md:items-start md:justify-center md:pt-12"
+          >
+            <motion.div
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="h-full w-full md:h-auto md:max-h-[90vh] md:w-[600px] md:rounded-xl bg-background flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-background z-10">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowMobileComposer(false)}
+                  data-testid="button-close-composer"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+                <Button
+                  onClick={() => {
+                    handleCreatePost();
+                    setShowMobileComposer(false);
+                  }}
+                  disabled={createPostMutation.isPending || (!newPostContent.trim() && selectedMedia.length === 0)}
+                  className="rounded-full px-5 font-semibold"
+                  data-testid="button-mobile-post"
+                >
+                  {createPostMutation.isPending ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    >
+                      <Send className="h-4 w-4" />
+                    </motion.div>
+                  ) : (
+                    "Post"
+                  )}
+                </Button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex gap-3">
+                  <Avatar className="h-10 w-10 ring-2 ring-background shadow-sm flex-shrink-0">
+                    <AvatarImage src={user?.profileImageUrl || undefined} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                      {getInitials(user?.firstName, user?.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <Textarea
+                      placeholder="What's happening on campus?"
+                      value={newPostContent}
+                      onChange={(e) => setNewPostContent(e.target.value)}
+                      className="resize-none border-0 bg-transparent focus-visible:ring-0 text-lg min-h-[150px] placeholder:text-muted-foreground/60"
+                      autoFocus
+                      data-testid="input-mobile-post"
+                    />
+                    
+                    <AnimatePresence>
+                      {mediaPreviews.length > 0 && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="grid grid-cols-2 gap-2 mt-4"
+                        >
+                          {mediaPreviews.map((preview, index) => (
+                            <motion.div 
+                              key={index} 
+                              className="relative group aspect-square"
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                            >
+                              <div className="h-full w-full rounded-xl overflow-hidden ring-1 ring-border">
+                                {preview.type === 'video' ? (
+                                  <div className="h-full w-full bg-muted flex items-center justify-center relative">
+                                    <video src={preview.url} className="h-full w-full object-cover" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                      <Play className="h-8 w-8 text-white fill-white" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={preview.url}
+                                    alt={`Preview ${index + 1}`}
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                onClick={() => removeMedia(index)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </motion.div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border-t px-4 py-3 sticky bottom-0 bg-background">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    id="mobile-media-upload"
+                    onChange={handleMediaUpload}
+                    data-testid="input-mobile-media"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-primary gap-2"
+                    onClick={() => document.getElementById('mobile-media-upload')?.click()}
+                    data-testid="button-mobile-add-media"
+                  >
+                    <ImageIcon className="h-5 w-5" />
+                    <span className="text-sm font-medium">Photo/Video</span>
+                  </Button>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {newPostContent.length > 0 && `${newPostContent.length} characters`}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">

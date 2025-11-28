@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -45,7 +46,8 @@ import {
   BadgeCheck,
   ExternalLink,
   Ban,
-  VolumeX
+  VolumeX,
+  Users
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
@@ -820,6 +822,44 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-muted rounded-md">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor="gender">Gender</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Optional - used for personalized experience
+                    </p>
+                  </div>
+                </div>
+                <Select
+                  value={(user as any).gender || ""}
+                  onValueChange={async (value) => {
+                    try {
+                      await apiRequest("PUT", `/api/users/${user.id}`, { gender: value || null });
+                      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+                      toast({ title: "Gender updated" });
+                    } catch (error) {
+                      toast({ title: "Failed to update gender", variant: "destructive" });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]" data-testid="select-gender">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>

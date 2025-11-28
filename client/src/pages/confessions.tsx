@@ -427,16 +427,44 @@ export default function ConfessionsPage() {
     mutationFn: async ({ id, voteType }: { id: string; voteType: "like" | "dislike" }) => {
       return apiRequest("POST", `/api/confessions/${id}/vote`, { voteType });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/confessions"] });
-      if (selectedConfessionId) refetchConfession();
+    onMutate: async ({ id, voteType }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/confessions"] });
+      const previousData = queryClient.getQueryData(["/api/confessions", selectedCategory, page]);
+      
+      queryClient.setQueryData(["/api/confessions", selectedCategory, page], (old: any) => {
+        if (!old?.confessions) return old;
+        return {
+          ...old,
+          confessions: old.confessions.map((c: ConfessionWithMeta) => {
+            if (c.id !== id) return c;
+            const prevVote = c.userVote;
+            const newVote = prevVote === voteType ? null : voteType;
+            let likesCount = c.likesCount || 0;
+            let dislikesCount = c.dislikesCount || 0;
+            if (prevVote === "like") likesCount--;
+            if (prevVote === "dislike") dislikesCount--;
+            if (newVote === "like") likesCount++;
+            if (newVote === "dislike") dislikesCount++;
+            return { ...c, userVote: newVote, likesCount, dislikesCount };
+          }),
+        };
+      });
+      
+      return { previousData };
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(["/api/confessions", selectedCategory, page], context.previousData);
+      }
       if (error?.message?.includes("401") || error?.message?.includes("Unauthorized")) {
         toast({ title: "Login Required", description: "Please login to vote on confessions", variant: "destructive" });
       } else {
         toast({ title: "Error", description: "Failed to vote", variant: "destructive" });
       }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/confessions"] });
+      if (selectedConfessionId) refetchConfession();
     },
   });
 
