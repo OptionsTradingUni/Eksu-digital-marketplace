@@ -1,0 +1,102 @@
+const GAME_LIBRARY = {
+  // ===================================================================
+  // 1. LUDO (Now with 1, 2, 3 Dice Variants - Elaborated for Easy Build)
+  // ===================================================================
+  ludo: {
+    name: "Ludo",
+    minPlayers: 2,
+    maxPlayers: 4,
+    type: "board",
+    betting: true,
+    diceVariants: [1, 2, 3], // Selectable in game lobby
+    rules: `
+*** LUDO CORE SETUP & WINNING (Same for ALL Dice Variants) ***
+• 2-4 Players. Each picks color (Red, Blue, Green, Yellow). 4 tokens start in YARD (safe, position: -1).
+• BOARD: 52 main path squares (clockwise circuit). Each color has: START square (pos 1, safe), 5 HOME STRETCH squares (pos 53-57, safe only for own color), CENTER HOME (pos 58, win).
+• SAFE ZONES: START square + Star/Globe squares (every ~13 squares) + entire HOME STRETCH. NO capture in safe.
+• CAPTURE: Land EXACTLY on opponent token (not safe) → send to their YARD (-1).
+• BLOCK: 2+ OWN tokens on same square → opponents CANNOT land there (bounce or skip? Simple: cannot land).
+• WIN: First player with ALL 4 tokens in CENTER HOME (58).
+• TURN ORDER: Clockwise. First player: highest roll.
+
+*** MOVEMENT BASICS ***
+• Tokens move CLOCKWISE only.
+• Choose ANY own token(s) for moves.
+• HOME ENTRY: From main path (pos 52), roll EXACT to enter HOME STRETCH (e.g., 1→53, 2→54, etc. up to 5→57, then exact to 58).
+• NO jumping over own block or opponents.
+
+*** 1 DIE VARIANT (Classic - Easiest for Beginners/AI) ***
+1. Roll 1 die (1-6).
+2. IF 6 AND yard has tokens: 
+   - Bring 1 token from YARD to START (pos 1). 
+   - ROLL AGAIN (extra turn).
+3. ELSE: Move 1 token forward by roll (e.g., pos 10 +3 →13).
+4. After move: IF landed on opponent (not safe) → CAPTURE.
+5. 3 CONSECUTIVE 6s: Penalty - cannot move, turn ENDS. Reset counter on non-6.
+• SIMPLE LOGIC: One move per turn (or entry+extra).
+
+*** 2 DICE VARIANT (Faster - Popular in India/Nigeria Apps like Zupee) ***
+1. Roll 2 dice (each 1-6).
+2. MUST USE BOTH DICE in ONE of these ways:
+   a) ONE TOKEN: Move by SUM (2-12).
+   b) TWO TOKENS: Move token A by die1, token B by die2.
+3. ENTRY RULE: ANY 6 = option to BRING OUT 1 token from YARD to START (uses up that 6, no move with it).
+   - Double 6: Bring out 2 tokens.
+   - Use remaining die(s) for moves.
+4. EXTRA TURN: On ANY 6 (after moves).
+5. 3 CONSECUTIVE 6s (any die): Penalty - turn ENDS, no moves.
+• EXAMPLE: Roll 6+3 → Enter 1 token (use 6), move another by 3. Extra turn.
+• Roll 4+5 → Move one by 9 OR one by4 + one by5.
+• SIMPLE LOGIC: Generate 2 options per token combo, pick best.
+
+*** 3 DICE VARIANT (Super Fast - App Extension like Wowzy) ***
+1. Roll 3 dice (1-6).
+2. MUST USE ALL 3 DICE:
+   a) ONE TOKEN: Sum all (3-18).
+   b) TWO TOKENS: e.g., die1+die2 on one, die3 on other (all combos).
+   c) THREE TOKENS: One die per token.
+3. ENTRY: ANY 6 = BRING OUT 1 token per 6 (uses up the 6).
+   - Triple 6: Bring 3 out.
+4. EXTRA TURN: On ANY 6.
+5. 3 CONSECUTIVE 6s: Penalty - turn ENDS.
+• EXAMPLE: 6+2+4 → Enter1 (6), move one by2, one by4.
+• SIMPLE LOGIC: Up to 6 ways (partitions of 3 dice), easy to enumerate.
+
+*** SIMPLE DUMB AI LOGIC (Easy to Build - Priority Rules, No Minimax Needed) ***
+1. PRIORITY 1: If can CAPTURE opponent → DO IT (win bets fast).
+2. PRIORITY 2: If can ENTER token(s) → DO IT (more tokens = better).
+3. PRIORITY 3: Move token CLOSEST to HOME (advance leaders).
+4. PRIORITY 4: Move to SAFE zone if threatened.
+5. PRIORITY 5: Spread tokens (avoid block risk).
+6. If multiple same priority: Pick highest roll/combo.
+7. Random if tie. (Dumb but fair vs humans)
+• IMPLEMENT: Loop tokens, simulate all valid move combos (few: 4 tokens * partitions), score by priorities, pick top.
+
+*** BETTING & EXTRAS ***
+• Pot: Entry fees, 95% to winner (5% rake).
+• Singleplayer: vs Dumb AI (above logic).
+• Multi: Real-time, sync moves.
+• Time: 10s/turn.
+    `.trim()
+  },
+
+  // ... (All other games unchanged from previous)
+  wordBattle: {
+    name: "Word Battle",
+    minPlayers: 2,
+    maxPlayers: 8,
+    type: "word",
+    timeLimitSeconds: 180,
+    betting: true,
+    rules: `
+• 4×4 grid of letters appears for all players simultaneously.
+• Players have 3 minutes to find as many valid English words as possible (min 3 letters).
+• Words must be formed by adjacent letters (horizontal, vertical, diagonal).
+• Same word can only be used once per player.
+• Scoring: 3-letter = 1pt, 4-letter = 2pt, 5-letter = 4pt, 6+ = length × 2.
+• Rare letters (Q,Z,X,J) give +3 bonus.
+• Player with highest score wins the pot.
+    `.trim()
+  },
+  trivia: {
+    name: "Trivia Live

@@ -60,7 +60,8 @@ import {
   Medal,
   Crown,
   Target,
-  ArrowLeft
+  ArrowLeft,
+  Circle
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Game, User as UserType, Wallet } from "@shared/schema";
@@ -71,10 +72,12 @@ import SpeedTypingGame from "@/components/games/SpeedTypingGame";
 import WhotGame from "@/components/games/WhotGame";
 import TruthOrDareGame from "@/components/games/TruthOrDareGame";
 import GuessThePriceGame from "@/components/games/GuessThePriceGame";
+import CampusBingoGame from "@/components/games/CampusBingoGame";
+import AyoOloponGame from "@/components/games/AyoOloponGame";
 
 type GameWithPlayer = Game & { player1: UserType };
 
-type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price";
+type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price" | "ayo_olopon";
 
 type GameMode = "single_player" | "multiplayer";
 
@@ -163,13 +166,13 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
   },
   campus_bingo: {
     name: "Campus Bingo",
-    description: "Live bingo experience! Mark your numbers and shout BINGO!",
+    description: "Nigerian campus life bingo! Mark phrases as they're called and shout BINGO!",
     icon: Grid3X3,
     color: "bg-green-500/10 text-green-600 dark:text-green-400",
-    stakeAmounts: ["100", "200", "500", "1000", "2000"],
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000"],
     platformFee: 15,
-    playerType: "Live",
-    supportsSinglePlayer: false,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
     supportsMultiplayer: true,
   },
   truth_or_dare: {
@@ -194,9 +197,20 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
     supportsSinglePlayer: true,
     supportsMultiplayer: true,
   },
+  ayo_olopon: {
+    name: "Ayo Olopon",
+    description: "Classic Yoruba Mancala game. Capture the most seeds to win!",
+    icon: Circle,
+    color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000"],
+    platformFee: 10,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: false,
+  },
 };
 
-const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"];
+const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "ayo_olopon"];
 
 interface LeaderboardEntry {
   rank: number;
@@ -480,6 +494,10 @@ export default function GamesPage() {
         return <TruthOrDareGame {...commonProps} />;
       case "guess_the_price":
         return <GuessThePriceGame {...commonProps} />;
+      case "campus_bingo":
+        return <CampusBingoGame {...commonProps} />;
+      case "ayo_olopon":
+        return <AyoOloponGame {...commonProps} />;
       default:
         return (
           <Card className="p-8 text-center">

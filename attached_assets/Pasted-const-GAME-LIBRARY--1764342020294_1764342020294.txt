@@ -1,0 +1,263 @@
+const GAME_LIBRARY = {
+  // ===================================================================
+  // 1. LUDO (Classic 4-player, also supports 2–4 players)
+  // ===================================================================
+  ludo: {
+    name: "Ludo",
+    minPlayers: 2,
+    maxPlayers: 4,
+    type: "board",
+    betting: true,
+    rules: `
+• Each player has 4 tokens that start in their yard.
+• Roll a 6 to bring a token out of the yard (you get another roll).
+• Move tokens clockwise according to dice roll (1–6).
+• Landing on an opponent’s token sends it back to their yard.
+• Safe zones: colored starting square + home column (star symbols in classic boards).
+• To enter the home triangle, you must roll the exact number.
+• First player to get all 4 tokens to the center wins.
+• In case of 3 consecutive 6s → current token returns to yard and turn ends.
+• Multiplayer betting: pot = sum of all entry fees, winner takes 95% (5% house rake common).
+    `.trim()
+  },
+
+  // ===================================================================
+  // 2. WORD BATTLE (like Wordament / Words With Friends showdown)
+  // ===================================================================
+  wordBattle: {
+    name: "Word Battle",
+    minPlayers: 2,
+    maxPlayers: 8,
+    type: "word",
+    timeLimitSeconds: 180,
+    betting: true,
+    rules: `
+• 4×4 grid of letters appears for all players simultaneously.
+• Players have 3 minutes to find as many valid English words as possible (min 3 letters).
+• Words must be formed by adjacent letters (horizontal, vertical, diagonal).
+• Same word can only be used once per player.
+• Scoring: 3-letter = 1pt, 4-letter = 2pt, 5-letter = 4pt, 6+ = length × 2.
+• Rare letters (Q,Z,X,J) give +3 bonus.
+• Player with highest score wins the pot.
+    `.trim()
+  },
+
+  // ===================================================================
+  // 3. TRIVIA
+  // ===================================================================
+  trivia: {
+    name: "Trivia Live",
+    minPlayers: 2,
+    maxPlayers: 100,
+    type: "quiz",
+    timePerQuestion: 12,
+    betting: true,
+    rules: `
+• 10–15 multiple-choice questions (4 options).
+• Faster correct answer = higher points (max 1000 → 0 based on time).
+• Wrong answer = 0 points for that question.
+• Power-ups: 50/50, Double Dip (2 guesses), Skip (once per game).
+• Last place eliminated every 3 rounds in tournament mode.
+• Betting types: Entry fee pot OR "survivor pool" (last man standing wins all).
+    `.trim()
+  },
+
+  // ===================================================================
+  // 4. WHOT (Nigerian classic card game)
+  // ===================================================================
+  whot: {
+    name: "Whot!",
+    minPlayers: 2,
+    maxPlayers: 6,
+    type: "card",
+    betting: true,
+    rules: `
+• 54-card deck: Circles, Triangles, Crosses, Squares, Stars (1–14) + 5 Whot! (20) cards.
+• Market card starts the pile.
+• Play same shape or same number.
+• Special cards:
+   2  → Next player picks 2 + miss turn
+   14 → Suspend (next player misses turn)
+   1  → Hold On (play again)
+   5  → General Market (everyone picks 1)
+   20 (Whot!) → Caller chooses any shape
+• First to empty hand wins. Others pay winner based on cards left (common stakes: 10×card value).
+    `.trim()
+  },
+
+  // ===================================================================
+  // 5. QUICK DRAW (reaction speed game)
+  // ===================================================================
+  quickDraw: {
+    name: "Quick Draw",
+    minPlayers: 2,
+    maxPlayers: 16,
+    type: "reaction",
+    betting: true,
+    rules: `
+• Random delay 3–10 seconds → "DRAW!" appears.
+• First player to click/tap wins the duel.
+• False start (clicking before "DRAW!") = instant loss.
+• Tournament bracket or free-for-all battle royale.
+• Betting: head-to-head or winner-takes-pot.
+    `.trim()
+  },
+
+  // ===================================================================
+  // 6. CAMPUS BINGO (Nigerian university-themed bingo)
+  // ===================================================================
+  campusBingo: {
+    name: "Campus Bingo",
+    minPlayers: 2,
+    maxPlayers: 500,
+    type: "bingo",
+    betting: true,
+    rules: `
+• 5×5 card, center is free space.
+• Numbers 1–90 called randomly.
+• Phrases instead of numbers (e.g., "Lecturer no come", "NEPA take light", "Sign out").
+• Patterns: Line (horizontal/vertical/diagonal), Four Corners, Full House.
+• Prizes scale: 1 Line = 20%, 2 Lines = 30%, Full House = 50% of pot.
+    `.trim()
+  },
+
+  // ===================================================================
+  // 7. TRUTH OR DARE (Rated 18+ version allowed)
+  // ===================================================================
+  truthOrDare: {
+    name: "Truth or Dare",
+    minPlayers: 2,
+    maxPlayers: 20,
+    type: "party",
+    betting: true,
+    rules: `
+• Players take turns choosing Truth or Dare.
+• Forfeiting = pay penalty into pot (e.g., 10% of entry fee).
+• Categories: Normal, Spicy, Extreme (age-gated).
+• Winner = player with least penalties OR last one standing.
+• Common in Nigeria as "Dare or Pay".
+    `.trim()
+  },
+
+  // ===================================================================
+  // 8. GUESS THE PRICE (Price guessing game)
+  // ===================================================================
+  guessThePrice: {
+    name: "Guess The Price",
+    minPlayers: 2,
+    maxPlayers: 100,
+    type: "guessing",
+    betting: true,
+    rules: `
+• Real products shown (iPhone, PS5, bag of rice, etc.).
+• Closest guess without going over wins (Price-Is-Right rule) OR closest overall.
+• Tie → split pot.
+• Betting: fixed entry, winner takes 90–95%.
+    `.trim()
+  },
+
+  // ===================================================================
+  // EXTRA POPULAR GAMES (Highly requested in African betting apps)
+  // ===================================================================
+  draughts: {
+    name: "Draughts (Checkers)",
+    minPlayers: 2,
+    maxPlayers: 2,
+    type: "board",
+    betting: true,
+    rules: "Standard international draughts rules (10×10 board, flying kings, mandatory capture)."
+  },
+  colorColor: {
+    name: "Colour Colour",
+    minPlayers: 2,
+    maxPlayers: 100,
+    type: "lottery",
+    betting: true,
+    rules: `
+• Wheel with Red, Green, Purple, Yellow.
+• Bet on colour or exact number (0–9).
+• Payouts: Colour 1.95×, Number 9×.
+    `.trim()
+  },
+  aviator: {
+    name: "Aviator (Crash)",
+    minPlayers: 1,
+    maxPlayers: 1000,
+    type: "crash",
+    betting: true,
+    rules: "Plane multiplier rises. Cash out before random crash. Auto-cashout available."
+  },
+  spinTheWheel: {
+    name: "Spin The Wheel",
+    minPlayers: 2,
+    maxPlayers: 500,
+    type: "wheel",
+    betting: true,
+    rules: "Bet on segments (1x, 2x, 5x, 10x, 50x, Jackpot). House edge ~4%."
+  },
+  chessBlitz: {
+    name: "Chess Blitz (3+0 or 5+0)",
+    minPlayers: 2,
+    maxPlayers: 2,
+    type: "board",
+    betting: true,
+    rules: "Standard chess rules + time control. Draw = stakes returned."
+  },
+  ayoayo: {
+    name: "Ayo Olopon (Mancala)",
+    minPlayers: 2,
+    maxPlayers: 2,
+    type: "traditional",
+    betting: true,
+    rules: "Classic Yoruba Ayo rules – capture when ending in opponent pit with 2 or 3 seeds."
+  },
+  diceDuel: {
+    name: "Dice Duel",
+    minPlayers: 2,
+    maxPlayers: 8,
+    type: "dice",
+    betting: true,
+    rules: "Roll 5 dice, highest poker hand wins (e.g., Five of a Kind > Full House)."
+  },
+
+  // ===================================================================
+  // BETTING SYSTEM (Common realistic implementation)
+  // ===================================================================
+  bettingSystem: {
+    supportedTypes: ["fixed-entry-pot", "head-to-head", "survivor-pool", "tournament-bracket"],
+    houseRakePercent: 5, // very common in real apps
+    virtualCurrency: "Coins",
+    realMoneyRegions: "Nigeria, Kenya, Ghana, South Africa (licensed)",
+    antiAddiction: "Daily loss limit, self-exclusion, reality check every 1hr",
+    kycRequiredForWithdrawal: true
+  },
+
+  // ===================================================================
+  // PLATFORM FEATURES (Realistic & proven)
+  // ===================================================================
+  platformFeatures: [
+    "Single player vs AI (with difficulty levels)",
+    "Multiplayer rooms (public, private, password-protected)",
+    "Friends list + invite",
+    "Voice & text chat (moderated)",
+    "Daily login bonus",
+    "Leaderboards (daily, weekly, all-time)",
+    "Referral program",
+    "In-game shop (avatars, table themes, emotes)",
+    "VIP levels with rakeback",
+    "Responsible gambling tools",
+    "24/7 live support",
+    "Tournament scheduler",
+    "Replay system for card/board games",
+    "Anti-cheating: RNG certified, movement delay checks, IP/device bans"
+  ]
+};
+
+// Export for Node.js / copy-paste into your project
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = GAME_LIBRARY;
+}
+
+// Quick test – no bugs
+console.log("Game library loaded with", Object.keys(GAME_LIBRARY).length - 2, "games + betting system");
+console.log("Example rule check → Ludo players:", GAME_LIBRARY.ludo.minPlayers, "–", GAME_LIBRARY.ludo.maxPlayers);

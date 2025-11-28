@@ -1416,7 +1416,7 @@ export type Negotiation = typeof negotiations.$inferSelect;
 export type InsertNegotiation = z.infer<typeof insertNegotiationSchema>;
 
 // Game type and status enums
-export const gameTypeEnum = pgEnum("game_type", ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]);
+export const gameTypeEnum = pgEnum("game_type", ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "aviator", "colour_colour", "spin_wheel", "draughts", "ayo_olopon", "dice_duel"]);
 export const gameStatusEnum = pgEnum("game_status", ["waiting", "in_progress", "completed", "cancelled"]);
 export const gameModeEnum = pgEnum("game_mode", ["single_player", "multiplayer"]);
 
@@ -1557,7 +1557,7 @@ export type InsertPriceGuessProduct = z.infer<typeof insertPriceGuessProductSche
 
 // API schemas for games
 export const createGameSchema = z.object({
-  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]),
+  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "aviator", "colour_colour", "spin_wheel", "draughts", "ayo_olopon", "dice_duel"]),
   stakeAmount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid stake amount"),
   mode: z.enum(["single_player", "multiplayer"]).optional().default("multiplayer"),
 });
@@ -2959,7 +2959,7 @@ export const insertGameRoomSchema = createInsertSchema(gameRooms).omit({
 });
 
 export const createGameRoomSchema = z.object({
-  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price"]),
+  gameType: z.enum(["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "aviator", "colour_colour", "spin_wheel", "draughts", "ayo_olopon", "dice_duel"]),
   stakeAmount: z.number().min(0).default(0),
   maxPlayers: z.number().min(2).max(10).default(4),
   isPrivate: z.boolean().optional(),
