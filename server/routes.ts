@@ -11091,5 +11091,339 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
+  // ========================================
+  // Study Materials (Past Questions) Routes
+  // ========================================
+
+  // GET /api/study-materials - List materials with filters
+  app.get("/api/study-materials", async (req, res) => {
+    try {
+      const { level, faculty, courseCode, materialType, search } = req.query;
+      const materials = await storage.getStudyMaterials({
+        level: level as string,
+        faculty: faculty as string,
+        courseCode: courseCode as string,
+        materialType: materialType as string,
+        search: search as string,
+      });
+      res.json(materials);
+    } catch (error) {
+      console.error("Error fetching study materials:", error);
+      res.status(500).json({ message: "Failed to fetch study materials" });
+    }
+  });
+
+  // GET /api/study-materials/my-uploads - Get user's uploaded materials
+  app.get("/api/study-materials/my-uploads", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const materials = await storage.getUserStudyMaterials(userId);
+      res.json(materials);
+    } catch (error) {
+      console.error("Error fetching user study materials:", error);
+      res.status(500).json({ message: "Failed to fetch your study materials" });
+    }
+  });
+
+  // GET /api/study-materials/:id - Get single material
+  app.get("/api/study-materials/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+      
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Increment views
+      await storage.incrementMaterialViews(id);
+      
+      // Check if user has purchased (if authenticated)
+      let hasPurchased = false;
+      const userId = getUserId(req);
+      if (userId) {
+        hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      }
+
+      // Get ratings
+      const ratings = await storage.getMaterialRatings(id);
+
+      res.json({ ...material, hasPurchased, ratings });
+    } catch (error) {
+      console.error("Error fetching study material:", error);
+      res.status(500).json({ message: "Failed to fetch study material" });
+    }
+  });
+
+  // POST /api/study-materials - Create new material (with file upload)
+  app.post("/api/study-materials", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Please upload a file" });
+      }
+
+      // Upload file to object storage
+      const prefix = `study-materials/${userId}/`;
+      const fileUrl = await uploadToObjectStorage(req.file, prefix);
+      
+      if (!fileUrl) {
+        return res.status(500).json({ message: "Failed to upload file" });
+      }
+
+      const { title, description, materialType, courseCode, courseName, faculty, department, level, semester, academicYear, price, isFree } = req.body;
+
+      const material = await storage.createStudyMaterial({
+        uploaderId: userId,
+        title,
+        description,
+        materialType: materialType || "past_question",
+        courseCode: courseCode || "N/A",
+        courseName,
+        faculty,
+        department,
+        level: level || "100L",
+        semester,
+        academicYear,
+        fileUrl,
+        fileSize: req.file.size,
+        price: price || "0.00",
+        isFree: isFree === "true" || isFree === true,
+      });
+
+      res.status(201).json(material);
+    } catch (error) {
+      console.error("Error creating study material:", error);
+      res.status(500).json({ message: "Failed to create study material" });
+    }
+  });
+
+  // PUT /api/study-materials/:id - Update material
+  app.put("/api/study-materials/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      if (material.uploaderId !== userId) {
+        return res.status(403).json({ message: "You can only update your own materials" });
+      }
+
+      const { title, description, materialType, courseCode, courseName, faculty, department, level, semester, academicYear, price, isFree } = req.body;
+
+      const updated = await storage.updateStudyMaterial(id, {
+        title,
+        description,
+        materialType,
+        courseCode,
+        courseName,
+        faculty,
+        department,
+        level,
+        semester,
+        academicYear,
+        price,
+        isFree,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating study material:", error);
+      res.status(500).json({ message: "Failed to update study material" });
+    }
+  });
+
+  // DELETE /api/study-materials/:id - Delete material
+  app.delete("/api/study-materials/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      if (material.uploaderId !== userId) {
+        return res.status(403).json({ message: "You can only delete your own materials" });
+      }
+
+      await storage.deleteStudyMaterial(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting study material:", error);
+      res.status(500).json({ message: "Failed to delete study material" });
+    }
+  });
+
+  // POST /api/study-materials/:id/purchase - Purchase material (deduct from wallet)
+  app.post("/api/study-materials/:id/purchase", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if already purchased
+      const alreadyPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      if (alreadyPurchased) {
+        return res.status(400).json({ message: "You already own this material" });
+      }
+
+      // If it's free, just record the purchase
+      if (material.isFree) {
+        await storage.purchaseStudyMaterial(id, userId, "0.00");
+        return res.json({ success: true, message: "Material added to your library" });
+      }
+
+      // Get user's wallet
+      const wallet = await storage.getWallet(userId);
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet not found" });
+      }
+
+      const price = parseFloat(material.price || "0");
+      const balance = parseFloat(wallet.balance || "0");
+
+      if (balance < price) {
+        return res.status(400).json({ message: "Insufficient wallet balance" });
+      }
+
+      // Deduct from buyer's wallet
+      await storage.updateWalletBalance(userId, (balance - price).toFixed(2));
+
+      // Record the purchase
+      await storage.purchaseStudyMaterial(id, userId, material.price || "0.00");
+
+      // Create transaction record
+      await storage.createTransaction({
+        userId,
+        type: "purchase",
+        amount: material.price || "0.00",
+        description: `Purchase: ${material.title}`,
+        status: "completed",
+        reference: `SM-${id}-${Date.now()}`,
+      });
+
+      // Credit the seller (90% of the price, 10% platform fee)
+      const sellerAmount = (price * 0.9).toFixed(2);
+      const sellerWallet = await storage.getWallet(material.uploaderId);
+      if (sellerWallet) {
+        const sellerBalance = parseFloat(sellerWallet.balance || "0");
+        await storage.updateWalletBalance(material.uploaderId, (sellerBalance + parseFloat(sellerAmount)).toFixed(2));
+        
+        await storage.createTransaction({
+          userId: material.uploaderId,
+          type: "credit",
+          amount: sellerAmount,
+          description: `Sale: ${material.title}`,
+          status: "completed",
+          reference: `SM-SALE-${id}-${Date.now()}`,
+        });
+      }
+
+      res.json({ success: true, message: "Purchase successful" });
+    } catch (error) {
+      console.error("Error purchasing study material:", error);
+      res.status(500).json({ message: "Failed to purchase study material" });
+    }
+  });
+
+  // GET /api/study-materials/:id/download - Download material (check purchase/free)
+  app.get("/api/study-materials/:id/download", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if user can download (owner, purchased, or free)
+      const isOwner = material.uploaderId === userId;
+      const hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      const isFree = material.isFree;
+
+      if (!isOwner && !hasPurchased && !isFree) {
+        return res.status(403).json({ message: "Please purchase this material to download" });
+      }
+
+      // Increment download count
+      await storage.incrementMaterialDownloads(id);
+
+      res.json({ downloadUrl: material.fileUrl });
+    } catch (error) {
+      console.error("Error downloading study material:", error);
+      res.status(500).json({ message: "Failed to download study material" });
+    }
+  });
+
+  // POST /api/study-materials/:id/rate - Rate a material
+  app.post("/api/study-materials/:id/rate", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { rating, review } = req.body;
+
+      if (typeof rating !== "number" || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Rating must be between 1 and 5" });
+      }
+
+      const material = await storage.getStudyMaterial(id);
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if user has purchased or owns the material
+      const isOwner = material.uploaderId === userId;
+      const hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+
+      if (!isOwner && !hasPurchased && !material.isFree) {
+        return res.status(403).json({ message: "You can only rate materials you've purchased" });
+      }
+
+      const newRating = await storage.rateStudyMaterial(id, userId, rating, review);
+      res.json(newRating);
+    } catch (error) {
+      console.error("Error rating study material:", error);
+      res.status(500).json({ message: "Failed to rate study material" });
+    }
+  });
+
   return httpServer;
 }

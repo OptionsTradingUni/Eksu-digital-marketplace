@@ -3073,6 +3073,112 @@ export type InsertSecretMessage = z.infer<typeof insertSecretMessageSchema>;
 export type SendSecretMessageInput = z.infer<typeof sendSecretMessageSchema>;
 
 // ===========================================
+// STUDY MATERIALS (Past Questions, Handouts, Notes)
+// ===========================================
+
+export const materialTypeEnum = pgEnum("material_type", [
+  "past_question",
+  "handout",
+  "summary",
+  "textbook",
+  "lab_report",
+  "project",
+  "lecture_note"
+]);
+
+export const academicLevelEnum = pgEnum("academic_level", ["100L", "200L", "300L", "400L", "500L", "postgraduate"]);
+
+export const studyMaterials = pgTable("study_materials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  uploaderId: varchar("uploader_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  materialType: materialTypeEnum("material_type").notNull(),
+  courseCode: varchar("course_code", { length: 20 }).notNull(),
+  courseName: varchar("course_name", { length: 200 }),
+  faculty: varchar("faculty", { length: 100 }),
+  department: varchar("department", { length: 100 }),
+  level: academicLevelEnum("level").notNull(),
+  semester: varchar("semester", { length: 20 }),
+  academicYear: varchar("academic_year", { length: 20 }),
+  fileUrl: text("file_url").notNull(),
+  previewUrl: text("preview_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  fileSize: integer("file_size"),
+  pageCount: integer("page_count"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  isFree: boolean("is_free").default(true),
+  downloads: integer("downloads").default(0),
+  views: integer("views").default(0),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0.00"),
+  ratingCount: integer("rating_count").default(0),
+  isApproved: boolean("is_approved").default(true),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("study_materials_uploader_idx").on(table.uploaderId),
+  index("study_materials_course_idx").on(table.courseCode),
+  index("study_materials_level_idx").on(table.level),
+  index("study_materials_type_idx").on(table.materialType),
+  index("study_materials_faculty_idx").on(table.faculty),
+]);
+
+export const studyMaterialPurchases = pgTable("study_material_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  materialId: varchar("material_id").notNull().references(() => studyMaterials.id, { onDelete: "cascade" }),
+  buyerId: varchar("buyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("study_material_purchases_material_idx").on(table.materialId),
+  index("study_material_purchases_buyer_idx").on(table.buyerId),
+]);
+
+export const studyMaterialRatings = pgTable("study_material_ratings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  materialId: varchar("material_id").notNull().references(() => studyMaterials.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(),
+  review: text("review"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("study_material_ratings_material_idx").on(table.materialId),
+  index("study_material_ratings_user_idx").on(table.userId),
+]);
+
+export const insertStudyMaterialSchema = createInsertSchema(studyMaterials).omit({
+  id: true,
+  downloads: true,
+  views: true,
+  rating: true,
+  ratingCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createStudyMaterialSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").max(200),
+  description: z.string().max(2000).optional(),
+  materialType: z.enum(["past_question", "handout", "summary", "textbook", "lab_report", "project", "lecture_note"]),
+  courseCode: z.string().min(2).max(20),
+  courseName: z.string().max(200).optional(),
+  faculty: z.string().max(100).optional(),
+  department: z.string().max(100).optional(),
+  level: z.enum(["100L", "200L", "300L", "400L", "500L", "postgraduate"]),
+  semester: z.string().max(20).optional(),
+  academicYear: z.string().max(20).optional(),
+  price: z.number().min(0).default(0),
+  isFree: z.boolean().default(true),
+});
+
+export type StudyMaterial = typeof studyMaterials.$inferSelect;
+export type InsertStudyMaterial = z.infer<typeof insertStudyMaterialSchema>;
+export type CreateStudyMaterialInput = z.infer<typeof createStudyMaterialSchema>;
+export type StudyMaterialPurchase = typeof studyMaterialPurchases.$inferSelect;
+export type StudyMaterialRating = typeof studyMaterialRatings.$inferSelect;
+
+// ===========================================
 // EMAIL VERIFICATION TOKENS
 // ===========================================
 
