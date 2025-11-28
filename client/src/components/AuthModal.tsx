@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,8 +24,123 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check, AtSign, Loader2, X, CheckCircle2 } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check, AtSign, Loader2, X, CheckCircle2, Shield, RefreshCw } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type PasswordStrength = "weak" | "medium" | "strong";
+
+interface PasswordStrengthResult {
+  strength: PasswordStrength;
+  score: number;
+  requirements: {
+    minLength: boolean;
+    hasLowercase: boolean;
+    hasUppercase: boolean;
+    hasNumber: boolean;
+    hasSpecialChar: boolean;
+  };
+}
+
+function calculatePasswordStrength(password: string): PasswordStrengthResult {
+  const requirements = {
+    minLength: password.length >= 8,
+    hasLowercase: /[a-z]/.test(password),
+    hasUppercase: /[A-Z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  };
+
+  let score = 0;
+  if (requirements.minLength) score += 1;
+  if (requirements.hasLowercase) score += 1;
+  if (requirements.hasUppercase) score += 1;
+  if (requirements.hasNumber) score += 1;
+  if (requirements.hasSpecialChar) score += 1;
+
+  if (password.length >= 12) score += 1;
+  if (password.length >= 16) score += 1;
+
+  let strength: PasswordStrength = "weak";
+  if (score >= 5) strength = "strong";
+  else if (score >= 3) strength = "medium";
+
+  return { strength, score, requirements };
+}
+
+function PasswordStrengthIndicator({ password }: { password: string }) {
+  const result = useMemo(() => calculatePasswordStrength(password), [password]);
+  
+  if (!password) return null;
+
+  const strengthConfig = {
+    weak: { 
+      color: "bg-red-500 dark:bg-red-400", 
+      width: "33%", 
+      text: "Weak",
+      textColor: "text-red-600 dark:text-red-400"
+    },
+    medium: { 
+      color: "bg-yellow-500 dark:bg-yellow-400", 
+      width: "66%", 
+      text: "Medium",
+      textColor: "text-yellow-600 dark:text-yellow-400"
+    },
+    strong: { 
+      color: "bg-green-500 dark:bg-green-400", 
+      width: "100%", 
+      text: "Strong",
+      textColor: "text-green-600 dark:text-green-400"
+    },
+  };
+
+  const config = strengthConfig[result.strength];
+
+  return (
+    <div className="space-y-1 mt-1.5" data-testid="password-strength-indicator">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Shield className={`h-3 w-3 ${config.textColor}`} />
+          <span className={`text-xs font-medium ${config.textColor}`} data-testid="password-strength-text">
+            {config.text}
+          </span>
+        </div>
+      </div>
+      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full transition-all duration-300 ${config.color}`}
+          style={{ width: config.width }}
+          data-testid="password-strength-bar"
+        />
+      </div>
+      <div className="flex flex-wrap gap-1 text-[10px]">
+        <span className={result.requirements.minLength ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+          8+ chars
+        </span>
+        <span className="text-muted-foreground">|</span>
+        <span className={result.requirements.hasLowercase ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+          a-z
+        </span>
+        <span className="text-muted-foreground">|</span>
+        <span className={result.requirements.hasUppercase ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+          A-Z
+        </span>
+        <span className="text-muted-foreground">|</span>
+        <span className={result.requirements.hasNumber ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+          0-9
+        </span>
+        <span className="text-muted-foreground">|</span>
+        <span className={result.requirements.hasSpecialChar ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+          !@#$
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -34,7 +149,12 @@ const signInSchema = z.object({
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .refine((password) => {
+      const result = calculatePasswordStrength(password);
+      return result.strength !== "weak";
+    }, "Password too weak. Add uppercase, numbers, or special characters"),
   confirmPassword: z.string(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -50,6 +170,10 @@ const signUpSchema = z.object({
   path: ["confirmPassword"],
 });
 
+const verificationCodeSchema = z.object({
+  code: z.string().length(6, "Enter the 6-digit code"),
+});
+
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
@@ -57,6 +181,7 @@ const forgotPasswordSchema = z.object({
 type SignInFormData = z.infer<typeof signInSchema>;
 type SignUpFormData = z.infer<typeof signUpSchema>;
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+type VerificationCodeFormData = z.infer<typeof verificationCodeSchema>;
 
 interface AuthModalProps {
   open: boolean;
@@ -69,6 +194,9 @@ interface AuthModalProps {
 export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRole = "buyer", defaultReferralCode = "" }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [registeredEmail, setRegisteredEmail] = useState("");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -76,6 +204,9 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
     if (open) {
       setActiveTab(defaultTab);
       setShowForgotPassword(false);
+      setShowVerification(false);
+      setVerificationCode("");
+      setRegisteredEmail("");
     }
   }, [open, defaultTab]);
 
@@ -221,20 +352,63 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       const response = await apiRequest("POST", "/api/auth/register", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({
         title: "Account created!",
-        description: "Welcome to EKSU Campus Marketplace.",
+        description: "Check your email for the verification code.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      onOpenChange(false);
+      setRegisteredEmail(variables.email);
+      setShowVerification(true);
       signUpForm.reset();
-      setLocation("/");
     },
     onError: (error: any) => {
       toast({
         title: "Sign up failed",
         description: error.message || "Unable to create account. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const verifyCodeMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const response = await apiRequest("POST", "/api/auth/verify-email-code", { code });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Email verified!",
+        description: "Your account is now fully set up.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      onOpenChange(false);
+      setLocation("/");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification failed",
+        description: error.message || "Invalid or expired code. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendVerificationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/auth/send-verification-email", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Code resent!",
+        description: "Check your email for the new verification code.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to resend",
+        description: error.message || "Unable to resend code. Please try again.",
         variant: "destructive",
       });
     },
@@ -333,6 +507,114 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
               </Button>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (showVerification) {
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setShowVerification(false);
+          setVerificationCode("");
+          setLocation("/");
+        }
+        onOpenChange(isOpen);
+      }}>
+        <DialogContent className="sm:max-w-[400px] max-h-[90vh] overflow-y-auto" data-testid="dialog-verification">
+          <DialogHeader className="text-center">
+            <div className="mx-auto rounded-full bg-primary/10 p-3 mb-2">
+              <Mail className="h-6 w-6 text-primary" />
+            </div>
+            <DialogTitle className="text-xl">Verify Your Email</DialogTitle>
+            <DialogDescription className="text-sm">
+              We sent a 6-digit code to <span className="font-medium">{registeredEmail}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={verificationCode}
+                onChange={setVerificationCode}
+                data-testid="input-verification-code"
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            <Button
+              type="button"
+              className="w-full"
+              disabled={verificationCode.length !== 6 || verifyCodeMutation.isPending}
+              onClick={() => verifyCodeMutation.mutate(verificationCode)}
+              data-testid="button-verify-code"
+            >
+              {verifyCodeMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Verify Email
+                </>
+              )}
+            </Button>
+
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <span>Didn't receive the code?</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={resendVerificationMutation.isPending}
+                onClick={() => resendVerificationMutation.mutate()}
+                data-testid="button-resend-verification"
+              >
+                {resendVerificationMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Resend
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="text-center pt-2 border-t">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowVerification(false);
+                  onOpenChange(false);
+                  setLocation("/");
+                }}
+                data-testid="button-skip-verification"
+              >
+                Skip for now
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                You can verify later from your profile settings
+              </p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -643,53 +925,52 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                     )}
                   />
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={signUpForm.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm">Password</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                type="password"
-                                placeholder="Min 6 chars"
-                                className="pl-10"
-                                data-testid="input-signup-password"
-                                {...field}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField
+                    control={signUpForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm">Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              type="password"
+                              placeholder="Strong password required"
+                              className="pl-10"
+                              data-testid="input-signup-password"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <PasswordStrengthIndicator password={field.value} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    <FormField
-                      control={signUpForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm">Confirm</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                type="password"
-                                placeholder="Re-enter"
-                                className="pl-10"
-                                data-testid="input-signup-confirm-password"
-                                {...field}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  <FormField
+                    control={signUpForm.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm">Confirm Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              type="password"
+                              placeholder="Re-enter your password"
+                              className="pl-10"
+                              data-testid="input-signup-confirm-password"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={signUpForm.control}

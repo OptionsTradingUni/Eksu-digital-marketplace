@@ -56,9 +56,10 @@ import {
   sendSecretMessageSchema,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
-import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
+import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo } from "./smedata";
+import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, fetchAndParsePlans, type ParsedVtuPlan } from "./smedata";
+import { sendEmailVerificationCode, sendErrorReportToAdmin } from "./email-service";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -529,6 +530,18 @@ Happy trading!`;
         }
       }
 
+      // Send email verification (don't block registration if this fails)
+      try {
+        const { token, code } = await storage.createEmailVerificationToken(user.id);
+        const appUrl = process.env.APP_URL || 'https://eksu-marketplace.com';
+        const verificationLink = `${appUrl}/verify-email?token=${token}`;
+        await sendEmailVerificationCode(user.email, user.firstName || 'User', code, verificationLink);
+        console.log(`Verification email sent to ${user.email}`);
+      } catch (emailError: any) {
+        console.error("Error sending verification email:", emailError.message);
+        // Don't fail registration if email fails - user can request resend later
+      }
+
       // Remove password from user object before storing in session/sending to client
       const { password: _, ...safeUser } = user;
 
@@ -553,6 +566,125 @@ Happy trading!`;
         message: "Failed to register user. Please try again.",
         error: process.env.NODE_ENV === "development" ? error.message : undefined
       });
+    }
+  });
+
+  // ==================== EMAIL VERIFICATION ROUTES ====================
+
+  // Send/resend verification email
+  app.post("/api/auth/send-verification-email", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "Email is already verified" });
+      }
+
+      // Generate verification token and code
+      const { token, code } = await storage.createEmailVerificationToken(userId);
+      
+      // Build verification link
+      const appUrl = process.env.APP_URL || 'https://eksu-marketplace.com';
+      const verificationLink = `${appUrl}/verify-email?token=${token}`;
+
+      // Send verification email
+      await sendEmailVerificationCode(user.email, user.firstName || 'User', code, verificationLink);
+
+      console.log(`Verification email sent to ${user.email}`);
+      res.json({ 
+        message: "Verification email sent successfully",
+        success: true 
+      });
+    } catch (error: any) {
+      console.error("Error sending verification email:", error);
+      res.status(500).json({ message: "Failed to send verification email" });
+    }
+  });
+
+  // Verify email via link token
+  app.get("/api/auth/verify-email/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      if (!token) {
+        return res.status(400).json({ message: "Verification token is required" });
+      }
+
+      const verified = await storage.verifyEmailToken(token);
+      
+      if (!verified) {
+        return res.status(400).json({ 
+          message: "Invalid or expired verification link. Please request a new one.",
+          success: false 
+        });
+      }
+
+      console.log(`Email verified via link token`);
+      res.json({ 
+        message: "Email verified successfully!",
+        success: true 
+      });
+    } catch (error: any) {
+      console.error("Error verifying email token:", error);
+      res.status(500).json({ message: "Failed to verify email" });
+    }
+  });
+
+  // Verify email via 6-digit code
+  app.post("/api/auth/verify-email-code", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { code } = req.body;
+      
+      if (!code || typeof code !== 'string' || code.length !== 6) {
+        return res.status(400).json({ message: "Valid 6-digit verification code is required" });
+      }
+
+      const verified = await storage.verifyEmailCode(userId, code);
+      
+      if (!verified) {
+        return res.status(400).json({ 
+          message: "Invalid or expired verification code. Please request a new one.",
+          success: false 
+        });
+      }
+
+      console.log(`Email verified via code for user ${userId}`);
+      res.json({ 
+        message: "Email verified successfully!",
+        success: true 
+      });
+    } catch (error: any) {
+      console.error("Error verifying email code:", error);
+      res.status(500).json({ message: "Failed to verify email" });
+    }
+  });
+
+  // Check email verification status
+  app.get("/api/auth/email-verification-status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const isVerified = await storage.isUserEmailVerified(userId);
+      res.json({ emailVerified: isVerified });
+    } catch (error: any) {
+      console.error("Error checking email verification status:", error);
+      res.status(500).json({ message: "Failed to check email verification status" });
     }
   });
 
@@ -892,9 +1024,14 @@ Happy trading!`;
 
   // Initialize a Squad payment
   app.post('/api/squad/initialize', isAuthenticated, async (req: any, res) => {
+    const requestId = crypto.randomBytes(4).toString('hex');
+    
     try {
       if (!isSquadConfigured()) {
-        return res.status(503).json({ message: "Payment service is not configured" });
+        return res.status(503).json({ 
+          message: "Payment service is not configured. Please contact support.",
+          code: "SERVICE_UNAVAILABLE"
+        });
       }
 
       const userId = req.user.id;
@@ -917,6 +1054,8 @@ Happy trading!`;
       const paymentChannels: ('card' | 'bank' | 'ussd' | 'transfer')[] = validated.paymentChannel 
         ? [validated.paymentChannel] 
         : ['transfer', 'card', 'ussd'];
+
+      console.log(`[Payment ${requestId}] Initializing Squad payment for user ${userId}, amount: ₦${amount}`);
 
       const paymentResult = await squad.initializePayment({
         amount,
@@ -942,19 +1081,89 @@ Happy trading!`;
         paymentDescription: validated.paymentDescription || null,
       });
 
+      console.log(`[Payment ${requestId}] Squad payment initialized successfully: ${paymentResult.transactionRef}`);
+
       res.json({
         checkoutUrl: paymentResult.checkoutUrl,
         transactionReference: paymentResult.transactionRef,
         paymentReference,
       });
     } catch (error) {
+      // Handle Zod validation errors
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid payment details. Please check your input and try again.",
+          code: "VALIDATION_ERROR",
+          errors: error.errors 
+        });
       }
-      console.error("Error initializing Squad payment:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to initialize payment" });
+
+      // Handle Squad API errors with user-friendly messages
+      if (error instanceof SquadApiError) {
+        console.error(`[Payment ${requestId}] Squad API Error:`, {
+          type: error.type,
+          message: error.message,
+          statusCode: error.statusCode,
+          userMessage: error.userMessage,
+        });
+
+        // Send error report to admin for non-retryable errors
+        if (!error.isRetryable) {
+          sendErrorReportToAdmin(
+            `Squad Payment Error [${requestId}]`,
+            error.message,
+            {
+              type: error.type,
+              statusCode: error.statusCode,
+              rawError: error.rawError,
+              userId: req.user?.id,
+            }
+          ).catch(console.error);
+        }
+
+        return res.status(getHttpStatusForSquadError(error.type)).json({
+          message: error.userMessage,
+          code: error.type,
+          isRetryable: error.isRetryable,
+        });
+      }
+
+      // Handle generic errors
+      console.error(`[Payment ${requestId}] Unexpected error initializing Squad payment:`, error);
+      
+      // Send error report to admin
+      sendErrorReportToAdmin(
+        `Unexpected Payment Error [${requestId}]`,
+        error instanceof Error ? error.message : 'Unknown error',
+        { stack: error instanceof Error ? error.stack : undefined, userId: req.user?.id }
+      ).catch(console.error);
+
+      res.status(500).json({ 
+        message: "Unable to process your payment at this time. Please try again later or contact support.",
+        code: "INTERNAL_ERROR"
+      });
     }
   });
+
+  // Helper function to map Squad error types to HTTP status codes
+  function getHttpStatusForSquadError(errorType: SquadErrorType): number {
+    switch (errorType) {
+      case SquadErrorType.INVALID_REQUEST:
+        return 400;
+      case SquadErrorType.INVALID_CREDENTIALS:
+        return 503;
+      case SquadErrorType.INSUFFICIENT_FUNDS:
+        return 402;
+      case SquadErrorType.RATE_LIMITED:
+        return 429;
+      case SquadErrorType.TIMEOUT:
+      case SquadErrorType.NETWORK_ERROR:
+      case SquadErrorType.SERVER_ERROR:
+        return 503;
+      default:
+        return 500;
+    }
+  }
 
   // Verify a Squad payment by reference
   app.get('/api/squad/verify/:reference', isAuthenticated, async (req: any, res) => {
@@ -5029,6 +5238,127 @@ Happy trading!`;
       res.json(plans);
     } catch (error) {
       console.error("Error fetching VTU plans:", error);
+      res.status(500).json({ message: "Failed to fetch VTU plans" });
+    }
+  });
+
+  // Admin endpoint: Sync VTU plans from SME Data API
+  app.post("/api/admin/vtu/sync-plans", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check if user is admin
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can sync VTU plans" });
+      }
+
+      if (!isSMEDataConfigured()) {
+        return res.status(503).json({ 
+          message: "SME Data API is not configured. Please set SME_API environment variable.",
+          code: "API_NOT_CONFIGURED"
+        });
+      }
+
+      console.log("[VTU Sync] Admin initiated VTU plan sync...");
+
+      // Fetch and parse plans from SME Data API
+      const result = await fetchAndParsePlans();
+      
+      if (!result.success || result.plans.length === 0) {
+        console.error("[VTU Sync] Failed to fetch plans:", result.message);
+        return res.status(500).json({
+          success: false,
+          message: result.message || "Failed to fetch plans from SME Data API",
+        });
+      }
+
+      console.log(`[VTU Sync] Fetched ${result.plans.length} plans, syncing to database...`);
+
+      // Sync plans to database
+      let plansCreated = 0;
+      let plansUpdated = 0;
+      const errors: string[] = [];
+
+      for (const plan of result.plans) {
+        try {
+          const existing = await storage.getVtuPlanByNetworkAndDataAmount(plan.network, plan.dataAmount);
+          await storage.upsertVtuPlan({
+            network: plan.network as any,
+            planName: plan.planName,
+            dataAmount: plan.dataAmount,
+            validity: plan.validity,
+            costPrice: plan.costPrice,
+            sellingPrice: plan.sellingPrice,
+            planCode: plan.planCode,
+            isActive: true,
+            sortOrder: plan.sortOrder,
+          });
+          
+          if (existing) {
+            plansUpdated++;
+          } else {
+            plansCreated++;
+          }
+        } catch (err: any) {
+          const errorMsg = `Failed to sync plan ${plan.planName}: ${err.message}`;
+          console.error(`[VTU Sync] ${errorMsg}`);
+          errors.push(errorMsg);
+        }
+      }
+
+      const syncResult = {
+        success: errors.length === 0,
+        message: `Synced ${plansCreated + plansUpdated} plans (${plansCreated} created, ${plansUpdated} updated)`,
+        plansCreated,
+        plansUpdated,
+        totalPlans: result.plans.length,
+        errors: errors.length > 0 ? errors : undefined,
+      };
+
+      console.log(`[VTU Sync] Completed: ${syncResult.message}`);
+
+      // Send optional email report (don't await)
+      import("./email-service").then(({ sendVtuSyncReport }) => {
+        sendVtuSyncReport(syncResult).catch(console.error);
+      }).catch(console.error);
+
+      res.json(syncResult);
+    } catch (error: any) {
+      console.error("[VTU Sync] Error syncing VTU plans:", error);
+      
+      sendErrorReportToAdmin(
+        "VTU Plan Sync Failed",
+        error.message || "Unknown error",
+        { stack: error.stack }
+      ).catch(console.error);
+      
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to sync VTU plans. Please try again later.",
+        code: "SYNC_ERROR"
+      });
+    }
+  });
+
+  // Admin endpoint: Get all VTU plans (including inactive)
+  app.get("/api/admin/vtu/all-plans", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can view all VTU plans" });
+      }
+
+      const plans = await storage.getAllVtuPlans();
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching all VTU plans:", error);
       res.status(500).json({ message: "Failed to fetch VTU plans" });
     }
   });

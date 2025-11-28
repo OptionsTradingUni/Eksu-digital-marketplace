@@ -82,6 +82,7 @@ export const users = pgTable("users", {
   // Account status
   isActive: boolean("is_active").default(true),
   isBanned: boolean("is_banned").default(false),
+  emailVerified: boolean("email_verified").default(false),
   banReason: text("ban_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -3069,3 +3070,22 @@ export type CreateSecretMessageLinkInput = z.infer<typeof createSecretMessageLin
 export type SecretMessage = typeof secretMessages.$inferSelect;
 export type InsertSecretMessage = z.infer<typeof insertSecretMessageSchema>;
 export type SendSecretMessageInput = z.infer<typeof sendSecretMessageSchema>;
+
+// ===========================================
+// EMAIL VERIFICATION TOKENS
+// ===========================================
+
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 64 }).notNull(),
+  code: varchar("code", { length: 6 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("email_verification_user_idx").on(table.userId),
+  index("email_verification_token_idx").on(table.token),
+]);
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;

@@ -225,6 +225,8 @@ import {
   secretMessages,
   type SecretMessageLink,
   type SecretMessage,
+  emailVerificationTokens,
+  type EmailVerificationToken,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -601,7 +603,13 @@ export interface IStorage {
   
   // VTU (Virtual Top-Up) operations
   getVtuPlans(network?: string): Promise<VtuPlan[]>;
+  getAllVtuPlans(): Promise<VtuPlan[]>;
   getVtuPlan(id: string): Promise<VtuPlan | undefined>;
+  getVtuPlanByNetworkAndDataAmount(network: string, dataAmount: string): Promise<VtuPlan | undefined>;
+  createVtuPlan(data: InsertVtuPlan): Promise<VtuPlan>;
+  updateVtuPlan(id: string, data: Partial<VtuPlan>): Promise<VtuPlan>;
+  upsertVtuPlan(plan: InsertVtuPlan): Promise<VtuPlan>;
+  deactivateAllVtuPlans(): Promise<void>;
   createVtuTransaction(data: InsertVtuTransaction): Promise<VtuTransaction>;
   updateVtuTransaction(id: string, data: Partial<VtuTransaction>): Promise<VtuTransaction>;
   getUserVtuTransactions(userId: string, filters?: { status?: string; network?: string; startDate?: Date; endDate?: Date }): Promise<VtuTransaction[]>;
@@ -782,6 +790,13 @@ export interface IStorage {
   markSecretMessageRead(id: string): Promise<SecretMessage>;
   deleteSecretMessage(id: string): Promise<void>;
   getUnreadSecretMessageCount(userId: string): Promise<number>;
+
+  // Email verification operations
+  createEmailVerificationToken(userId: string): Promise<{ token: string; code: string }>;
+  verifyEmailToken(token: string): Promise<boolean>;
+  verifyEmailCode(userId: string, code: string): Promise<boolean>;
+  markUserEmailVerified(userId: string): Promise<void>;
+  isUserEmailVerified(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4261,6 +4276,60 @@ export class DatabaseStorage implements IStorage {
     return plan;
   }
 
+  async getAllVtuPlans(): Promise<VtuPlan[]> {
+    return await db.select().from(vtuPlans).orderBy(vtuPlans.network, vtuPlans.sortOrder);
+  }
+
+  async getVtuPlanByNetworkAndDataAmount(network: string, dataAmount: string): Promise<VtuPlan | undefined> {
+    const [plan] = await db
+      .select()
+      .from(vtuPlans)
+      .where(and(
+        eq(vtuPlans.network, network as any),
+        eq(vtuPlans.dataAmount, dataAmount.toUpperCase())
+      ));
+    return plan;
+  }
+
+  async createVtuPlan(data: InsertVtuPlan): Promise<VtuPlan> {
+    const [plan] = await db.insert(vtuPlans).values(data).returning();
+    return plan;
+  }
+
+  async updateVtuPlan(id: string, data: Partial<VtuPlan>): Promise<VtuPlan> {
+    const [updated] = await db
+      .update(vtuPlans)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(vtuPlans.id, id))
+      .returning();
+    return updated;
+  }
+
+  async upsertVtuPlan(plan: InsertVtuPlan): Promise<VtuPlan> {
+    // Try to find existing plan by network and dataAmount
+    const existing = await this.getVtuPlanByNetworkAndDataAmount(plan.network, plan.dataAmount);
+    
+    if (existing) {
+      // Update existing plan
+      return await this.updateVtuPlan(existing.id, {
+        planName: plan.planName,
+        validity: plan.validity,
+        costPrice: plan.costPrice,
+        sellingPrice: plan.sellingPrice,
+        planCode: plan.planCode,
+        isActive: plan.isActive ?? true,
+        sortOrder: plan.sortOrder ?? existing.sortOrder,
+      });
+    } else {
+      // Create new plan
+      return await this.createVtuPlan(plan);
+    }
+  }
+
+  async deactivateAllVtuPlans(): Promise<void> {
+    await db.update(vtuPlans).set({ isActive: false, updatedAt: new Date() });
+  }
+
   async createVtuTransaction(data: InsertVtuTransaction): Promise<VtuTransaction> {
     const [transaction] = await db.insert(vtuTransactions).values(data).returning();
     return transaction;
@@ -6228,6 +6297,94 @@ export class DatabaseStorage implements IStorage {
         eq(secretMessages.isRead, false)
       ));
     return Number(result[0]?.count || 0);
+  }
+
+  // Email verification operations
+  async createEmailVerificationToken(userId: string): Promise<{ token: string; code: string }> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    await db.update(emailVerificationTokens)
+      .set({ isUsed: true })
+      .where(and(
+        eq(emailVerificationTokens.userId, userId),
+        eq(emailVerificationTokens.isUsed, false)
+      ));
+    
+    await db.insert(emailVerificationTokens).values({
+      userId,
+      token,
+      code,
+      expiresAt,
+    });
+    
+    return { token, code };
+  }
+
+  async verifyEmailToken(token: string): Promise<boolean> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.token, token));
+    
+    if (!verificationToken) {
+      return false;
+    }
+    
+    if (verificationToken.isUsed) {
+      return false;
+    }
+    
+    if (new Date() > verificationToken.expiresAt) {
+      return false;
+    }
+    
+    await db.update(emailVerificationTokens)
+      .set({ isUsed: true })
+      .where(eq(emailVerificationTokens.id, verificationToken.id));
+    
+    await this.markUserEmailVerified(verificationToken.userId);
+    
+    return true;
+  }
+
+  async verifyEmailCode(userId: string, code: string): Promise<boolean> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(and(
+        eq(emailVerificationTokens.userId, userId),
+        eq(emailVerificationTokens.code, code),
+        eq(emailVerificationTokens.isUsed, false)
+      ));
+    
+    if (!verificationToken) {
+      return false;
+    }
+    
+    if (new Date() > verificationToken.expiresAt) {
+      return false;
+    }
+    
+    await db.update(emailVerificationTokens)
+      .set({ isUsed: true })
+      .where(eq(emailVerificationTokens.id, verificationToken.id));
+    
+    await this.markUserEmailVerified(userId);
+    
+    return true;
+  }
+
+  async markUserEmailVerified(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ emailVerified: true })
+      .where(eq(users.id, userId));
+  }
+
+  async isUserEmailVerified(userId: string): Promise<boolean> {
+    const [user] = await db.select({ emailVerified: users.emailVerified })
+      .from(users)
+      .where(eq(users.id, userId));
+    return user?.emailVerified ?? false;
   }
 }
 
