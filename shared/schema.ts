@@ -2934,3 +2934,60 @@ export const createChatbotMessageSchema = z.object({
 export type ChatbotConversation = typeof chatbotConversations.$inferSelect;
 export type ChatbotMessage = typeof chatbotMessages.$inferSelect;
 export type CreateChatbotMessageInput = z.infer<typeof createChatbotMessageSchema>;
+
+// ===========================================
+// SECRET MESSAGE LINKS (Anonymous Messages)
+// ===========================================
+
+export const secretMessageLinks = pgTable("secret_message_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  linkCode: varchar("link_code", { length: 12 }).unique().notNull(),
+  title: text("title").notNull().default("Send me an anonymous message"),
+  backgroundColor: varchar("background_color", { length: 20 }).default("#6b21a8"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("secret_message_links_user_idx").on(table.userId),
+  index("secret_message_links_code_idx").on(table.linkCode),
+]);
+
+export const secretMessages = pgTable("secret_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  linkId: varchar("link_id").notNull().references(() => secretMessageLinks.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("secret_messages_link_idx").on(table.linkId),
+  index("secret_messages_read_idx").on(table.isRead),
+]);
+
+export const insertSecretMessageLinkSchema = createInsertSchema(secretMessageLinks).omit({
+  id: true,
+  userId: true,
+  linkCode: true,
+  createdAt: true,
+});
+
+export const createSecretMessageLinkSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").max(200, "Title must be at most 200 characters").optional(),
+  backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format").optional(),
+});
+
+export const insertSecretMessageSchema = createInsertSchema(secretMessages).omit({
+  id: true,
+  isRead: true,
+  createdAt: true,
+});
+
+export const sendSecretMessageSchema = z.object({
+  content: z.string().min(1, "Message cannot be empty").max(2000, "Message must be at most 2000 characters"),
+});
+
+export type SecretMessageLink = typeof secretMessageLinks.$inferSelect;
+export type InsertSecretMessageLink = z.infer<typeof insertSecretMessageLinkSchema>;
+export type CreateSecretMessageLinkInput = z.infer<typeof createSecretMessageLinkSchema>;
+export type SecretMessage = typeof secretMessages.$inferSelect;
+export type InsertSecretMessage = z.infer<typeof insertSecretMessageSchema>;
+export type SendSecretMessageInput = z.infer<typeof sendSecretMessageSchema>;

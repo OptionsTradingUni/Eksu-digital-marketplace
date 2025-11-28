@@ -52,6 +52,8 @@ import {
   payBillSchema,
   validateCustomerSchema,
   createStorySchema,
+  createSecretMessageLinkSchema,
+  sendSecretMessageSchema,
 } from "@shared/schema";
 import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
@@ -9548,6 +9550,267 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error fetching user game rooms:", error);
       res.status(500).json({ message: "Failed to fetch user game rooms" });
+    }
+  });
+
+  // ===========================================
+  // SECRET MESSAGE LINKS (Anonymous Messages)
+  // ===========================================
+
+  // Rate limiting for anonymous message submissions (by IP)
+  const secretMessageRateLimit = new Map<string, { count: number; resetAt: Date }>();
+
+  function checkSecretMessageRateLimit(ip: string): { allowed: boolean; remaining: number; resetAt: Date } {
+    const now = new Date();
+    const limit = secretMessageRateLimit.get(ip);
+    
+    if (!limit || now > limit.resetAt) {
+      const resetAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour
+      secretMessageRateLimit.set(ip, { count: 1, resetAt });
+      return { allowed: true, remaining: 4, resetAt };
+    }
+    
+    if (limit.count >= 5) {
+      return { allowed: false, remaining: 0, resetAt: limit.resetAt };
+    }
+    
+    limit.count++;
+    return { allowed: true, remaining: 5 - limit.count, resetAt: limit.resetAt };
+  }
+
+  // POST /api/secret-links - Create new secret message link
+  app.post("/api/secret-links", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const data = createSecretMessageLinkSchema.parse(req.body);
+      const link = await storage.createSecretMessageLink(userId, data);
+      res.status(201).json(link);
+    } catch (error: any) {
+      console.error("Error creating secret link:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create secret link" });
+    }
+  });
+
+  // GET /api/secret-links/mine - Get user's secret message links
+  app.get("/api/secret-links/mine", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const links = await storage.getUserSecretMessageLinks(userId);
+      res.json(links);
+    } catch (error) {
+      console.error("Error fetching secret links:", error);
+      res.status(500).json({ message: "Failed to fetch secret links" });
+    }
+  });
+
+  // GET /api/secret-links/:code - Get link info by code (public)
+  app.get("/api/secret-links/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const link = await storage.getSecretMessageLinkByCode(code);
+      
+      if (!link) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+
+      if (!link.isActive) {
+        return res.status(410).json({ message: "This link is no longer active" });
+      }
+
+      // Only return necessary info - no user id
+      res.json({
+        title: link.title,
+        backgroundColor: link.backgroundColor,
+        isActive: link.isActive,
+      });
+    } catch (error) {
+      console.error("Error fetching secret link:", error);
+      res.status(500).json({ message: "Failed to fetch link" });
+    }
+  });
+
+  // POST /api/secret-messages/:code - Submit anonymous message (public)
+  app.post("/api/secret-messages/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      
+      // Check rate limit
+      const rateCheck = checkSecretMessageRateLimit(ip);
+      if (!rateCheck.allowed) {
+        return res.status(429).json({ 
+          message: "Rate limit exceeded. Please try again later.",
+          resetAt: rateCheck.resetAt,
+        });
+      }
+
+      const link = await storage.getSecretMessageLinkByCode(code);
+      if (!link) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+
+      if (!link.isActive) {
+        return res.status(410).json({ message: "This link is no longer active" });
+      }
+
+      const data = sendSecretMessageSchema.parse(req.body);
+      const message = await storage.createSecretMessage(link.id, data.content);
+      
+      res.status(201).json({ 
+        success: true, 
+        message: "Your anonymous message has been sent!",
+        remaining: rateCheck.remaining,
+      });
+    } catch (error: any) {
+      console.error("Error sending secret message:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // GET /api/secret-messages - Get messages received (authenticated)
+  app.get("/api/secret-messages", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const messages = await storage.getSecretMessagesForUser(userId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching secret messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  // GET /api/secret-messages/unread-count - Get unread count
+  app.get("/api/secret-messages/unread-count", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const count = await storage.getUnreadSecretMessageCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ message: "Failed to fetch unread count" });
+    }
+  });
+
+  // PATCH /api/secret-messages/:id/read - Mark as read (authenticated)
+  app.patch("/api/secret-messages/:id/read", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      
+      // Verify message belongs to user through the link
+      const messages = await storage.getSecretMessagesForUser(userId);
+      const message = messages.find(m => m.id === id);
+      
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      const updated = await storage.markSecretMessageRead(id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking message as read:", error);
+      res.status(500).json({ message: "Failed to mark as read" });
+    }
+  });
+
+  // DELETE /api/secret-messages/:id - Delete a message (authenticated)
+  app.delete("/api/secret-messages/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      
+      // Verify message belongs to user through the link
+      const messages = await storage.getSecretMessagesForUser(userId);
+      const message = messages.find(m => m.id === id);
+      
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      await storage.deleteSecretMessage(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      res.status(500).json({ message: "Failed to delete message" });
+    }
+  });
+
+  // DELETE /api/secret-links/:id - Delete a link (authenticated)
+  app.delete("/api/secret-links/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      
+      // Verify link belongs to user
+      const link = await storage.getSecretMessageLink(id);
+      if (!link || link.userId !== userId) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+
+      await storage.deleteSecretMessageLink(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting secret link:", error);
+      res.status(500).json({ message: "Failed to delete link" });
+    }
+  });
+
+  // PATCH /api/secret-links/:id/toggle - Toggle link active status
+  app.patch("/api/secret-links/:id/toggle", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { isActive } = req.body;
+      
+      // Verify link belongs to user
+      const link = await storage.getSecretMessageLink(id);
+      if (!link || link.userId !== userId) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+
+      const updated = await storage.toggleSecretMessageLink(id, isActive);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error toggling secret link:", error);
+      res.status(500).json({ message: "Failed to toggle link" });
     }
   });
 

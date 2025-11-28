@@ -212,6 +212,10 @@ import {
   type CommunityPost,
   type CommunityPostComment,
   type CommunityPostLike,
+  secretMessageLinks,
+  secretMessages,
+  type SecretMessageLink,
+  type SecretMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
@@ -738,6 +742,21 @@ export interface IStorage {
   updateGameState(roomId: string, gameState: any): Promise<GameRoom>;
   startGameRoom(roomId: string): Promise<GameRoom>;
   endGameRoom(roomId: string, winnerId?: string, results?: any): Promise<GameRoom>;
+
+  // Secret Message Link operations
+  createSecretMessageLink(userId: string, data: { title?: string; backgroundColor?: string }): Promise<SecretMessageLink>;
+  getUserSecretMessageLinks(userId: string): Promise<SecretMessageLink[]>;
+  getSecretMessageLinkByCode(code: string): Promise<SecretMessageLink | undefined>;
+  getSecretMessageLink(id: string): Promise<SecretMessageLink | undefined>;
+  deleteSecretMessageLink(id: string): Promise<void>;
+  toggleSecretMessageLink(id: string, isActive: boolean): Promise<SecretMessageLink>;
+  
+  // Secret Message operations
+  createSecretMessage(linkId: string, content: string): Promise<SecretMessage>;
+  getSecretMessagesForUser(userId: string): Promise<(SecretMessage & { link: SecretMessageLink })[]>;
+  markSecretMessageRead(id: string): Promise<SecretMessage>;
+  deleteSecretMessage(id: string): Promise<void>;
+  getUnreadSecretMessageCount(userId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5894,6 +5913,115 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return updated;
+  }
+
+  // Secret Message Link operations
+  private generateSecretLinkCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let code = '';
+    for (let i = 0; i < 10; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  async createSecretMessageLink(userId: string, data: { title?: string; backgroundColor?: string }): Promise<SecretMessageLink> {
+    let linkCode = this.generateSecretLinkCode();
+    let attempts = 0;
+    
+    while (attempts < 10) {
+      const existing = await this.getSecretMessageLinkByCode(linkCode);
+      if (!existing) break;
+      linkCode = this.generateSecretLinkCode();
+      attempts++;
+    }
+
+    const [link] = await db.insert(secretMessageLinks).values({
+      userId,
+      linkCode,
+      title: data.title || "Send me an anonymous message",
+      backgroundColor: data.backgroundColor || "#6b21a8",
+    }).returning();
+
+    return link;
+  }
+
+  async getUserSecretMessageLinks(userId: string): Promise<SecretMessageLink[]> {
+    return await db.select()
+      .from(secretMessageLinks)
+      .where(eq(secretMessageLinks.userId, userId))
+      .orderBy(desc(secretMessageLinks.createdAt));
+  }
+
+  async getSecretMessageLinkByCode(code: string): Promise<SecretMessageLink | undefined> {
+    const [link] = await db.select()
+      .from(secretMessageLinks)
+      .where(eq(secretMessageLinks.linkCode, code));
+    return link;
+  }
+
+  async getSecretMessageLink(id: string): Promise<SecretMessageLink | undefined> {
+    const [link] = await db.select()
+      .from(secretMessageLinks)
+      .where(eq(secretMessageLinks.id, id));
+    return link;
+  }
+
+  async deleteSecretMessageLink(id: string): Promise<void> {
+    await db.delete(secretMessageLinks).where(eq(secretMessageLinks.id, id));
+  }
+
+  async toggleSecretMessageLink(id: string, isActive: boolean): Promise<SecretMessageLink> {
+    const [link] = await db.update(secretMessageLinks)
+      .set({ isActive })
+      .where(eq(secretMessageLinks.id, id))
+      .returning();
+    return link;
+  }
+
+  // Secret Message operations
+  async createSecretMessage(linkId: string, content: string): Promise<SecretMessage> {
+    const [message] = await db.insert(secretMessages).values({
+      linkId,
+      content,
+    }).returning();
+    return message;
+  }
+
+  async getSecretMessagesForUser(userId: string): Promise<(SecretMessage & { link: SecretMessageLink })[]> {
+    const result = await db.select()
+      .from(secretMessages)
+      .innerJoin(secretMessageLinks, eq(secretMessages.linkId, secretMessageLinks.id))
+      .where(eq(secretMessageLinks.userId, userId))
+      .orderBy(desc(secretMessages.createdAt));
+
+    return result.map(row => ({
+      ...row.secret_messages,
+      link: row.secret_message_links,
+    }));
+  }
+
+  async markSecretMessageRead(id: string): Promise<SecretMessage> {
+    const [message] = await db.update(secretMessages)
+      .set({ isRead: true })
+      .where(eq(secretMessages.id, id))
+      .returning();
+    return message;
+  }
+
+  async deleteSecretMessage(id: string): Promise<void> {
+    await db.delete(secretMessages).where(eq(secretMessages.id, id));
+  }
+
+  async getUnreadSecretMessageCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(secretMessages)
+      .innerJoin(secretMessageLinks, eq(secretMessages.linkId, secretMessageLinks.id))
+      .where(and(
+        eq(secretMessageLinks.userId, userId),
+        eq(secretMessages.isRead, false)
+      ));
+    return Number(result[0]?.count || 0);
   }
 }
 
