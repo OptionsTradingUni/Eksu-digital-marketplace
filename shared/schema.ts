@@ -369,17 +369,30 @@ export const disputes = pgTable("disputes", {
 export const supportTickets = pgTable("support_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ticketNumber: varchar("ticket_number", { length: 20 }), // e.g., EKSU-00124
   subject: varchar("subject", { length: 200 }).notNull(),
   message: text("message").notNull(),
-  category: varchar("category", { length: 50 }), // account, payment, technical, report
+  category: varchar("category", { length: 50 }), // account, payment, technical, report, bug, suggestion
   priority: varchar("priority", { length: 20 }).default("medium"), // low, medium, high, urgent
   attachments: text("attachments").array().default(sql`ARRAY[]::text[]`), // Array of image URLs
-  status: varchar("status", { length: 20 }).default("open"), // open, in_progress, resolved, closed
+  status: varchar("status", { length: 20 }).default("open"), // open, pending, in_progress, resolved, closed
   assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
   response: text("response"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Ticket replies - threaded conversation history
+export const ticketReplies = pgTable("ticket_replies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull().references(() => supportTickets.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  isAdminReply: boolean("is_admin_reply").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("ticket_replies_ticket_idx").on(table.ticketId),
+]);
 
 // Login streak rewards
 export const loginStreaks = pgTable("login_streaks", {
@@ -1204,6 +1217,7 @@ export type Dispute = typeof disputes.$inferSelect;
 export type InsertDispute = z.infer<typeof insertDisputeSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type TicketReply = typeof ticketReplies.$inferSelect;
 export type LoginStreak = typeof loginStreaks.$inferSelect;
 export type SellerAnalytics = typeof sellerAnalytics.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
@@ -1214,6 +1228,20 @@ export const insertFollowSchema = createInsertSchema(follows).omit({
   id: true,
   createdAt: true,
 });
+
+// Zod schemas for ticket replies
+export const insertTicketReplySchema = createInsertSchema(ticketReplies).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const createTicketReplySchema = z.object({
+  ticketId: z.string().min(1, "Ticket ID is required"),
+  message: z.string().min(5, "Reply must be at least 5 characters"),
+});
+
+export type InsertTicketReply = z.infer<typeof insertTicketReplySchema>;
+export type CreateTicketReplyInput = z.infer<typeof createTicketReplySchema>;
 
 // Zod schemas for new tables
 export const insertHostelSchema = createInsertSchema(hostels).omit({

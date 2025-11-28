@@ -188,3 +188,42 @@ The EKSU Marketplace includes an official system account ("Campus Hub") that pro
 ### Pull-to-Refresh & Back-to-Top
 - **File:** `client/src/components/ui/pull-to-refresh.tsx`
 - **Features:** Swipe-down gesture to refresh feeds, floating back-to-top button
+
+### Enhanced Support Ticket System
+- **Tables:** `support_tickets`, `ticket_replies`, `ticket_number_seq` (PostgreSQL sequence)
+- **Features:**
+  - Threaded conversations with ticket replies
+  - Atomic ticket numbering using PostgreSQL sequence (EKSU-00001 format, race-condition safe)
+  - Status tracking (open, pending, in_progress, resolved, closed)
+  - Admin and user reply differentiation
+  - Open ticket count tracking per user
+  - Comprehensive admin management with filtering, pagination, and stats
+- **API Endpoints:**
+  - `GET /api/support` - List user's tickets
+  - `POST /api/support` - Create new ticket with auto-numbering
+  - `GET /api/support/:id` - Get ticket with all replies
+  - `POST /api/support/:id/reply` - Add reply to ticket
+  - `POST /api/tickets/create` - Create ticket from chatbot handoff
+  - `GET /api/tickets/status` - Check user's open ticket count
+  - `GET /api/admin/tickets` - Admin: list all tickets with filtering
+  - `PATCH /api/admin/tickets/:id` - Admin: update ticket status/priority
+  - `GET /api/admin/tickets/stats` - Admin: ticket statistics dashboard
+
+### AI Chatbot Handoff System
+- **File:** `server/chatbot.ts`
+- **Features:**
+  - Frustration detection using NLP patterns
+  - Automatic handoff detection for:
+    - Scam/fraud reports
+    - Financial issues
+    - Account access problems
+    - Verification issues
+    - Explicit human support requests
+  - Frustration level scoring (0-10 scale)
+  - Smart handoff suggestions with category classification
+  - Conversation history analysis for repeated issues
+- **API Response Additions:**
+  - `shouldHandoff` - Boolean indicating need for human support
+  - `handoffReason` - Explanation of why handoff is needed
+  - `suggestedCategory` - Ticket category suggestion
+  - `frustrationLevel` - Numeric frustration score

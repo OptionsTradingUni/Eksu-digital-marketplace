@@ -320,6 +320,15 @@ export interface UserContext {
   isVerified?: boolean;
   trustScore?: string;
   currentPage?: string;
+  userId?: string;
+}
+
+export interface ChatbotResponse {
+  message: string;
+  shouldHandoff: boolean;
+  handoffReason?: string;
+  suggestedCategory?: string;
+  frustrationLevel?: number;
 }
 
 export async function getChatbotResponse(
@@ -437,6 +446,117 @@ export function checkForPaymentScam(message: string): boolean {
 
   const messageLower = message.toLowerCase();
   return scamKeywords.some(keyword => messageLower.includes(keyword));
+}
+
+// Detect if user needs human support
+export function detectHandoffNeed(messages: ChatMessage[]): { shouldHandoff: boolean; reason?: string; category?: string; frustrationLevel: number } {
+  const conversationText = messages.map(m => m.content.toLowerCase()).join(' ');
+  const lastFewMessages = messages.slice(-3);
+  const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
+  
+  let frustrationLevel = 0;
+  let reason: string | undefined;
+  let category: string | undefined;
+  
+  // Frustration indicators
+  const frustrationPatterns = [
+    { pattern: /not working|doesn't work|broken|won't|can't|unable/gi, weight: 1 },
+    { pattern: /useless|stupid|rubbish|trash|waste|annoying/gi, weight: 2 },
+    { pattern: /human|real person|agent|staff|support|customer service/gi, weight: 3 },
+    { pattern: /scam|scammed|stole|stolen|thief|fraud/gi, weight: 4 },
+    { pattern: /please help|help me|i need help|urgent|emergency/gi, weight: 2 },
+    { pattern: /lost money|money missing|funds missing|wallet empty/gi, weight: 4 },
+    { pattern: /refund|get my money back|return my money/gi, weight: 3 },
+    { pattern: /angry|frustrated|upset|disappointed|terrible/gi, weight: 2 },
+    { pattern: /wetin dey|no understand|confused|still not|again/gi, weight: 1 },
+    { pattern: /!!+|\?{2,}|caps lock/gi, weight: 1 },
+  ];
+  
+  for (const { pattern, weight } of frustrationPatterns) {
+    const matches = conversationText.match(pattern);
+    if (matches) {
+      frustrationLevel += matches.length * weight;
+    }
+  }
+  
+  // Repeated similar questions indicate bot not helping
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length >= 3) {
+    const recentUserMessages = userMessages.slice(-3).map(m => m.content.toLowerCase());
+    const similarCount = recentUserMessages.filter((msg, i, arr) => 
+      i > 0 && arr[i-1] && (
+        msg.includes(arr[i-1].substring(0, 20)) || 
+        arr[i-1].includes(msg.substring(0, 20))
+      )
+    ).length;
+    frustrationLevel += similarCount * 2;
+  }
+  
+  // Detect specific issues that need human support
+  if (/scam|scammed|fraud|stolen|thief/.test(lastMessage)) {
+    reason = "User is reporting a scam or fraud incident";
+    category = "scam_report";
+    frustrationLevel = Math.max(frustrationLevel, 5);
+  } else if (/money missing|wallet.*empty|funds.*gone|lost.*money/.test(lastMessage)) {
+    reason = "User has a financial issue with their wallet";
+    category = "payment";
+    frustrationLevel = Math.max(frustrationLevel, 5);
+  } else if (/refund|money back|return.*payment/.test(lastMessage)) {
+    reason = "User is requesting a refund";
+    category = "payment";
+    frustrationLevel = Math.max(frustrationLevel, 4);
+  } else if (/human|real person|support|talk to someone|agent|staff/.test(lastMessage)) {
+    reason = "User explicitly requested human support";
+    category = "general";
+    frustrationLevel = Math.max(frustrationLevel, 5);
+  } else if (/verify|verification|kyc|not approved|rejected/.test(lastMessage) && frustrationLevel >= 2) {
+    reason = "User is having verification issues";
+    category = "account";
+  } else if (/account.*locked|banned|suspended|can't.*login|access.*denied/.test(lastMessage)) {
+    reason = "User has account access issues";
+    category = "account";
+    frustrationLevel = Math.max(frustrationLevel, 4);
+  } else if (/withdraw|withdrawal.*failed|money.*stuck|pending.*too.*long/.test(lastMessage) && frustrationLevel >= 2) {
+    reason = "User has withdrawal issues";
+    category = "payment";
+  }
+  
+  // Determine if we should hand off
+  const shouldHandoff = frustrationLevel >= 5 || !!reason;
+  
+  return { shouldHandoff, reason, category, frustrationLevel };
+}
+
+export async function getChatbotResponseWithHandoff(
+  messages: ChatMessage[],
+  userContext?: UserContext
+): Promise<ChatbotResponse> {
+  // Check for handoff need first
+  const handoffCheck = detectHandoffNeed(messages);
+  
+  // Get the regular chatbot response
+  const message = await getChatbotResponse(messages, userContext);
+  
+  // If handoff is needed, append the handoff offer
+  if (handoffCheck.shouldHandoff) {
+    const handoffMessage = handoffCheck.reason 
+      ? `\n\n---\nI notice you might need more specialized help. ${handoffCheck.reason}. Would you like me to create a support ticket for you? A human agent will review your case within 1-4 hours.`
+      : `\n\n---\nI sense you might need help from our support team. Would you like to speak with a human agent? I can create a ticket for you right now.`;
+    
+    return {
+      message: message + handoffMessage,
+      shouldHandoff: true,
+      handoffReason: handoffCheck.reason,
+      suggestedCategory: handoffCheck.category,
+      frustrationLevel: handoffCheck.frustrationLevel,
+    };
+  }
+  
+  return {
+    message,
+    shouldHandoff: false,
+    frustrationLevel: handoffCheck.frustrationLevel,
+  };
 }
 
 export const QUICK_RESPONSES = {

@@ -55,7 +55,7 @@ import {
   createSecretMessageLinkSchema,
   sendSecretMessageSchema,
 } from "@shared/schema";
-import { getChatbotResponse, checkForPaymentScam, type ChatMessage } from "./chatbot";
+import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo } from "./smedata";
@@ -1940,7 +1940,7 @@ Happy trading!`;
     try {
       const userId = req.user.id;
       const validated = createSupportTicketSchema.parse({ ...req.body, userId });
-      const ticket = await storage.createSupportTicket(validated);
+      const ticket = await storage.createSupportTicketWithNumber(validated);
       res.json(ticket);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1948,6 +1948,271 @@ Happy trading!`;
       }
       console.error("Error creating ticket:", error);
       res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  // Get single ticket with replies
+  app.get('/api/support/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
+      const ticket = await storage.getSupportTicketById(id);
+      
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Check if user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Check if user owns the ticket or is admin
+      if (ticket.userId !== userId && user.role !== 'admin') {
+        return res.status(403).json({ message: "Not authorized to view this ticket" });
+      }
+      
+      const replies = await storage.getTicketReplies(id);
+      res.json({ ...ticket, replies });
+    } catch (error) {
+      console.error("Error fetching ticket:", error);
+      res.status(500).json({ message: "Failed to fetch ticket" });
+    }
+  });
+
+  // Add reply to ticket
+  app.post('/api/support/:id/reply', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { id: ticketId } = req.params;
+      const { message } = req.body;
+      
+      if (!message || message.trim().length < 5) {
+        return res.status(400).json({ message: "Reply must be at least 5 characters" });
+      }
+      
+      const ticket = await storage.getSupportTicketById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Check if user exists and get their role
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const isAdmin = user.role === 'admin';
+      
+      // Check if user owns the ticket or is admin
+      if (ticket.userId !== userId && !isAdmin) {
+        return res.status(403).json({ message: "Not authorized to reply to this ticket" });
+      }
+      
+      const reply = await storage.createTicketReply({
+        ticketId,
+        userId,
+        message: message.trim(),
+        isAdminReply: isAdmin,
+      });
+      
+      // If admin replied, update ticket status to in_progress
+      if (isAdmin) {
+        await storage.updateSupportTicket(ticketId, { status: 'in_progress' });
+      }
+      
+      // Return reply with user info
+      res.json({
+        ...reply,
+        user: {
+          id: user.id,
+          username: user.username,
+          profileImage: user.profileImage,
+        }
+      });
+    } catch (error) {
+      console.error("Error adding reply:", error);
+      res.status(500).json({ message: "Failed to add reply" });
+    }
+  });
+
+  // Create ticket from chatbot handoff
+  app.post('/api/tickets/create', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { subject, message, category, chatHistory } = req.body;
+      
+      if (!message || message.trim().length < 10) {
+        return res.status(400).json({ message: "Message must be at least 10 characters" });
+      }
+      
+      // Create ticket with chat history context
+      const fullMessage = chatHistory 
+        ? `${message}\n\n--- Previous Chat Context ---\n${chatHistory}`
+        : message;
+      
+      const ticket = await storage.createSupportTicketWithNumber({
+        userId,
+        subject: subject || "Issue from Chatbot",
+        message: fullMessage,
+        category: category || "technical",
+        priority: "medium",
+      });
+      
+      res.json({
+        success: true,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        message: `Ticket ${ticket.ticketNumber} created successfully. You can track it in My Tickets.`,
+      });
+    } catch (error) {
+      console.error("Error creating ticket from chatbot:", error);
+      res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  // Check if user has open tickets (for chatbot)
+  app.get('/api/tickets/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const openCount = await storage.getUserOpenTicketCount(userId);
+      const tickets = await storage.getUserSupportTickets(userId);
+      
+      res.json({
+        hasOpenTickets: openCount > 0,
+        openTicketCount: openCount,
+        recentTickets: tickets.slice(0, 5),
+      });
+    } catch (error) {
+      console.error("Error checking ticket status:", error);
+      res.status(500).json({ message: "Failed to check ticket status" });
+    }
+  });
+
+  // Admin: Get all support tickets
+  app.get('/api/admin/tickets', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      const { status, priority, category, page = 1, limit = 20 } = req.query;
+      const allTickets = await storage.getAllSupportTickets();
+      
+      // Filter tickets based on query params
+      let filteredTickets = allTickets;
+      if (status) {
+        filteredTickets = filteredTickets.filter(t => t.status === status);
+      }
+      if (priority) {
+        filteredTickets = filteredTickets.filter(t => t.priority === priority);
+      }
+      if (category) {
+        filteredTickets = filteredTickets.filter(t => t.category === category);
+      }
+      
+      // Pagination
+      const pageNum = parseInt(page as string) || 1;
+      const limitNum = parseInt(limit as string) || 20;
+      const offset = (pageNum - 1) * limitNum;
+      const paginatedTickets = filteredTickets.slice(offset, offset + limitNum);
+      
+      // Get user info for each ticket
+      const ticketsWithUsers = await Promise.all(
+        paginatedTickets.map(async (ticket) => {
+          const ticketUser = await storage.getUser(ticket.userId);
+          return {
+            ...ticket,
+            user: ticketUser ? { 
+              id: ticketUser.id, 
+              username: ticketUser.username, 
+              email: ticketUser.email,
+              profileImage: ticketUser.profileImage 
+            } : null,
+          };
+        })
+      );
+      
+      res.json({
+        tickets: ticketsWithUsers,
+        total: filteredTickets.length,
+        page: pageNum,
+        totalPages: Math.ceil(filteredTickets.length / limitNum),
+      });
+    } catch (error) {
+      console.error("Error fetching admin tickets:", error);
+      res.status(500).json({ message: "Failed to fetch tickets" });
+    }
+  });
+
+  // Admin: Update ticket status/priority
+  app.patch('/api/admin/tickets/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      const { id } = req.params;
+      const { status, priority, assignedTo } = req.body;
+      
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (priority) updateData.priority = priority;
+      if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+      
+      const ticket = await storage.updateSupportTicket(id, updateData);
+      res.json(ticket);
+    } catch (error) {
+      console.error("Error updating ticket:", error);
+      res.status(500).json({ message: "Failed to update ticket" });
+    }
+  });
+
+  // Admin: Get ticket stats
+  app.get('/api/admin/tickets/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      const allTickets = await storage.getAllSupportTickets();
+      
+      const stats = {
+        total: allTickets.length,
+        open: allTickets.filter(t => t.status === 'open').length,
+        pending: allTickets.filter(t => t.status === 'pending').length,
+        inProgress: allTickets.filter(t => t.status === 'in_progress').length,
+        resolved: allTickets.filter(t => t.status === 'resolved').length,
+        closed: allTickets.filter(t => t.status === 'closed').length,
+        byPriority: {
+          low: allTickets.filter(t => t.priority === 'low').length,
+          medium: allTickets.filter(t => t.priority === 'medium').length,
+          high: allTickets.filter(t => t.priority === 'high').length,
+          urgent: allTickets.filter(t => t.priority === 'urgent').length,
+        },
+        byCategory: {
+          technical: allTickets.filter(t => t.category === 'technical').length,
+          payment: allTickets.filter(t => t.category === 'payment').length,
+          account: allTickets.filter(t => t.category === 'account').length,
+          scam_report: allTickets.filter(t => t.category === 'scam_report').length,
+          general: allTickets.filter(t => t.category === 'general').length,
+        },
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching ticket stats:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
     }
   });
 
@@ -3177,6 +3442,10 @@ Happy trading!`;
   const chatbotRequestSchema = z.object({
     message: z.string().min(1).max(2000),
     currentPage: z.string().optional(),
+    conversationHistory: z.array(z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string()
+    })).optional(),
   });
   
   app.post("/api/chatbot", async (req: any, res) => {
@@ -3184,10 +3453,9 @@ Happy trading!`;
       // Validate request
       const validated = chatbotRequestSchema.parse(req.body);
       
-      // SECURITY: Only accept the current user message, not full history
-      // We'll maintain conversation history server-side in the future
       const userMessage = validated.message;
       const currentPage = validated.currentPage;
+      const history = validated.conversationHistory || [];
 
       // Get user context if authenticated
       let userContext;
@@ -3200,6 +3468,7 @@ Happy trading!`;
             isVerified: user.isVerified ?? undefined,
             trustScore: user.trustScore ?? undefined,
             currentPage: currentPage,
+            userId: userId,
           };
         }
       } else if (currentPage) {
@@ -3209,17 +3478,22 @@ Happy trading!`;
       // Check for payment scam patterns in the user message
       const hasPaymentWarning = checkForPaymentScam(userMessage);
 
-      // Build trusted conversation (for now just single message)
-      // In production, this should pull from server-side session storage
+      // Build conversation with history for handoff detection
       const trustedMessages: ChatMessage[] = [
-        { role: "user", content: userMessage }
+        ...history.slice(-6).map(h => ({ role: h.role as "user" | "assistant", content: h.content })),
+        { role: "user" as const, content: userMessage }
       ];
 
-      const response = await getChatbotResponse(trustedMessages, userContext);
+      // Use the handoff-aware response function
+      const response = await getChatbotResponseWithHandoff(trustedMessages, userContext);
 
       res.json({
-        message: response,
+        message: response.message,
         hasPaymentWarning,
+        shouldHandoff: response.shouldHandoff,
+        handoffReason: response.handoffReason,
+        suggestedCategory: response.suggestedCategory,
+        frustrationLevel: response.frustrationLevel,
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {

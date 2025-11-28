@@ -20,6 +20,7 @@ import {
   boostRequests,
   disputes,
   supportTickets,
+  ticketReplies,
   loginStreaks,
   sellerAnalytics,
   follows,
@@ -104,6 +105,8 @@ import {
   type InsertDispute,
   type SupportTicket,
   type InsertSupportTicket,
+  type TicketReply,
+  type InsertTicketReply,
   type LoginStreak,
   type SellerAnalytics,
   type Hostel,
@@ -1654,6 +1657,68 @@ export class DatabaseStorage implements IStorage {
       .where(eq(supportTickets.id, id))
       .returning();
     return updated;
+  }
+
+  async getSupportTicketById(id: string): Promise<(SupportTicket & { user: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(supportTickets)
+      .innerJoin(users, eq(supportTickets.userId, users.id))
+      .where(eq(supportTickets.id, id));
+    
+    if (result.length === 0) return undefined;
+    return { ...result[0].support_tickets, user: result[0].users };
+  }
+
+  async getNextTicketNumber(): Promise<string> {
+    // Use PostgreSQL sequence for atomic, monotonic ticket number generation
+    const result = await db.execute(sql`SELECT nextval('ticket_number_seq') as next_num`);
+    const nextNum = result.rows?.[0]?.next_num || 1;
+    return `EKSU-${String(nextNum).padStart(5, '0')}`;
+  }
+
+  async createSupportTicketWithNumber(ticket: InsertSupportTicket): Promise<SupportTicket> {
+    // Generate ticket number atomically using sequence
+    const ticketNumber = await this.getNextTicketNumber();
+    const [created] = await db.insert(supportTickets).values({
+      ...ticket,
+      ticketNumber,
+    }).returning();
+    return created;
+  }
+
+  // Ticket reply operations
+  async createTicketReply(reply: InsertTicketReply): Promise<TicketReply> {
+    const [created] = await db.insert(ticketReplies).values(reply).returning();
+    
+    // Update ticket status to pending if user replied, or keep it if admin replied
+    if (!reply.isAdminReply) {
+      await this.updateSupportTicket(reply.ticketId, { status: 'pending' });
+    }
+    
+    return created;
+  }
+
+  async getTicketReplies(ticketId: string): Promise<(TicketReply & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(ticketReplies)
+      .innerJoin(users, eq(ticketReplies.userId, users.id))
+      .where(eq(ticketReplies.ticketId, ticketId))
+      .orderBy(ticketReplies.createdAt);
+    
+    return result.map(r => ({ ...r.ticket_replies, user: r.users }));
+  }
+
+  async getUserOpenTicketCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(supportTickets)
+      .where(and(
+        eq(supportTickets.userId, userId),
+        sql`${supportTickets.status} IN ('open', 'pending', 'in_progress')`
+      ));
+    return result[0]?.count || 0;
   }
 
   // Login streak operations
