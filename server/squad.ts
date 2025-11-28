@@ -693,6 +693,37 @@ export function isSquadConfigured(): boolean {
 }
 
 /**
+ * Get detailed Squad configuration status for admin dashboard
+ */
+export function getSquadConfigStatus(): {
+  configured: boolean;
+  mode: 'sandbox' | 'live' | 'unknown';
+  baseUrl: string;
+  hasSecretKey: boolean;
+  hasPublicKey: boolean;
+  keyPrefix: string;
+} {
+  const secretKey = process.env.SQUAD_SECRET_KEY || '';
+  const publicKey = process.env.SQUAD_PUBLIC_KEY || '';
+  
+  let mode: 'sandbox' | 'live' | 'unknown' = 'unknown';
+  if (secretKey.startsWith('sk_test_') || secretKey.startsWith('sandbox_sk_')) {
+    mode = 'sandbox';
+  } else if (secretKey.startsWith('sk_live_') || (secretKey && !secretKey.startsWith('sk_test_'))) {
+    mode = 'live';
+  }
+  
+  return {
+    configured: isSquadConfigured(),
+    mode,
+    baseUrl: getSquadBaseUrl(),
+    hasSecretKey: !!secretKey,
+    hasPublicKey: !!publicKey,
+    keyPrefix: secretKey ? secretKey.substring(0, 8) + '...' : 'not set',
+  };
+}
+
+/**
  * Payment method messaging for checkout
  * Bank Transfer is highlighted as instant (T+0)
  */
@@ -731,6 +762,7 @@ export const squad = {
   generatePaymentReference,
   generateTransferReference,
   isSquadConfigured,
+  getSquadConfigStatus,
   paymentMethodMessages,
 };
 

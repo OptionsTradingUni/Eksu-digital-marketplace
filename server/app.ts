@@ -9,12 +9,8 @@ import express, {
 
 import { registerRoutes } from "./routes";
 import { initializeDatabaseSequences } from "./db";
-import { fetchAndParsePlans, isSMEDataConfigured } from "./smedata";
+import { isSMEDataConfigured } from "./smedata";
 import { sendErrorReportToAdmin } from "./email-service";
-
-// VTU auto-sync configuration
-const AUTO_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-let autoSyncTimer: NodeJS.Timeout | null = null;
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -112,31 +108,58 @@ app.use((req, res, next) => {
   next();
 });
 
-// Auto-sync VTU plans from SME Data API
-async function autoSyncVtuPlans() {
-  if (!isSMEDataConfigured()) {
-    log("VTU auto-sync skipped: SME Data API not configured", "vtu-sync");
-    return;
-  }
-
+// Initialize default VTU plans if none exist (admin can modify prices)
+async function initializeDefaultVtuPlans() {
   try {
-    log("Starting VTU plans auto-sync...", "vtu-sync");
-    const result = await fetchAndParsePlans();
+    const { storage } = await import("./storage");
+    const existingPlans = await storage.getVtuPlans();
     
-    if (!result.success) {
-      log(`VTU auto-sync failed: ${result.message}`, "vtu-sync");
+    if (existingPlans.length > 0) {
+      log(`VTU plans already exist (${existingPlans.length} plans), skipping initialization`, "vtu-init");
       return;
     }
-
-    log(`VTU auto-sync: fetched ${result.plans.length} plans from SME Data API`, "vtu-sync");
     
-    // Import storage dynamically to avoid circular dependencies
-    const { storage } = await import("./storage");
-    let created = 0, updated = 0;
+    log("Initializing default VTU plans...", "vtu-init");
     
-    for (const plan of result.plans) {
+    // Default plans based on SMEDATA.NG pricing (admin can update via admin panel)
+    // The dataAmount field MUST match what SMEDATA API expects: "500MB", "1GB", "2GB", etc.
+    const defaultPlans = [
+      // MTN SME Plans
+      { network: "mtn_sme", planName: "MTN 500MB - 30 Days", dataAmount: "500MB", validity: "30 days", costPrice: "140.00", sellingPrice: "150.00", planCode: "mtn_500mb", sortOrder: 1 },
+      { network: "mtn_sme", planName: "MTN 1GB - 30 Days", dataAmount: "1GB", validity: "30 days", costPrice: "245.00", sellingPrice: "260.00", planCode: "mtn_1gb", sortOrder: 2 },
+      { network: "mtn_sme", planName: "MTN 2GB - 30 Days", dataAmount: "2GB", validity: "30 days", costPrice: "490.00", sellingPrice: "520.00", planCode: "mtn_2gb", sortOrder: 3 },
+      { network: "mtn_sme", planName: "MTN 3GB - 30 Days", dataAmount: "3GB", validity: "30 days", costPrice: "735.00", sellingPrice: "780.00", planCode: "mtn_3gb", sortOrder: 4 },
+      { network: "mtn_sme", planName: "MTN 5GB - 30 Days", dataAmount: "5GB", validity: "30 days", costPrice: "1225.00", sellingPrice: "1300.00", planCode: "mtn_5gb", sortOrder: 5 },
+      { network: "mtn_sme", planName: "MTN 10GB - 30 Days", dataAmount: "10GB", validity: "30 days", costPrice: "2450.00", sellingPrice: "2600.00", planCode: "mtn_10gb", sortOrder: 6 },
+      
+      // GLO CG Plans
+      { network: "glo_cg", planName: "GLO 500MB - 30 Days", dataAmount: "500MB", validity: "30 days", costPrice: "135.00", sellingPrice: "145.00", planCode: "glo_500mb", sortOrder: 10 },
+      { network: "glo_cg", planName: "GLO 1GB - 30 Days", dataAmount: "1GB", validity: "30 days", costPrice: "240.00", sellingPrice: "255.00", planCode: "glo_1gb", sortOrder: 11 },
+      { network: "glo_cg", planName: "GLO 2GB - 30 Days", dataAmount: "2GB", validity: "30 days", costPrice: "480.00", sellingPrice: "510.00", planCode: "glo_2gb", sortOrder: 12 },
+      { network: "glo_cg", planName: "GLO 3GB - 30 Days", dataAmount: "3GB", validity: "30 days", costPrice: "720.00", sellingPrice: "765.00", planCode: "glo_3gb", sortOrder: 13 },
+      { network: "glo_cg", planName: "GLO 5GB - 30 Days", dataAmount: "5GB", validity: "30 days", costPrice: "1200.00", sellingPrice: "1275.00", planCode: "glo_5gb", sortOrder: 14 },
+      { network: "glo_cg", planName: "GLO 10GB - 30 Days", dataAmount: "10GB", validity: "30 days", costPrice: "2400.00", sellingPrice: "2550.00", planCode: "glo_10gb", sortOrder: 15 },
+      
+      // Airtel CG Plans
+      { network: "airtel_cg", planName: "Airtel 500MB - 30 Days", dataAmount: "500MB", validity: "30 days", costPrice: "140.00", sellingPrice: "150.00", planCode: "airtel_500mb", sortOrder: 20 },
+      { network: "airtel_cg", planName: "Airtel 1GB - 30 Days", dataAmount: "1GB", validity: "30 days", costPrice: "250.00", sellingPrice: "265.00", planCode: "airtel_1gb", sortOrder: 21 },
+      { network: "airtel_cg", planName: "Airtel 2GB - 30 Days", dataAmount: "2GB", validity: "30 days", costPrice: "500.00", sellingPrice: "530.00", planCode: "airtel_2gb", sortOrder: 22 },
+      { network: "airtel_cg", planName: "Airtel 3GB - 30 Days", dataAmount: "3GB", validity: "30 days", costPrice: "750.00", sellingPrice: "795.00", planCode: "airtel_3gb", sortOrder: 23 },
+      { network: "airtel_cg", planName: "Airtel 5GB - 30 Days", dataAmount: "5GB", validity: "30 days", costPrice: "1250.00", sellingPrice: "1325.00", planCode: "airtel_5gb", sortOrder: 24 },
+      { network: "airtel_cg", planName: "Airtel 10GB - 30 Days", dataAmount: "10GB", validity: "30 days", costPrice: "2500.00", sellingPrice: "2650.00", planCode: "airtel_10gb", sortOrder: 25 },
+      
+      // 9mobile Plans
+      { network: "9mobile", planName: "9mobile 500MB - 30 Days", dataAmount: "500MB", validity: "30 days", costPrice: "130.00", sellingPrice: "140.00", planCode: "9mobile_500mb", sortOrder: 30 },
+      { network: "9mobile", planName: "9mobile 1GB - 30 Days", dataAmount: "1GB", validity: "30 days", costPrice: "230.00", sellingPrice: "245.00", planCode: "9mobile_1gb", sortOrder: 31 },
+      { network: "9mobile", planName: "9mobile 2GB - 30 Days", dataAmount: "2GB", validity: "30 days", costPrice: "460.00", sellingPrice: "490.00", planCode: "9mobile_2gb", sortOrder: 32 },
+      { network: "9mobile", planName: "9mobile 3GB - 30 Days", dataAmount: "3GB", validity: "30 days", costPrice: "690.00", sellingPrice: "735.00", planCode: "9mobile_3gb", sortOrder: 33 },
+      { network: "9mobile", planName: "9mobile 5GB - 30 Days", dataAmount: "5GB", validity: "30 days", costPrice: "1150.00", sellingPrice: "1225.00", planCode: "9mobile_5gb", sortOrder: 34 },
+      { network: "9mobile", planName: "9mobile 10GB - 30 Days", dataAmount: "10GB", validity: "30 days", costPrice: "2300.00", sellingPrice: "2450.00", planCode: "9mobile_10gb", sortOrder: 35 },
+    ];
+    
+    let created = 0;
+    for (const plan of defaultPlans) {
       try {
-        const existing = await storage.getVtuPlanByNetworkAndDataAmount(plan.network, plan.dataAmount);
         await storage.upsertVtuPlan({
           network: plan.network as any,
           planName: plan.planName,
@@ -148,32 +171,17 @@ async function autoSyncVtuPlans() {
           isActive: true,
           sortOrder: plan.sortOrder,
         });
-        if (existing) updated++; else created++;
+        created++;
       } catch (err: any) {
-        log(`VTU auto-sync: failed to sync plan ${plan.planName}: ${err.message}`, "vtu-sync");
+        log(`Failed to create VTU plan ${plan.planName}: ${err.message}`, "vtu-init");
       }
     }
     
-    log(`VTU auto-sync completed: ${created} created, ${updated} updated`, "vtu-sync");
+    log(`VTU initialization complete: ${created} default plans created`, "vtu-init");
+    log("Admin can update prices via Admin Panel > VTU Management", "vtu-init");
   } catch (error: any) {
-    log(`VTU auto-sync error: ${error.message}`, "vtu-sync");
-    sendErrorReportToAdmin("VTU Auto-Sync Failed", error.message, { stack: error.stack }).catch(console.error);
+    log(`VTU initialization error: ${error.message}`, "vtu-init");
   }
-}
-
-// Schedule periodic VTU plan sync
-function scheduleVtuSync() {
-  // Initial sync after 30 seconds (give server time to fully start)
-  setTimeout(() => {
-    autoSyncVtuPlans();
-  }, 30000);
-  
-  // Schedule recurring sync every 24 hours
-  autoSyncTimer = setInterval(() => {
-    autoSyncVtuPlans();
-  }, AUTO_SYNC_INTERVAL_MS);
-  
-  log(`VTU auto-sync scheduled (every ${AUTO_SYNC_INTERVAL_MS / 1000 / 60 / 60} hours)`, "vtu-sync");
 }
 
 export default async function runApp(
@@ -245,8 +253,8 @@ export default async function runApp(
   // the catch-all route doesn't interfere with the other routes
   await setup(app, server);
 
-  // Schedule VTU auto-sync
-  scheduleVtuSync();
+  // Initialize default VTU plans if none exist
+  initializeDefaultVtuPlans();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

@@ -56,9 +56,9 @@ import {
   sendSecretMessageSchema,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
-import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, SquadApiError, SquadErrorType } from "./squad";
+import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, fetchAndParsePlans, type ParsedVtuPlan } from "./smedata";
+import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, requeryOrder } from "./smedata";
 import { sendEmailVerificationCode, sendErrorReportToAdmin, sendMessageNotification, sendOrderEmail } from "./email-service";
 
 // Module-level WebSocket connections map for broadcasting notifications
@@ -290,6 +290,60 @@ async function isAdminUser(userId: string | null): Promise<boolean> {
   // Fall back to database role check
   const user = await storage.getUser(userId);
   return user?.role === "admin";
+}
+
+// Email verification enforcement configuration
+const MAX_LISTINGS_UNVERIFIED = 3; // Unverified users can only create 3 listings
+
+// Middleware to check if user has verified their email
+// Returns null if verified, error message if not
+async function checkEmailVerified(userId: string): Promise<{ verified: boolean; message?: string }> {
+  const user = await storage.getUser(userId);
+  if (!user) {
+    return { verified: false, message: "User not found" };
+  }
+  
+  // System accounts are always considered verified
+  const systemUserId = process.env.SYSTEM_USER_ID || process.env.SYSTEM_WELCOME_USER_ID;
+  if (userId === systemUserId) {
+    return { verified: true };
+  }
+  
+  // Admins are always considered verified
+  if (user.role === "admin" || isSuperAdmin(userId)) {
+    return { verified: true };
+  }
+  
+  if (!user.emailVerified) {
+    return { 
+      verified: false, 
+      message: "Please verify your email to use this feature. Check your inbox for the verification link."
+    };
+  }
+  
+  return { verified: true };
+}
+
+// Middleware to enforce email verification for critical actions
+function requireEmailVerified(req: any, res: any, next: any) {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  checkEmailVerified(userId).then(result => {
+    if (!result.verified) {
+      return res.status(403).json({ 
+        message: result.message,
+        code: "EMAIL_NOT_VERIFIED",
+        action: "verify_email"
+      });
+    }
+    next();
+  }).catch(err => {
+    console.error("Email verification check error:", err);
+    next(); // Continue on error to not block users
+  });
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1034,6 +1088,37 @@ Happy trading!`;
     res.json({ configured: isSquadConfigured() });
   });
 
+  // Admin: Get detailed Squad payment configuration status
+  app.get('/api/admin/payment/config', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can view payment configuration" });
+      }
+
+      const squadStatus = getSquadConfigStatus();
+      const smedataConfigured = isSMEDataConfigured();
+
+      res.json({
+        squad: squadStatus,
+        vtu: {
+          configured: smedataConfigured,
+          provider: "SMEDATA.NG",
+        },
+        message: squadStatus.configured 
+          ? `Squad is configured in ${squadStatus.mode} mode`
+          : "Squad is not configured. Please set SQUAD_SECRET_KEY and SQUAD_PUBLIC_KEY environment variables.",
+      });
+    } catch (error) {
+      console.error("Error fetching payment config:", error);
+      res.status(500).json({ message: "Failed to fetch payment configuration" });
+    }
+  });
+
   // Initialize a Squad payment
   app.post('/api/squad/initialize', isAuthenticated, async (req: any, res) => {
     const requestId = crypto.randomBytes(4).toString('hex');
@@ -1466,6 +1551,17 @@ Happy trading!`;
   app.post('/api/negotiations', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+
+      // Enforce email verification for making offers
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
+      }
+
       const { productId, offerPrice, message } = req.body;
 
       // Validate required fields
@@ -2710,6 +2806,19 @@ Happy trading!`;
         });
       }
 
+      // Enforce email verification - unverified users can only create limited listings
+      if (!user.emailVerified && user.role !== "admin" && !isSuperAdmin(userId)) {
+        // Count user's existing products
+        const existingProducts = await storage.getProductsByUser(userId);
+        if (existingProducts.length >= MAX_LISTINGS_UNVERIFIED) {
+          return res.status(403).json({ 
+            message: `Please verify your email to create more listings. Unverified accounts are limited to ${MAX_LISTINGS_UNVERIFIED} listings.`,
+            code: "EMAIL_NOT_VERIFIED",
+            action: "verify_email"
+          });
+        }
+      }
+
       // Parse the product data from FormData
       let productData;
       try {
@@ -3323,6 +3432,16 @@ Happy trading!`;
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Enforce email verification for sending messages
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
+      }
+
       const validated = insertMessageSchema.parse({
         senderId: userId,
         ...req.body,
@@ -3381,6 +3500,16 @@ Happy trading!`;
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Enforce email verification for sending messages
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
       }
 
       let imageUrl: string | null = null;
@@ -4247,6 +4376,16 @@ Happy trading!`;
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Enforce email verification for posting in The Plug
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
+      }
+
       const { content } = req.body;
       const hasMedia = req.files && Array.isArray(req.files) && req.files.length > 0;
       const hasContent = content && content.trim().length > 0;
@@ -4347,6 +4486,16 @@ Happy trading!`;
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Enforce email verification for commenting
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
       }
 
       const postId = req.params.id;
@@ -5260,103 +5409,141 @@ Happy trading!`;
     }
   });
 
-  // Admin endpoint: Sync VTU plans from SME Data API
-  app.post("/api/admin/vtu/sync-plans", isAuthenticated, async (req: any, res) => {
+  // Admin endpoint: Update VTU plan pricing (manual management)
+  // Note: SMEDATA API doesn't have a plans endpoint - plans must be manually managed
+  app.post("/api/admin/vtu/update-plan", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Check if user is admin
       if (!(await isAdminUser(userId))) {
-        return res.status(403).json({ message: "Only admins can sync VTU plans" });
+        return res.status(403).json({ message: "Only admins can update VTU plans" });
       }
 
-      if (!isSMEDataConfigured()) {
-        return res.status(503).json({ 
-          message: "SME Data API is not configured. Please set SME_API environment variable.",
-          code: "API_NOT_CONFIGURED"
-        });
-      }
-
-      console.log("[VTU Sync] Admin initiated VTU plan sync...");
-
-      // Fetch and parse plans from SME Data API
-      const result = await fetchAndParsePlans();
+      const { planId, costPrice, sellingPrice, isActive } = req.body;
       
-      if (!result.success || result.plans.length === 0) {
-        console.error("[VTU Sync] Failed to fetch plans:", result.message);
-        return res.status(500).json({
-          success: false,
-          message: result.message || "Failed to fetch plans from SME Data API",
-        });
+      if (!planId) {
+        return res.status(400).json({ message: "Plan ID is required" });
       }
 
-      console.log(`[VTU Sync] Fetched ${result.plans.length} plans, syncing to database...`);
-
-      // Sync plans to database
-      let plansCreated = 0;
-      let plansUpdated = 0;
-      const errors: string[] = [];
-
-      for (const plan of result.plans) {
-        try {
-          const existing = await storage.getVtuPlanByNetworkAndDataAmount(plan.network, plan.dataAmount);
-          await storage.upsertVtuPlan({
-            network: plan.network as any,
-            planName: plan.planName,
-            dataAmount: plan.dataAmount,
-            validity: plan.validity,
-            costPrice: plan.costPrice,
-            sellingPrice: plan.sellingPrice,
-            planCode: plan.planCode,
-            isActive: true,
-            sortOrder: plan.sortOrder,
-          });
-          
-          if (existing) {
-            plansUpdated++;
-          } else {
-            plansCreated++;
-          }
-        } catch (err: any) {
-          const errorMsg = `Failed to sync plan ${plan.planName}: ${err.message}`;
-          console.error(`[VTU Sync] ${errorMsg}`);
-          errors.push(errorMsg);
-        }
+      const plan = await storage.getVtuPlan(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "VTU plan not found" });
       }
 
-      const syncResult = {
-        success: errors.length === 0,
-        message: `Synced ${plansCreated + plansUpdated} plans (${plansCreated} created, ${plansUpdated} updated)`,
-        plansCreated,
-        plansUpdated,
-        totalPlans: result.plans.length,
-        errors: errors.length > 0 ? errors : undefined,
-      };
+      // Update plan with new pricing
+      await storage.upsertVtuPlan({
+        network: plan.network as any,
+        planName: plan.planName,
+        dataAmount: plan.dataAmount,
+        validity: plan.validity,
+        costPrice: costPrice ?? plan.costPrice,
+        sellingPrice: sellingPrice ?? plan.sellingPrice,
+        planCode: plan.planCode,
+        isActive: isActive ?? plan.isActive,
+        sortOrder: plan.sortOrder ?? 0,
+      });
 
-      console.log(`[VTU Sync] Completed: ${syncResult.message}`);
+      console.log(`[VTU Admin] Updated plan ${plan.planName}: cost=${costPrice}, sell=${sellingPrice}, active=${isActive}`);
 
-      // Send optional email report (don't await)
-      import("./email-service").then(({ sendVtuSyncReport }) => {
-        sendVtuSyncReport(syncResult).catch(console.error);
-      }).catch(console.error);
-
-      res.json(syncResult);
+      res.json({
+        success: true,
+        message: `Plan "${plan.planName}" updated successfully`,
+      });
     } catch (error: any) {
-      console.error("[VTU Sync] Error syncing VTU plans:", error);
-      
-      sendErrorReportToAdmin(
-        "VTU Plan Sync Failed",
-        error.message || "Unknown error",
-        { stack: error.stack }
-      ).catch(console.error);
-      
+      console.error("[VTU Admin] Error updating VTU plan:", error);
       res.status(500).json({ 
         success: false,
-        message: "Failed to sync VTU plans. Please try again later.",
-        code: "SYNC_ERROR"
+        message: "Failed to update VTU plan",
+      });
+    }
+  });
+
+  // Admin endpoint: Add new VTU plan
+  app.post("/api/admin/vtu/add-plan", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can add VTU plans" });
+      }
+
+      const { network, planName, dataAmount, validity, costPrice, sellingPrice, planCode, sortOrder } = req.body;
+      
+      if (!network || !planName || !dataAmount || !costPrice || !sellingPrice) {
+        return res.status(400).json({ 
+          message: "Missing required fields: network, planName, dataAmount, costPrice, sellingPrice" 
+        });
+      }
+
+      // Validate network
+      const validNetworks = ["mtn_sme", "glo_cg", "airtel_cg", "9mobile"];
+      if (!validNetworks.includes(network)) {
+        return res.status(400).json({ message: "Invalid network. Must be one of: " + validNetworks.join(", ") });
+      }
+
+      // Check for duplicate
+      const existing = await storage.getVtuPlanByNetworkAndDataAmount(network, dataAmount);
+      if (existing) {
+        return res.status(409).json({ message: `Plan for ${network} ${dataAmount} already exists` });
+      }
+
+      await storage.upsertVtuPlan({
+        network: network as any,
+        planName,
+        dataAmount: dataAmount.toUpperCase(),
+        validity: validity || "30 days",
+        costPrice,
+        sellingPrice,
+        planCode: planCode || `${network}_${dataAmount}`.toLowerCase().replace(/\s+/g, "_"),
+        isActive: true,
+        sortOrder: sortOrder ?? 0,
+      });
+
+      console.log(`[VTU Admin] Added new plan: ${planName}`);
+
+      res.json({
+        success: true,
+        message: `Plan "${planName}" added successfully`,
+      });
+    } catch (error: any) {
+      console.error("[VTU Admin] Error adding VTU plan:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to add VTU plan",
+      });
+    }
+  });
+
+  // Admin endpoint: Requery order status
+  app.post("/api/admin/vtu/requery", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!(await isAdminUser(userId))) {
+        return res.status(403).json({ message: "Only admins can requery orders" });
+      }
+
+      const { orderId } = req.body;
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required" });
+      }
+
+      const result = await requeryOrder(orderId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[VTU Admin] Error requerying order:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to requery order",
       });
     }
   });
@@ -6572,6 +6759,16 @@ Happy trading!`;
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Enforce email verification for placing orders
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
       }
 
       const validationResult = createOrderSchema.safeParse(req.body);

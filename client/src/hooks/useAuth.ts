@@ -23,5 +23,6 @@ export function useAuth() {
     isBuyer: user?.role === "buyer" || user?.role === "admin",
     isAdmin: user?.role === "admin" || isSuperAdmin,
     isVerified: user?.isVerified || user?.ninVerified || false,
+    isEmailVerified: user?.emailVerified || false,
   };
 }

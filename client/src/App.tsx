@@ -14,6 +14,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { BackToTop } from "@/components/BackToTop";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Landing = lazy(() => import("@/pages/landing"));
@@ -58,7 +59,7 @@ function PageLoadingSpinner() {
 }
 
 function Router() {
-  const { isAuthenticated, isLoading, isError } = useAuth();
+  const { isAuthenticated, isLoading, isError, isEmailVerified, isAdmin } = useAuth();
   const [location] = useLocation();
 
   // Check if current path is a public secret message route
@@ -119,6 +120,12 @@ function Router() {
     <>
       <Header />
       <main className="pb-16 lg:pb-0">
+        {/* Show email verification banner for non-admin users who haven't verified */}
+        {!isEmailVerified && !isAdmin && (
+          <div className="px-4 pt-2">
+            <EmailVerificationBanner />
+          </div>
+        )}
         <Suspense fallback={<PageLoadingSpinner />}>
           <Switch>
             <Route path="/" component={() => (

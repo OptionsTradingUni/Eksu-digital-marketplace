@@ -236,23 +236,28 @@ export async function verifyNIN(
   }
 }
 
-// Get available data plans from SMEDATA (for syncing)
-// API uses token parameter: GET https://smedata.ng/wp-json/api/v1/plans?token={API_KEY}
-export async function getAvailablePlans(): Promise<SMEDataResponse> {
+// NOTE: SMEDATA.NG API does NOT have a /plans endpoint to fetch available plans
+// Plans must be predefined in the database and managed by admin
+// The API only supports direct purchases via /data endpoint with size parameter
+// Reference: https://smedata.ng/mtn-sme-data-api-documentation-for-developers/
+
+// Check order status via requery endpoint
+export async function requeryOrder(orderId: string): Promise<SMEDataResponse> {
   if (!isSMEDataConfigured()) {
     return {
       success: false,
-      message: "API not configured",
-      error: "SME_API environment variable not set",
+      message: "VTU service is not configured",
+      error: "API_NOT_CONFIGURED",
     };
   }
 
   try {
-    // SME Data API uses token as query parameter
-    const url = `${SMEDATA_BASE_URL}/plans?token=${encodeURIComponent(SME_API_KEY)}`;
-    console.log("[SME Data] Fetching plans from API...");
+    const params = new URLSearchParams({
+      token: SME_API_KEY,
+      orderid: orderId,
+    });
 
-    const response = await fetch(url, {
+    const response = await fetch(`${SMEDATA_BASE_URL}/requery?${params.toString()}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -260,130 +265,22 @@ export async function getAvailablePlans(): Promise<SMEDataResponse> {
     });
 
     const data = await response.json();
-    console.log("[SME Data] Plans response:", JSON.stringify(data).substring(0, 500));
-    
-    const isSuccess = data.success || data.code === "success" || data.status === "success" || Array.isArray(data.data) || Array.isArray(data);
-    
-    if (!isSuccess) {
-      return {
-        success: false,
-        message: data.message || "Failed to fetch plans",
-        error: data.error || "FETCH_FAILED",
-      };
-    }
+    console.log("[SME Data] Requery response:", JSON.stringify(data));
 
     return {
-      success: true,
-      message: "Plans retrieved successfully",
-      data: data.data || data,
+      success: data.code === "success",
+      message: data.message || "Order status retrieved",
+      data: data.data,
+      reference: data.data?.order_id?.toString(),
     };
   } catch (error: any) {
-    console.error("[SME Data] Error fetching plans:", error);
+    console.error("[SME Data] Requery error:", error);
     return {
       success: false,
-      message: "Failed to get plans from SME Data API",
+      message: "Failed to check order status",
       error: error.message || "NETWORK_ERROR",
     };
   }
-}
-
-// Calculate profit margin (markup percentage)
-const PROFIT_MARGIN_PERCENT = 5; // 5% markup on cost price
-
-// Parse and transform SME Data API plans to our database format
-export function parseSmeDataPlans(apiPlans: any[]): ParsedVtuPlan[] {
-  const parsedPlans: ParsedVtuPlan[] = [];
-  let sortOrder = 0;
-
-  for (const plan of apiPlans) {
-    try {
-      // Handle different API response formats
-      const network = plan.network?.toUpperCase() || plan.Network?.toUpperCase();
-      const size = plan.size || plan.Size || plan.data_size || plan.dataSize;
-      const validity = plan.validity || plan.Validity || plan.duration || "30 days";
-      const price = parseFloat(plan.price || plan.Price || plan.amount || plan.cost || "0");
-      const planCode = plan.plan_code || plan.planCode || plan.code || plan.id || size;
-
-      if (!network || !size || !price) {
-        console.warn("[SME Data] Skipping invalid plan:", plan);
-        continue;
-      }
-
-      const mappedNetwork = NETWORK_REVERSE_MAP[network];
-      if (!mappedNetwork) {
-        console.warn(`[SME Data] Unknown network: ${network}, skipping`);
-        continue;
-      }
-
-      // Calculate selling price with markup
-      const costPrice = price;
-      const sellingPrice = Math.ceil(costPrice * (1 + PROFIT_MARGIN_PERCENT / 100));
-
-      // Create plan name
-      const planName = `${network} ${size} - ${validity}`;
-
-      parsedPlans.push({
-        network: mappedNetwork,
-        planName,
-        dataAmount: size.toUpperCase(),
-        validity,
-        costPrice: costPrice.toFixed(2),
-        sellingPrice: sellingPrice.toFixed(2),
-        planCode: planCode.toString(),
-        isActive: true,
-        sortOrder: sortOrder++,
-      });
-    } catch (err) {
-      console.error("[SME Data] Error parsing plan:", err, plan);
-    }
-  }
-
-  console.log(`[SME Data] Parsed ${parsedPlans.length} plans from API response`);
-  return parsedPlans;
-}
-
-// Fetch and sync VTU plans from SME Data API
-export async function fetchAndParsePlans(): Promise<{ success: boolean; plans: ParsedVtuPlan[]; message: string }> {
-  const response = await getAvailablePlans();
-  
-  if (!response.success || !response.data) {
-    return {
-      success: false,
-      plans: [],
-      message: response.message || "Failed to fetch plans from API",
-    };
-  }
-
-  // Handle different response structures
-  let rawPlans: any[] = [];
-  if (Array.isArray(response.data)) {
-    rawPlans = response.data;
-  } else if (response.data.plans && Array.isArray(response.data.plans)) {
-    rawPlans = response.data.plans;
-  } else if (typeof response.data === "object") {
-    // Some APIs return plans grouped by network
-    for (const key of Object.keys(response.data)) {
-      if (Array.isArray(response.data[key])) {
-        rawPlans.push(...response.data[key].map((p: any) => ({ ...p, network: key })));
-      }
-    }
-  }
-
-  if (rawPlans.length === 0) {
-    return {
-      success: false,
-      plans: [],
-      message: "No plans found in API response",
-    };
-  }
-
-  const parsedPlans = parseSmeDataPlans(rawPlans);
-  
-  return {
-    success: true,
-    plans: parsedPlans,
-    message: `Successfully parsed ${parsedPlans.length} plans`,
-  };
 }
 
 // Helper function to normalize Nigerian phone numbers
