@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Lightbox, useLightbox } from "@/components/ui/lightbox";
 import { 
   Send, 
   Paperclip, 
@@ -314,7 +315,8 @@ const ChatBubble = memo(function ChatBubble({
   reactions,
   onAddReaction,
   onRemoveReaction,
-  currentUserId
+  currentUserId,
+  onImageClick
 }: { 
   message: Message; 
   isOwn: boolean; 
@@ -323,6 +325,7 @@ const ChatBubble = memo(function ChatBubble({
   onAddReaction: (messageId: string, reaction: string) => void;
   onRemoveReaction: (messageId: string) => void;
   currentUserId?: string;
+  onImageClick?: (src: string) => void;
 }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -396,8 +399,8 @@ const ChatBubble = memo(function ChatBubble({
               <img
                 src={message.imageUrl}
                 alt="Message attachment"
-                className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer"
-                onClick={() => window.open(message.imageUrl!, '_blank')}
+                className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => onImageClick?.(message.imageUrl!)}
                 loading="lazy"
               />
             </div>
@@ -416,8 +419,8 @@ const ChatBubble = memo(function ChatBubble({
                       key={index}
                       src={part.value}
                       alt="Shared image"
-                      className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer my-1"
-                      onClick={() => window.open(part.value, '_blank')}
+                      className="max-w-[250px] max-h-[300px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity my-1"
+                      onClick={() => onImageClick?.(part.value)}
                       loading="lazy"
                       data-testid={`inline-image-${message.id}-${index}`}
                     />
@@ -730,6 +733,9 @@ export default function Messages() {
   const [showArchivedSection, setShowArchivedSection] = useState(false);
   const [showConversationSettings, setShowConversationSettings] = useState(false);
   const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, ReactionWithUser[]>>({});
+  
+  const { isOpen: lightboxOpen, currentImage, openLightbox, closeLightbox } = useLightbox();
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1682,6 +1688,7 @@ export default function Messages() {
                       onAddReaction={handleAddReaction}
                       onRemoveReaction={handleRemoveReaction}
                       currentUserId={currentUser?.id}
+                      onImageClick={openLightbox}
                     />
                   );
                 })}
@@ -1834,6 +1841,14 @@ export default function Messages() {
             onAcknowledge={handleSafetyAcknowledge}
           />
         )}
+        
+        {/* Image Lightbox */}
+        <Lightbox
+          src={currentImage}
+          isOpen={lightboxOpen}
+          onClose={closeLightbox}
+          alt="Message image"
+        />
       </>
     );
   }
@@ -1863,6 +1878,14 @@ export default function Messages() {
           onAcknowledge={handleSafetyAcknowledge}
         />
       )}
+      
+      {/* Image Lightbox */}
+      <Lightbox
+        src={currentImage}
+        isOpen={lightboxOpen}
+        onClose={closeLightbox}
+        alt="Message image"
+      />
     </>
   );
 }

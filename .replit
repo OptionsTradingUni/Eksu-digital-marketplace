@@ -114,3 +114,4 @@ DATABASE_URL = "postgresql://neondb_owner:npg_4Eswfa6SyHgC@ep-ancient-dust-agz33
 SYSTEM_USER_ID = "2bebadee-f30f-43c5-bf57-d94ee04eabe5"
 SUPER_ADMIN_IDS = "e461e9f4-6a83-413f-a2e9-ab346d268f44"
 VITE_SUPER_ADMIN_IDS = "e461e9f4-6a83-413f-a2e9-ab346d268f44"
+SYSTEM_WELCOME_USER_ID = "2bebadee-f30f-43c5-bf57-d94ee04eabe5"
