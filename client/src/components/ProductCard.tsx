@@ -2,7 +2,8 @@ import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Eye, ShoppingCart, Loader2, User, Heart } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MapPin, Eye, ShoppingCart, Loader2, User, Heart, ImageOff } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -44,9 +45,9 @@ export function ProductCard({ product }: ProductCardProps) {
   });
 
   // Determine if we can show distance and location
-  const canShowDistance = isAuthenticated && 
-    userSettings?.locationVisible && 
-    product.sellerSettings?.locationVisible;
+  const canShowDistance = !!(isAuthenticated && 
+    (userSettings?.locationVisible ?? false) && 
+    (product.sellerSettings?.locationVisible ?? false));
 
   // Get seller's mapped location name from GPS coordinates
   const sellerLocationName = product.sellerSettings?.locationVisible && product.sellerSettings?.latitude && product.sellerSettings?.longitude
@@ -167,23 +168,39 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   const isWishlistLoading = addToWishlistMutation.isPending || removeFromWishlistMutation.isPending;
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   return (
     <Link href={`/products/${product.id}`}>
-      <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer">
-        <div className="aspect-square relative overflow-hidden">
-          <img
-            src={imageUrl}
-            alt={product.title}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-            loading="lazy"
-          />
+      <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer h-full">
+        <div className="aspect-square relative overflow-hidden bg-muted">
+          {!imageLoaded && !imageError && (
+            <Skeleton className="absolute inset-0 w-full h-full" />
+          )}
+          {imageError ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted">
+              <ImageOff className="h-8 w-8 text-muted-foreground" />
+            </div>
+          ) : (
+            <img
+              src={imageUrl}
+              alt={product.title}
+              className={`h-full w-full object-cover transition-all duration-300 group-hover:scale-105 ${
+                imageLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="lazy"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+              data-testid={`img-product-${product.id}`}
+            />
+          )}
           <Button
             variant="ghost"
             size="icon"
             onClick={handleWishlistToggle}
             disabled={isWishlistLoading}
-            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm"
+            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm z-10"
             data-testid={`button-wishlist-toggle-${product.id}`}
           >
             {isWishlistLoading ? (
@@ -199,17 +216,17 @@ export function ProductCard({ product }: ProductCardProps) {
             )}
           </Button>
           {isOnSale && (
-            <Badge className="absolute top-2 left-2 bg-red-500 text-white" data-testid={`badge-sale-${product.id}`}>
+            <Badge className="absolute top-2 left-2 bg-red-500 text-white z-10" data-testid={`badge-sale-${product.id}`}>
               SALE -{discountPercent}%
             </Badge>
           )}
           {product.isBoosted && !isOnSale && (
-            <Badge className="absolute top-2 left-2 bg-yellow-500 text-white">
+            <Badge className="absolute top-2 left-2 bg-yellow-500 text-white z-10">
               Featured
             </Badge>
           )}
           {product.condition && !product.isBoosted && !isOnSale && (
-            <Badge variant="secondary" className="absolute top-2 left-2">
+            <Badge variant="secondary" className="absolute top-2 left-2 z-10">
               {product.condition}
             </Badge>
           )}

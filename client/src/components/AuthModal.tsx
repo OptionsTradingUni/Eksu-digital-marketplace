@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check, AtSign, Loader2, X, CheckCircle2 } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const signInSchema = z.object({
@@ -38,6 +38,10 @@ const signUpSchema = z.object({
   confirmPassword: z.string(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username must be at most 30 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores allowed"),
   phoneNumber: z.string().optional(),
   role: z.enum(["buyer", "seller"]).default("buyer"),
   referralCode: z.string().optional(),
@@ -91,11 +95,83 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
       confirmPassword: "",
       firstName: "",
       lastName: "",
+      username: "",
       phoneNumber: "",
       role: defaultRole,
       referralCode: defaultReferralCode,
     },
   });
+
+  // Username availability checking state
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const [usernameMessage, setUsernameMessage] = useState<string>("");
+  const usernameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Debounced username availability check
+  const checkUsernameAvailability = useCallback(async (username: string) => {
+    // Clear any existing timeout
+    if (usernameCheckTimeoutRef.current) {
+      clearTimeout(usernameCheckTimeoutRef.current);
+    }
+    
+    // Don't check if username is too short
+    if (!username || username.length < 3) {
+      setUsernameStatus("idle");
+      setUsernameMessage("");
+      return;
+    }
+    
+    // Basic validation before API call
+    if (username.length > 30) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Username must be at most 30 characters");
+      return;
+    }
+    
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Only letters, numbers, and underscores allowed");
+      return;
+    }
+    
+    // Set checking state
+    setUsernameStatus("checking");
+    setUsernameMessage("Checking availability...");
+    
+    // Debounce: wait 500ms before checking
+    usernameCheckTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/auth/check-username/${encodeURIComponent(username.toLowerCase())}`);
+        const data = await response.json();
+        
+        if (response.ok) {
+          if (data.available) {
+            setUsernameStatus("available");
+            setUsernameMessage("Username is available");
+          } else {
+            setUsernameStatus("taken");
+            setUsernameMessage(data.message || "Username is already taken");
+          }
+        } else {
+          setUsernameStatus("invalid");
+          setUsernameMessage(data.message || "Error checking username");
+        }
+      } catch (error) {
+        setUsernameStatus("idle");
+        setUsernameMessage("");
+        console.error("Error checking username:", error);
+      }
+    }, 500);
+  }, []);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (usernameCheckTimeoutRef.current) {
+        clearTimeout(usernameCheckTimeoutRef.current);
+      }
+    };
+  }, []);
   
   useEffect(() => {
     if (open && defaultRole) {
@@ -430,6 +506,60 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                             />
                           </div>
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={signUpForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm">Username</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <AtSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="johndoe123"
+                              className={`pl-10 pr-10 ${
+                                usernameStatus === "available" 
+                                  ? "border-green-500 focus-visible:ring-green-500" 
+                                  : usernameStatus === "taken" || usernameStatus === "invalid"
+                                  ? "border-red-500 focus-visible:ring-red-500"
+                                  : ""
+                              }`}
+                              data-testid="input-signup-username"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e);
+                                checkUsernameAvailability(e.target.value);
+                              }}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {usernameStatus === "checking" && (
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid="icon-username-checking" />
+                              )}
+                              {usernameStatus === "available" && (
+                                <CheckCircle2 className="h-4 w-4 text-green-500" data-testid="icon-username-available" />
+                              )}
+                              {(usernameStatus === "taken" || usernameStatus === "invalid") && (
+                                <X className="h-4 w-4 text-red-500" data-testid="icon-username-taken" />
+                              )}
+                            </div>
+                          </div>
+                        </FormControl>
+                        {usernameMessage && usernameStatus !== "idle" && (
+                          <p className={`text-xs mt-1 ${
+                            usernameStatus === "available" 
+                              ? "text-green-600 dark:text-green-400" 
+                              : usernameStatus === "checking"
+                              ? "text-muted-foreground"
+                              : "text-red-600 dark:text-red-400"
+                          }`} data-testid="text-username-status">
+                            {usernameMessage}
+                          </p>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

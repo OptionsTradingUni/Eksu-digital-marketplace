@@ -323,6 +323,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== NEW AUTH ROUTES (Passport.js Local) ====================
   
+  // Simple in-memory rate limiting for username checks
+  const usernameCheckRateLimits = new Map<string, { count: number; resetTime: number }>();
+  const RATE_LIMIT_WINDOW = 60000; // 1 minute
+  const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
+  
+  // Check username availability endpoint with rate limiting
+  app.get("/api/auth/check-username/:username", async (req, res) => {
+    try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      
+      // Rate limiting check
+      const rateLimit = usernameCheckRateLimits.get(clientIp);
+      if (rateLimit) {
+        if (now < rateLimit.resetTime) {
+          if (rateLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
+            return res.status(429).json({ 
+              message: "Too many requests. Please try again later.",
+              available: false
+            });
+          }
+          rateLimit.count++;
+        } else {
+          usernameCheckRateLimits.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+        }
+      } else {
+        usernameCheckRateLimits.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+      }
+      
+      const { username } = req.params;
+      
+      // Validate username format
+      if (!username || username.length < 3) {
+        return res.status(400).json({ 
+          available: false, 
+          message: "Username must be at least 3 characters" 
+        });
+      }
+      
+      if (username.length > 30) {
+        return res.status(400).json({ 
+          available: false, 
+          message: "Username must be at most 30 characters" 
+        });
+      }
+      
+      // Only allow alphanumeric and underscore
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ 
+          available: false, 
+          message: "Username can only contain letters, numbers, and underscores" 
+        });
+      }
+      
+      // Check if username is taken (case-insensitive)
+      const existingUser = await storage.getUserByUsername(username.toLowerCase());
+      
+      if (existingUser) {
+        return res.json({ 
+          available: false, 
+          message: "Username is already taken" 
+        });
+      }
+      
+      return res.json({ 
+        available: true, 
+        message: "Username is available" 
+      });
+    } catch (error: any) {
+      console.error("Error checking username:", error);
+      return res.status(500).json({ 
+        available: false, 
+        message: "Error checking username availability" 
+      });
+    }
+  });
+  
   // Registration route
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -338,12 +415,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { email, password, firstName, lastName, phoneNumber, role, referralCode } = validationResult.data;
+      const { email, password, firstName, lastName, username, phoneNumber, role, referralCode } = validationResult.data;
 
-      // Check if user already exists
+      // Check if user already exists by email
       const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
       if (existingUser) {
         return res.status(400).json({ message: "Email already registered" });
+      }
+
+      // Check if username is already taken
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username is already taken" });
       }
 
       // Hash password
@@ -354,7 +437,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: string; 
         password: string; 
         firstName: string; 
-        lastName: string; 
+        lastName: string;
+        username: string; 
         phoneNumber?: string; 
         role: "buyer" | "seller" | "both" 
       } = {
@@ -362,6 +446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        username: username, // Already lowercase from schema transform
         role: role || "buyer",
       };
       
@@ -1634,8 +1719,8 @@ Happy trading!`;
 
   // Login streak rate limiting store (in-memory, per-user tracking)
   const loginStreakRateLimits: Map<string, { count: number; windowStart: number }> = new Map();
-  const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
-  const RATE_LIMIT_MAX_REQUESTS = 5; // Max 5 requests per minute per user
+  const STREAK_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+  const STREAK_RATE_LIMIT_MAX_REQUESTS = 5; // Max 5 requests per minute per user
 
   // Helper function to get client IP address
   function getClientIp(req: any): string {
@@ -1651,24 +1736,24 @@ Happy trading!`;
   }
 
   // Helper function to check rate limit
-  function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
+  function checkStreakRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
     const now = Date.now();
     const userLimit = loginStreakRateLimits.get(userId);
     
-    if (!userLimit || (now - userLimit.windowStart) > RATE_LIMIT_WINDOW_MS) {
+    if (!userLimit || (now - userLimit.windowStart) > STREAK_RATE_LIMIT_WINDOW_MS) {
       // New window or expired window
       loginStreakRateLimits.set(userId, { count: 1, windowStart: now });
-      return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+      return { allowed: true, remaining: STREAK_RATE_LIMIT_MAX_REQUESTS - 1, resetIn: STREAK_RATE_LIMIT_WINDOW_MS };
     }
     
-    if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
-      const resetIn = RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart);
+    if (userLimit.count >= STREAK_RATE_LIMIT_MAX_REQUESTS) {
+      const resetIn = STREAK_RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart);
       return { allowed: false, remaining: 0, resetIn };
     }
     
     userLimit.count++;
     loginStreakRateLimits.set(userId, userLimit);
-    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - userLimit.count, resetIn: RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart) };
+    return { allowed: true, remaining: STREAK_RATE_LIMIT_MAX_REQUESTS - userLimit.count, resetIn: STREAK_RATE_LIMIT_WINDOW_MS - (now - userLimit.windowStart) };
   }
 
   // Login streak routes
@@ -1677,7 +1762,7 @@ Happy trading!`;
       const userId = req.user.id;
       
       // Check rate limit
-      const rateCheck = checkRateLimit(userId);
+      const rateCheck = checkStreakRateLimit(userId);
       if (!rateCheck.allowed) {
         console.log(`Rate limit exceeded for user ${userId}. Reset in ${rateCheck.resetIn}ms`);
         return res.status(429).json({ 

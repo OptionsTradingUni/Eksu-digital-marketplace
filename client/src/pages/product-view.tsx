@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot, Share2, Loader2, Check } from "lucide-react";
+import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot, Share2, Loader2, Check, ImageOff } from "lucide-react";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import type { Product, User, Watchlist, UserSettings } from "@shared/schema";
 import { getDistanceDisplay } from "@/lib/distance";

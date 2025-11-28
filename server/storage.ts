@@ -244,7 +244,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByReferralCode(referralCode: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  createUser(user: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User>;
+  createUser(user: { email: string; password: string; firstName: string; lastName: string; username?: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User>;
   updateUserProfile(id: string, data: Partial<User>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   verifyUser(id: string): Promise<User>;
@@ -817,7 +817,7 @@ export class DatabaseStorage implements IStorage {
     throw new Error('Failed to generate unique referral code after max attempts');
   }
 
-  async createUser(userData: { email: string; password: string; firstName: string; lastName: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User> {
+  async createUser(userData: { email: string; password: string; firstName: string; lastName: string; username?: string; phoneNumber?: string; role?: "buyer" | "seller" | "both" | "admin" }): Promise<User> {
     const referralCode = await this.generateUniqueReferralCode();
     
     const [user] = await db.insert(users).values({
