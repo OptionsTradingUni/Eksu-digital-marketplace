@@ -144,3 +144,42 @@ The marketplace employs a modern full-stack architecture focusing on performance
 
 ### Product View
 - Fixed product image sizing on mobile with max-height constraints (max-h-[60vh])
+
+## Recent Changes (November 28, 2024)
+
+### Mobile UX Enhancements
+- Fixed 100vh viewport bug with 100dvh, -webkit-fill-available fallbacks, and safe-area-inset padding
+- Added keyboard-aware-input class to prevent keyboard from covering inputs in chats/comments
+- Added pb-safe utility class for safe area bottom padding
+
+### Toast Notification System
+- Added 4 color variants: success (green), info (blue), warning (yellow), destructive (red)
+- Consistent styling with proper close button colors per variant
+- ToastViewport includes safe-area-inset-bottom padding
+
+### Verification Badge System
+- New VerificationBadge component at `client/src/components/VerificationBadge.tsx`
+- Badge types: verified (blue check), official (purple crown), seller (gold badge), admin (red shield)
+- Priority order: admin > official > seller > verified
+- Integrated in ProductCard with full seller flag support
+
+### Comment Bottom Sheet
+- Converted comment modal from Dialog to Sheet component in confessions.tsx
+- Slides up from bottom with mobile-friendly styling
+- Includes pb-safe and keyboard-aware-input classes
+
+### Profile Page Updates
+- Gender selector now integrated into Edit Profile form using FormField
+- Proper form validation and submission with other profile fields
+- Values: Male, Female, Other, Prefer not to say
+
+### Category Filter Enhancement
+- Added search Input in FilterPanel for quick category finding
+- Real-time filtering as user types
+- Categories displayed in scrollable list with buttons
+
+### Secret Messages Hub
+- New public route at `/secret` with dark purple gradient theme
+- Ghost icon branding with feature cards explaining anonymous messaging
+- Call-to-action buttons for signing in and getting started
+- Fully accessible without authentication
