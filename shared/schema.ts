@@ -505,22 +505,7 @@ export const escrowTransactions = pgTable("escrow_transactions", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Paystack payment records (legacy - keeping for backward compatibility)
-export const paystackPayments = pgTable("paystack_payments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  reference: varchar("reference").notNull().unique(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  currency: varchar("currency", { length: 3 }).default("NGN"),
-  status: varchar("status", { length: 20 }).notNull(),
-  channel: varchar("channel", { length: 20 }),
-  paidAt: timestamp("paid_at"),
-  metadata: jsonb("metadata"),
-  purpose: varchar("purpose", { length: 50 }),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Squad payment records (primary payment provider - Habari)
+// Squad payment records (primary payment provider - Habari/GTBank)
 export const squadPayments = pgTable("squad_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -603,7 +588,6 @@ export const withdrawals = pgTable("withdrawals", {
   accountNumber: varchar("account_number").notNull(),
   accountName: varchar("account_name").notNull(),
   status: varchar("status", { length: 20 }).default("pending"), // pending, processing, completed, failed
-  paystackReference: varchar("paystack_reference"), // Legacy
   squadReference: varchar("squad_reference"), // Squad transfer reference
   squadTransferId: varchar("squad_transfer_id").references(() => squadTransfers.id, { onDelete: "set null" }),
   processedAt: timestamp("processed_at"),
@@ -1275,11 +1259,6 @@ export const insertEscrowTransactionSchema = createInsertSchema(escrowTransactio
   status: true,
 });
 
-export const insertPaystackPaymentSchema = createInsertSchema(paystackPayments).omit({
-  id: true,
-  createdAt: true,
-});
-
 // Squad insert schemas
 export const insertSquadPaymentSchema = createInsertSchema(squadPayments).omit({
   id: true,
@@ -1828,8 +1807,6 @@ export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EscrowTransaction = typeof escrowTransactions.$inferSelect;
 export type InsertEscrowTransaction = z.infer<typeof insertEscrowTransactionSchema>;
-export type PaystackPayment = typeof paystackPayments.$inferSelect;
-export type InsertPaystackPayment = z.infer<typeof insertPaystackPaymentSchema>;
 export type Withdrawal = typeof withdrawals.$inferSelect;
 export type InsertWithdrawal = z.infer<typeof insertWithdrawalSchema>;
 export type Notification = typeof notifications.$inferSelect;

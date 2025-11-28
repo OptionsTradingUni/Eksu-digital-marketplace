@@ -27,7 +27,6 @@ import {
   hostels,
   events,
   escrowTransactions,
-  paystackPayments,
   withdrawals,
   cartItems,
   games,
@@ -117,8 +116,6 @@ import {
   type InsertEvent,
   type EscrowTransaction,
   type InsertEscrowTransaction,
-  type PaystackPayment,
-  type InsertPaystackPayment,
   type Withdrawal,
   type InsertWithdrawal,
   type Follow,
@@ -419,13 +416,6 @@ export interface IStorage {
   addToEscrowBalance(sellerId: string, amount: string): Promise<Wallet>;
   getSellerCompletedSalesCount(sellerId: string): Promise<number>;
   lockSecurityDeposit(userId: string, amount: string): Promise<Wallet>;
-  
-  // Paystack payment operations
-  createPaystackPayment(payment: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment>;
-  updatePaystackPayment(reference: string, data: Partial<PaystackPayment>): Promise<PaystackPayment>;
-  getPaystackPayment(reference: string): Promise<PaystackPayment | undefined>;
-  getUserPaystackPayments(userId: string): Promise<PaystackPayment[]>;
-  processPaystackSuccess(reference: string, amount: string): Promise<void>;
   
   // Withdrawal operations
   createWithdrawal(withdrawal: InsertWithdrawal & { userId: string }): Promise<Withdrawal>;
@@ -2391,34 +2381,6 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Paystack payment operations
-  async createPaystackPayment(paymentData: InsertPaystackPayment & { userId: string }): Promise<PaystackPayment> {
-    const [created] = await db.insert(paystackPayments).values(paymentData).returning();
-    return created;
-  }
-
-  async updatePaystackPayment(reference: string, data: Partial<PaystackPayment>): Promise<PaystackPayment> {
-    const [updated] = await db
-      .update(paystackPayments)
-      .set(data)
-      .where(eq(paystackPayments.reference, reference))
-      .returning();
-    return updated;
-  }
-
-  async getPaystackPayment(reference: string): Promise<PaystackPayment | undefined> {
-    const [payment] = await db.select().from(paystackPayments).where(eq(paystackPayments.reference, reference));
-    return payment;
-  }
-
-  async getUserPaystackPayments(userId: string): Promise<PaystackPayment[]> {
-    return await db
-      .select()
-      .from(paystackPayments)
-      .where(eq(paystackPayments.userId, userId))
-      .orderBy(desc(paystackPayments.createdAt));
-  }
-
   // Withdrawal operations
   async createWithdrawal(withdrawalData: InsertWithdrawal & { userId: string }): Promise<Withdrawal> {
     const [created] = await db.insert(withdrawals).values(withdrawalData).returning();
@@ -3055,32 +3017,6 @@ export class DatabaseStorage implements IStorage {
         { name: "Nike Air Force 1", actualPrice: "55000.00", category: "Fashion", difficulty: "easy" },
       ]);
     }
-  }
-
-  async processPaystackSuccess(reference: string, amount: string): Promise<void> {
-    const [payment] = await db
-      .select()
-      .from(paystackPayments)
-      .where(eq(paystackPayments.reference, reference));
-    
-    if (!payment) {
-      throw new Error("Payment not found");
-    }
-
-    await db
-      .update(paystackPayments)
-      .set({ status: "success", paidAt: new Date() })
-      .where(eq(paystackPayments.reference, reference));
-
-    await this.updateWalletBalance(payment.userId, amount, "add");
-
-    await this.createTransaction({
-      walletId: (await this.getWallet(payment.userId))!.id,
-      amount,
-      type: "deposit",
-      status: "completed",
-      description: `Paystack deposit - ${reference}`,
-    });
   }
 
   // Password reset token operations
