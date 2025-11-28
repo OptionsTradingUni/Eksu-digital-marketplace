@@ -1233,12 +1233,14 @@ function DatabaseMetricsTab() {
   });
 
   // Format bytes to readable size
-  const formatBytes = (bytes: number) => {
+  const formatBytes = (bytes: number | null | undefined) => {
+    if (bytes === null || bytes === undefined || isNaN(bytes)) return '0 Bytes';
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    if (isNaN(i) || i < 0) return '0 Bytes';
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[Math.min(i, sizes.length - 1)];
   };
 
   // Prepare data for charts
@@ -1415,7 +1417,7 @@ function DatabaseMetricsTab() {
                       {table.table_name.split('.')[1] || table.table_name}
                     </TableCell>
                     <TableCell className="text-right">
-                      {table.row_estimate.toLocaleString()}
+                      {(table.row_estimate ?? 0).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
                       {formatBytes(table.table_size_bytes)}

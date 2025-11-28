@@ -473,14 +473,15 @@ function CreateCommunityDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Create Community</DialogTitle>
           <DialogDescription>
             Create a new community for people to join and share content.
           </DialogDescription>
         </DialogHeader>
 
+        <ScrollArea className="flex-1 pr-4">
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="name">Community Name *</Label>
@@ -571,8 +572,9 @@ function CreateCommunityDialog({
             />
           </div>
         </div>
+        </ScrollArea>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
