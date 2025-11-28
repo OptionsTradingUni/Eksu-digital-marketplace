@@ -2028,7 +2028,7 @@ Happy trading!`;
         user: {
           id: user.id,
           username: user.username,
-          profileImage: user.profileImage,
+          profileImageUrl: user.profileImageUrl,
         }
       });
     } catch (error) {
@@ -2131,7 +2131,7 @@ Happy trading!`;
               id: ticketUser.id, 
               username: ticketUser.username, 
               email: ticketUser.email,
-              profileImage: ticketUser.profileImage 
+              profileImageUrl: ticketUser.profileImageUrl 
             } : null,
           };
         })
