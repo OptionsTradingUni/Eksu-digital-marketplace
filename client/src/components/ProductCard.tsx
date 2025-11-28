@@ -13,6 +13,7 @@ import type { Product, Watchlist, UserSettings } from "@shared/schema";
 import { useState } from "react";
 import { SellerLocationBadge, DistanceBadge } from "@/components/LocationBadge";
 import { getSellerLocationName } from "@/lib/geolocation";
+import { VerificationBadge, getUserBadgeType } from "@/components/VerificationBadge";
 
 interface SellerSettings {
   latitude: string | null;
@@ -20,9 +21,20 @@ interface SellerSettings {
   locationVisible: boolean | null;
 }
 
+interface Seller {
+  firstName?: string;
+  isVerified?: boolean;
+  isSeller?: boolean;
+  isOfficial?: boolean;
+  isAdmin?: boolean;
+  role?: string;
+  id?: string;
+  profileImageUrl?: string;
+}
+
 interface ProductCardProps {
   product: Product & { 
-    seller?: { firstName?: string; isVerified?: boolean; id?: string; profileImageUrl?: string };
+    seller?: Seller;
     sellerSettings?: SellerSettings | null;
   };
 }
@@ -304,11 +316,18 @@ export function ProductCard({ product }: ProductCardProps) {
                 <span className="text-xs">
                   {product.seller?.firstName || "Seller"}
                 </span>
-                {product.seller?.isVerified && (
-                  <Badge variant="outline" className="text-xs ml-1 py-0 px-1">
-                    Verified
-                  </Badge>
-                )}
+                {(() => {
+                  const badgeType = product.seller ? getUserBadgeType({
+                    isVerified: product.seller.isVerified,
+                    isSeller: product.seller.isSeller,
+                    isOfficial: product.seller.isOfficial,
+                    isAdmin: product.seller.isAdmin,
+                    role: product.seller.role,
+                  }) : null;
+                  return badgeType ? (
+                    <VerificationBadge type={badgeType} size="sm" />
+                  ) : null;
+                })()}
               </button>
             )}
           </div>

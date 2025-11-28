@@ -9,7 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Plus, SlidersHorizontal, X, MapPin, Wallet, Search } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, SlidersHorizontal, X, MapPin, Wallet, Search, Tag } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,7 @@ export default function Home() {
   const [condition, setCondition] = useState(searchParams.get("condition") || "all");
   const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "all");
   const [isBrokeStudentMode, setIsBrokeStudentMode] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -151,20 +153,56 @@ export default function Home() {
       </div>
 
       <div>
-        <Label>Category</Label>
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-          <SelectTrigger data-testid="select-category" className={selectedCategory !== "all" ? "ring-2 ring-primary/50" : ""}>
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories?.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>
-                {cat.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 mb-2">
+          <Tag className="h-4 w-4 text-muted-foreground" />
+          <Label className="font-semibold">Category</Label>
+        </div>
+        <div className="relative mb-2">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search categories..."
+            value={categorySearch}
+            onChange={(e) => setCategorySearch(e.target.value)}
+            className="pl-9"
+            data-testid="input-category-search"
+          />
+        </div>
+        <ScrollArea className="h-[180px] rounded-md border">
+          <div className="p-2 space-y-1">
+            <Button
+              variant={selectedCategory === "all" ? "default" : "ghost"}
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => setSelectedCategory("all")}
+              data-testid="category-all"
+            >
+              All Categories
+            </Button>
+            {categories
+              ?.filter(cat => 
+                cat.name.toLowerCase().includes(categorySearch.toLowerCase())
+              )
+              .map((cat) => (
+                <Button
+                  key={cat.id}
+                  variant={selectedCategory === cat.id ? "default" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  data-testid={`category-${cat.id}`}
+                >
+                  {cat.name}
+                </Button>
+              ))}
+            {categories && categorySearch && categories.filter(cat => 
+              cat.name.toLowerCase().includes(categorySearch.toLowerCase())
+            ).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No categories found
+              </p>
+            )}
+          </div>
+        </ScrollArea>
       </div>
 
       <div>

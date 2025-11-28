@@ -580,8 +580,46 @@
     @apply border-border;
   }
 
+  /* Fix mobile 100vh viewport bug - prevents white space on iOS/Android */
+  html {
+    height: 100%;
+    height: 100dvh;
+    height: -webkit-fill-available;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    min-height: 100%;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* Ensure app containers fill the viewport properly */
+  #root, .app, [class*="min-h-screen"] {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* Safe area insets for notched devices */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Fix keyboard covering input on mobile */
+  .keyboard-aware-input {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Chat input container stays above keyboard */
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: inherit;
   }
 }
 

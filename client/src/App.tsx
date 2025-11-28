@@ -44,6 +44,7 @@ const ConfessionsPage = lazy(() => import("@/pages/confessions"));
 const CommunitiesPage = lazy(() => import("@/pages/communities"));
 const SecretMessagesPage = lazy(() => import("@/pages/secret-messages"));
 const SendSecretPage = lazy(() => import("@/pages/send-secret"));
+const SecretHubPage = lazy(() => import("@/pages/secret-hub"));
 
 function PageLoadingSpinner() {
   return (
@@ -60,8 +61,8 @@ function Router() {
   const { isAuthenticated, isLoading, isError } = useAuth();
   const [location] = useLocation();
 
-  // Check if current path is a public secret message link page
-  const isPublicSecretRoute = location.startsWith('/secret/');
+  // Check if current path is a public secret message route
+  const isPublicSecretRoute = location === '/secret' || location.startsWith('/secret/');
 
   // Show loading spinner while checking authentication (but not for public routes)
   if (isLoading && !isPublicSecretRoute) {
@@ -81,6 +82,11 @@ function Router() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoadingSpinner />}>
           <Switch>
+            <Route path="/secret" component={() => (
+              <ErrorBoundary>
+                <SecretHubPage />
+              </ErrorBoundary>
+            )} />
             <Route path="/secret/:code" component={() => (
               <ErrorBoundary>
                 <SendSecretPage />

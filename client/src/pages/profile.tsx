@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -327,6 +327,7 @@ export default function Profile() {
       phoneNumber: "",
       location: "",
       bio: "",
+      gender: null,
     },
   });
 
@@ -338,6 +339,7 @@ export default function Profile() {
         phoneNumber: currentUser.phoneNumber || "",
         location: currentUser.location || "",
         bio: currentUser.bio || "",
+        gender: (currentUser as any).gender || null,
       });
       setUsernameInput(currentUser.username || "");
     }
@@ -1600,6 +1602,36 @@ export default function Profile() {
                         data-testid="input-bio"
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-gender-profile">
+                          <SelectValue placeholder="Select gender (optional)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Used for personalized experience. Optional.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

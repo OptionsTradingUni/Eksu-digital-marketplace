@@ -21,6 +21,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -766,46 +772,53 @@ export default function ConfessionsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={showCommentDialog} onOpenChange={(open) => {
+        <Sheet open={showCommentDialog} onOpenChange={(open) => {
           if (!open) {
             setShowCommentDialog(false);
             setSelectedConfessionId(null);
           }
         }}>
-          <DialogContent className="sm:max-w-md max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>Comments</DialogTitle>
-            </DialogHeader>
+          <SheetContent side="bottom" className="h-[85vh] rounded-t-xl px-4 pb-safe">
+            <div className="mx-auto w-12 h-1.5 bg-muted-foreground/30 rounded-full mb-4 mt-2" />
+            <SheetHeader className="text-left pb-3">
+              <SheetTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-purple-500" />
+                Comments
+              </SheetTitle>
+            </SheetHeader>
             {selectedConfession && (
-              <div className="space-y-4">
-                <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/50">
+              <div className="flex flex-col h-[calc(100%-4rem)]">
+                <div className="p-3 rounded-lg bg-muted/50 border border-border/50 mb-4">
                   <p className="text-sm text-foreground line-clamp-3">{selectedConfession.content}</p>
                 </div>
                 
-                <ScrollArea className="h-[200px]">
-                  <div className="pr-4">
+                <ScrollArea className="flex-1 -mx-4 px-4">
+                  <div className="pr-2">
                     {selectedConfession.comments && selectedConfession.comments.length > 0 ? (
                       selectedConfession.comments.map((comment) => (
                         <CommentItem key={comment.id} comment={comment} />
                       ))
                     ) : (
-                      <p className="text-sm text-muted-foreground text-center py-8">
-                        No comments yet. Be the first!
-                      </p>
+                      <div className="text-center py-12">
+                        <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                        <p className="text-sm text-muted-foreground">
+                          No comments yet. Be the first!
+                        </p>
+                      </div>
                     )}
                   </div>
                 </ScrollArea>
 
-                <div className="space-y-3 pt-2 border-t">
+                <div className="pt-4 border-t mt-auto keyboard-aware-input">
                   <Textarea
                     placeholder="Add a comment..."
                     value={commentContent}
                     onChange={(e) => setCommentContent(e.target.value)}
-                    className="min-h-[80px] resize-none"
+                    className="min-h-[60px] resize-none mb-3"
                     maxLength={1000}
                     data-testid="textarea-comment"
                   />
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <Switch 
                         id="comment-anonymous" 
@@ -818,19 +831,18 @@ export default function ConfessionsPage() {
                     <Button 
                       onClick={() => commentMutation.mutate()}
                       disabled={!commentContent.trim() || commentMutation.isPending}
-                      size="sm"
                       className="bg-purple-600 hover:bg-purple-700"
                       data-testid="button-submit-comment"
                     >
-                      <Send className="h-4 w-4 mr-1" />
+                      <Send className="h-4 w-4 mr-2" />
                       {commentMutation.isPending ? "Posting..." : "Comment"}
                     </Button>
                   </div>
                 </div>
               </div>
             )}
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
 
         <Dialog open={showReportDialog} onOpenChange={(open) => {
           if (!open) {
