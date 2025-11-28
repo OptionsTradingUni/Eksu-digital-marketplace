@@ -1,0 +1,86 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+at async DatabaseStorage.createNotification (file:///opt/render/project/src/dist/index.js:4091:34)
+    at async createAndBroadcastNotification (file:///opt/render/project/src/dist/index.js:8616:26)
+    at async file:///opt/render/project/src/dist/index.js:8904:13 {
+  length: 144,
+  severity: 'ERROR',
+  code: '22P02',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: "unnamed portal parameter $2 = '...'",
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'enum.c',
+  line: '129',
+  routine: 'enum_in'
+}
+[Email] resend failed: The gmail.com domain is not verified. Please, add and verify your domain on https://resend.com/domains
+[Email] gmail failed: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7d1516fae0fsm5504930b3a.22 - gsmtp
+[Email] All providers failed
+
+How to Fix the Resend Error
+The solution is to change the from address in your application's code to an email address that uses your verified domain: eksuplug.com.ng.
+1. Change the FROM Address:
+• Go to the part of your application code that makes the call to the Resend API (likely within the createAndBroadcastNotification or related functions mentioned in the first log).
+• Locate the from: parameter in the API call.
+• Old (Failing): from: "christophermomsa@gmail.com" (or similar)
+• New (Working): from: "no-reply@eksuplug.com.ng" or from: "info@eksuplug.com.ng" (Use any address that ends in @eksuplug.com.ng).
+2. Ensure the Verified Domain is Used: If you are storing the sender email in an environment variable (like process.env.FROM_EMAIL), make sure that variable is updated to use your verified domain.
+💡 Quick Recap of All Errors
+Remember, you still have two other errors to address:
+
+The layout in secret message and I’m not able to scroll easily or scroll to see more secret messages 
+
+Please like I said whenever I click create your own link in secret messages it takes me to the start page or sign up page I don’t want that, let outsiders who are not signed to have direct access to the site and use it too 
+
+When an action happen maybe link copied etc once it shows let it disappear 
+
+I noticed that users in messing has disappeared from my messages conversation please solve it 
+
+Also in my profile I see social links , services you offer , account security and settings 
+
+Social links shouldn’t have the name social link 
+Just in your edit profile be able to add TikTok, instagram link and very it is a TikTok instagram link 
+
+Services you offer would be like a mini bio 
+
+While for account security and settings let it fall under settings when you click the 3 dots 
+Add the account settings in normal
+Profile navigation and remove the account name from there and put it there 
+
+
+Theme changing already exist but it’s not showing or persistent. It’s not showing in the site itself 
+After sign up it’s not visible again 
+Also remove the name or file darkmode in profile navigation since I’m not using it 
+
+Error
+500: {"message":"column \"titlel" of relation
+"community_postsl" does not exist"}
+
+As you’re creating anything create database tables with it 
+
+Also in carting check if many products can be added to carts and purchase can be made 
+In confessions I’m unable to add comments 
+
+Also in filters I’m unable to scroll it’s fixed or stocked 
+Also work on student materials and hostel finder stuff 
+
+Also in campus update management I’ll be using that to send messages to people via the official account
