@@ -1631,6 +1631,25 @@ export const socialPostReposts = pgTable("social_post_reposts", {
   index("idx_reposts_reposter").on(table.reposterId),
 ]);
 
+// Social post reports
+export const socialPostReports = pgTable("social_post_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: varchar("reason", { length: 100 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).default("pending"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_post_reports_post").on(table.postId),
+  index("idx_post_reports_reporter").on(table.reporterId),
+]);
+
+export type SocialPostReport = typeof socialPostReports.$inferSelect;
+export type InsertSocialPostReport = typeof socialPostReports.$inferInsert;
+
 // Blocked users table - for user blocking functionality
 export const blockedUsers = pgTable("blocked_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

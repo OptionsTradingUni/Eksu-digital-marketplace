@@ -4130,6 +4130,48 @@ Happy trading!`;
     }
   });
 
+  // Report a social post
+  app.post("/api/social-posts/:id/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const postId = req.params.id;
+      const { reason, description } = req.body;
+
+      if (!reason) {
+        return res.status(400).json({ message: "Report reason is required" });
+      }
+
+      const validReasons = ["spam", "harassment", "hate_speech", "violence", "inappropriate", "misinformation", "other"];
+      if (!validReasons.includes(reason)) {
+        return res.status(400).json({ message: "Invalid report reason" });
+      }
+
+      const post = await storage.getSocialPost(postId);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      if (post.authorId === userId) {
+        return res.status(400).json({ message: "You cannot report your own post" });
+      }
+
+      const hasReported = await storage.hasUserReportedPost(postId, userId);
+      if (hasReported) {
+        return res.status(400).json({ message: "You have already reported this post" });
+      }
+
+      await storage.createSocialPostReport(postId, userId, reason, description);
+      res.json({ message: "Report submitted successfully" });
+    } catch (error) {
+      console.error("Error reporting post:", error);
+      res.status(500).json({ message: "Failed to submit report" });
+    }
+  });
+
   // ========== BOOKMARK ENDPOINTS ==========
   
   // Bookmark a post

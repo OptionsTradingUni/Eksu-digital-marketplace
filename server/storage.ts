@@ -43,6 +43,7 @@ import {
   socialPostLikes,
   socialPostComments,
   socialPostReposts,
+  socialPostReports,
   blockedUsers,
   postBookmarks,
   feedEngagementScores,
@@ -141,6 +142,7 @@ import {
   type SocialPostComment,
   type InsertSocialPostComment,
   type SocialPostRepost,
+  type SocialPostReport,
   type BlockedUser,
   type InsertBlockedUser,
   type PostBookmark,
@@ -581,6 +583,13 @@ export interface IStorage {
   createUserReport(data: InsertUserReport): Promise<UserReport>;
   reportUser(reporterId: string, reportedId: string, reason: string, description: string): Promise<UserReport>;
   getUserRelationship(userId: string, targetId: string): Promise<{ isBlocked: boolean; isMuted: boolean; isBlockedByTarget: boolean }>;
+  
+  // Social post report operations
+  createSocialPostReport(postId: string, reporterId: string, reason: string, description?: string): Promise<SocialPostReport>;
+  getSocialPostReports(postId: string): Promise<SocialPostReport[]>;
+  getPostReportCount(postId: string): Promise<number>;
+  hasUserReportedPost(postId: string, userId: string): Promise<boolean>;
+  hideSocialPost(postId: string): Promise<void>;
   
   // VTU (Virtual Top-Up) operations
   getVtuPlans(network?: string): Promise<VtuPlan[]>;
@@ -4140,6 +4149,41 @@ export class DatabaseStorage implements IStorage {
       isMuted: isMutedResult,
       isBlockedByTarget: isBlockedByTargetResult,
     };
+  }
+
+  // Social post report operations
+  async createSocialPostReport(postId: string, reporterId: string, reason: string, description?: string): Promise<SocialPostReport> {
+    const [report] = await db.insert(socialPostReports).values({
+      postId,
+      reporterId,
+      reason,
+      description: description || null,
+    }).returning();
+    
+    const reportCount = await this.getPostReportCount(postId);
+    if (reportCount >= 3) {
+      await this.hideSocialPost(postId);
+    }
+    
+    return report;
+  }
+  
+  async getSocialPostReports(postId: string): Promise<SocialPostReport[]> {
+    return db.select().from(socialPostReports).where(eq(socialPostReports.postId, postId)).orderBy(desc(socialPostReports.createdAt));
+  }
+  
+  async getPostReportCount(postId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` }).from(socialPostReports).where(eq(socialPostReports.postId, postId));
+    return result[0]?.count || 0;
+  }
+  
+  async hasUserReportedPost(postId: string, userId: string): Promise<boolean> {
+    const result = await db.select().from(socialPostReports).where(and(eq(socialPostReports.postId, postId), eq(socialPostReports.reporterId, userId)));
+    return result.length > 0;
+  }
+  
+  async hideSocialPost(postId: string): Promise<void> {
+    await db.update(socialPosts).set({ isVisible: false }).where(eq(socialPosts.id, postId));
   }
 
   // VTU (Virtual Top-Up) operations
