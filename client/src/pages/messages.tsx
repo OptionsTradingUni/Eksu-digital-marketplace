@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Loader2
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,6 +75,9 @@ const DISAPPEARING_DURATIONS = [
   { value: "604800", label: "7 days", seconds: 604800 },
   { value: "7776000", label: "90 days", seconds: 7776000 },
 ];
+
+// Message pagination - initial limit for better performance
+const INITIAL_MESSAGE_LIMIT = 50;
 
 // Common emoji categories for the emoji picker
 const EMOJI_CATEGORIES = [
@@ -218,8 +222,8 @@ function ReactionPicker({
   );
 }
 
-// Message reactions display component
-function MessageReactions({ 
+// Message reactions display component - memoized for performance
+const MessageReactions = memo(function MessageReactions({ 
   reactions, 
   isOwn,
   onReactionClick
@@ -230,12 +234,14 @@ function MessageReactions({
 }) {
   if (!reactions || reactions.length === 0) return null;
 
-  // Group reactions by type
-  const groupedReactions = reactions.reduce((acc, r) => {
-    if (!acc[r.reaction]) acc[r.reaction] = [];
-    acc[r.reaction].push(r);
-    return acc;
-  }, {} as Record<string, ReactionWithUser[]>);
+  // Group reactions by type - memoized internally
+  const groupedReactions = useMemo(() => {
+    return reactions.reduce((acc, r) => {
+      if (!acc[r.reaction]) acc[r.reaction] = [];
+      acc[r.reaction].push(r);
+      return acc;
+    }, {} as Record<string, ReactionWithUser[]>);
+  }, [reactions]);
 
   return (
     <div 
@@ -261,7 +267,7 @@ function MessageReactions({
       })}
     </div>
   );
-}
+});
 
 // Helper function to parse message content and extract Cloudinary URLs
 const CLOUDINARY_URL_REGEX = /(https?:\/\/res\.cloudinary\.com\/[^\s]+)/g;
@@ -300,8 +306,8 @@ function parseMessageContent(content: string): Array<{ type: 'text' | 'image'; v
   return parts;
 }
 
-// Chat bubble component with reactions and blue checkmarks
-function ChatBubble({ 
+// Chat bubble component with reactions and blue checkmarks - memoized for performance
+const ChatBubble = memo(function ChatBubble({ 
   message, 
   isOwn, 
   showTail,
@@ -320,39 +326,53 @@ function ChatBubble({
 }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const messageDate = new Date(message.createdAt!);
+  
+  // Memoize the date formatting to avoid recalculation
+  const formattedTime = useMemo(() => {
+    const messageDate = new Date(message.createdAt!);
+    return messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }, [message.createdAt]);
 
-  const handleTouchStart = () => {
+  // Memoize parsed content for inline images
+  const parsedContent = useMemo(() => {
+    if (!message.content) return [];
+    return parseMessageContent(message.content);
+  }, [message.content]);
+
+  const handleTouchStart = useCallback(() => {
     longPressTimerRef.current = setTimeout(() => {
       setShowReactionPicker(true);
-    }, 500); // 500ms long press
-  };
+    }, 500);
+  }, []);
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
     }
-  };
+  }, []);
 
-  const handleContextMenu = (e: React.MouseEvent) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setShowReactionPicker(true);
-  };
+  }, []);
 
-  const handleReactionSelect = (reaction: string) => {
+  const handleReactionSelect = useCallback((reaction: string) => {
     onAddReaction(message.id, reaction);
     setShowReactionPicker(false);
-  };
+  }, [message.id, onAddReaction]);
 
-  const handleReactionClick = (reactionId: string) => {
-    // Check if current user has this reaction
+  const handleReactionClick = useCallback((reactionId: string) => {
     const userReaction = reactions?.find(r => r.userId === currentUserId && r.reaction === reactionId);
     if (userReaction) {
       onRemoveReaction(message.id);
     } else {
       onAddReaction(message.id, reactionId);
     }
-  };
+  }, [reactions, currentUserId, message.id, onAddReaction, onRemoveReaction]);
+
+  const handleCloseReactionPicker = useCallback(() => {
+    setShowReactionPicker(false);
+  }, []);
   
   return (
     <div
@@ -389,7 +409,7 @@ function ChatBubble({
               className={`text-sm ${message.imageUrl ? 'px-2 pb-1' : ''}`}
               data-testid={`text-message-content-${message.id}`}
             >
-              {parseMessageContent(message.content).map((part, index) => {
+              {parsedContent.map((part, index) => {
                 if (part.type === 'image') {
                   return (
                     <img
@@ -421,7 +441,7 @@ function ChatBubble({
               className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
               data-testid={`text-message-time-${message.id}`}
             >
-              {messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {formattedTime}
             </span>
             
             {/* Read receipts for sent messages - WhatsApp style blue checkmarks */}
@@ -468,12 +488,12 @@ function ChatBubble({
             <>
               <div 
                 className="fixed inset-0 z-40" 
-                onClick={() => setShowReactionPicker(false)}
+                onClick={handleCloseReactionPicker}
               />
               <div className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-50`}>
                 <ReactionPicker 
                   onSelect={handleReactionSelect}
-                  onClose={() => setShowReactionPicker(false)}
+                  onClose={handleCloseReactionPicker}
                 />
               </div>
             </>
@@ -482,7 +502,7 @@ function ChatBubble({
       </div>
     </div>
   );
-}
+});
 
 // Date separator component
 function DateSeparator({ date }: { date: Date }) {
@@ -495,8 +515,8 @@ function DateSeparator({ date }: { date: Date }) {
   );
 }
 
-// Swipeable thread item component
-function ThreadItem({
+// Swipeable thread item component - memoized for performance
+const ThreadItem = memo(function ThreadItem({
   thread,
   isSelected,
   onClick,
@@ -512,18 +532,20 @@ function ThreadItem({
   isArchived?: boolean;
 }) {
   const x = useMotionValue(0);
-  const background = useTransform(x, [-100, 0], ["hsl(var(--destructive))", "transparent"]);
   const archiveOpacity = useTransform(x, [-100, -50, 0], [1, 0.5, 0]);
   
-  const lastMessageTime = thread.lastMessage?.createdAt
-    ? formatRelativeTime(new Date(thread.lastMessage.createdAt))
-    : null;
+  // Memoize time formatting
+  const lastMessageTime = useMemo(() => {
+    return thread.lastMessage?.createdAt
+      ? formatRelativeTime(new Date(thread.lastMessage.createdAt))
+      : null;
+  }, [thread.lastMessage?.createdAt]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     if (x.get() < -80) {
       onArchive();
     }
-  };
+  }, [x, onArchive]);
 
   return (
     <motion.div 
@@ -562,7 +584,7 @@ function ThreadItem({
           {/* Avatar with online indicator */}
           <div className="relative">
             <Avatar>
-              <AvatarImage src={thread.user.profileImageUrl || undefined} />
+              <AvatarImage src={thread.user.profileImageUrl || undefined} loading="lazy" />
               <AvatarFallback>
                 {thread.user.firstName?.[0] || thread.user.email?.[0]}
               </AvatarFallback>
@@ -614,7 +636,7 @@ function ThreadItem({
       </motion.button>
     </motion.div>
   );
-}
+});
 
 // Emoji picker component
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
@@ -728,60 +750,84 @@ export default function Messages() {
     }
   }, [preselectedUserId]);
 
-  // Fetch chat threads
+  // State for message pagination - show limited messages initially
+  const [displayedMessageCount, setDisplayedMessageCount] = useState(INITIAL_MESSAGE_LIMIT);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Fetch chat threads with caching optimization
   const { data: threads, isLoading: threadsLoading } = useQuery<ChatThread[]>({
     queryKey: ["/api/messages/threads"],
+    staleTime: 30000, // Cache for 30 seconds
   });
 
-  // Fetch messages for selected user
+  // Fetch messages for selected user with caching
   const { data: messages, isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedUser],
     enabled: !!selectedUser,
+    staleTime: 10000, // Cache for 10 seconds
   });
 
-  // Fetch archived conversations
+  // Fetch archived conversations with longer cache
   const { data: archivedConversations, isLoading: archivedLoading } = useQuery<(ArchivedConversation & { otherUser: User })[]>({
     queryKey: ["/api/conversations/archived"],
+    staleTime: 60000, // Cache for 1 minute - archives change infrequently
   });
 
   // Fetch disappearing message settings for current conversation
   const { data: disappearingSettings } = useQuery<DisappearingMessageSetting>({
     queryKey: ["/api/conversations", selectedUser, "disappearing"],
     enabled: !!selectedUser,
+    staleTime: 60000, // Cache for 1 minute
   });
 
-  // Fetch initial online status
+  // Fetch initial online status with appropriate caching
   const { data: onlineStatusData } = useQuery<{ onlineUserIds: string[] }>({
     queryKey: ["/api/users/online-status"],
     refetchInterval: 30000, // Refetch every 30 seconds as backup
+    staleTime: 15000, // Cache for 15 seconds
   });
 
-  // Fetch reactions for messages when conversation is loaded
+  // Fetch reactions for visible messages only (performance optimization)
+  // Only fetch for the most recent messages to reduce API calls
   useEffect(() => {
     if (messages && messages.length > 0) {
-      // Fetch reactions for each message
+      // Only fetch reactions for displayed messages (not all)
+      const visibleMessages = messages.slice(-displayedMessageCount);
+      
+      // Batch fetch reactions using Promise.all for better performance
       const fetchReactions = async () => {
-        const reactionsMap: Record<string, ReactionWithUser[]> = {};
-        for (const message of messages) {
+        const reactionsPromises = visibleMessages.map(async (message) => {
           try {
             const response = await fetch(`/api/messages/${message.id}/reactions`, {
               credentials: 'include'
             });
             if (response.ok) {
               const reactions = await response.json();
-              if (reactions.length > 0) {
-                reactionsMap[message.id] = reactions;
-              }
+              return { messageId: message.id, reactions };
             }
           } catch (error) {
             // Silently fail for individual reaction fetches
           }
-        }
+          return { messageId: message.id, reactions: [] };
+        });
+
+        const results = await Promise.all(reactionsPromises);
+        const reactionsMap: Record<string, ReactionWithUser[]> = {};
+        results.forEach(({ messageId, reactions }) => {
+          if (reactions && reactions.length > 0) {
+            reactionsMap[messageId] = reactions;
+          }
+        });
         setMessageReactionsMap(reactionsMap);
       };
       fetchReactions();
     }
-  }, [messages]);
+  }, [messages, displayedMessageCount]);
+
+  // Reset displayed message count when switching conversations
+  useEffect(() => {
+    setDisplayedMessageCount(INITIAL_MESSAGE_LIMIT);
+  }, [selectedUser]);
 
   // Update onlineUserIds when API data changes
   useEffect(() => {
@@ -1315,35 +1361,68 @@ export default function Messages() {
 
   const selectedThread = threads?.find((t) => t.user.id === selectedUser);
 
-  // Filter threads based on search and exclude archived
-  const archivedUserIds = new Set(archivedConversations?.map(a => a.otherUserId) || []);
-  const filteredThreads = threads?.filter((thread) => {
-    const name = thread.user.firstName || thread.user.email || "";
-    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
-    const notArchived = !archivedUserIds.has(thread.user.id);
-    return matchesSearch && notArchived;
-  });
+  // Memoize archived user IDs set for better performance
+  const archivedUserIds = useMemo(() => {
+    return new Set(archivedConversations?.map(a => a.otherUserId) || []);
+  }, [archivedConversations]);
 
-  // Group messages by date
-  const groupedMessages = messages?.reduce((acc, msg, index, arr) => {
-    const msgDate = new Date(msg.createdAt!);
-    const prevMsg = arr[index - 1];
-    const prevDate = prevMsg ? new Date(prevMsg.createdAt!) : null;
+  // Memoize filtered threads to avoid recalculation on every render
+  const filteredThreads = useMemo(() => {
+    return threads?.filter((thread) => {
+      const name = thread.user.firstName || thread.user.email || "";
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
+      const notArchived = !archivedUserIds.has(thread.user.id);
+      return matchesSearch && notArchived;
+    });
+  }, [threads, searchQuery, archivedUserIds]);
 
-    // Add date separator if it's a new day
-    if (!prevDate || !isSameDay(msgDate, prevDate)) {
-      acc.push({ type: "separator" as const, date: msgDate });
+  // Calculate if there are more messages to load
+  const hasMoreMessages = useMemo(() => {
+    return messages ? messages.length > displayedMessageCount : false;
+  }, [messages, displayedMessageCount]);
+
+  // Get paginated messages (most recent ones)
+  const paginatedMessages = useMemo(() => {
+    if (!messages) return [];
+    // If we have more messages than displayed, slice from the end
+    if (messages.length > displayedMessageCount) {
+      return messages.slice(messages.length - displayedMessageCount);
     }
+    return messages;
+  }, [messages, displayedMessageCount]);
 
-    // Determine if this message should show a tail
-    const nextMsg = arr[index + 1];
-    const showTail = !nextMsg || 
-      nextMsg.senderId !== msg.senderId ||
-      !isSameDay(new Date(nextMsg.createdAt!), msgDate);
+  // Handler to load more messages
+  const handleLoadMoreMessages = useCallback(() => {
+    setIsLoadingMore(true);
+    // Simulate a small delay for UX, then load more
+    setTimeout(() => {
+      setDisplayedMessageCount(prev => prev + INITIAL_MESSAGE_LIMIT);
+      setIsLoadingMore(false);
+    }, 200);
+  }, []);
 
-    acc.push({ type: "message" as const, message: msg, showTail });
-    return acc;
-  }, [] as Array<{ type: "separator"; date: Date } | { type: "message"; message: Message; showTail: boolean }>);
+  // Memoize grouped messages - expensive computation for large message lists
+  const groupedMessages = useMemo(() => {
+    return paginatedMessages.reduce((acc, msg, index, arr) => {
+      const msgDate = new Date(msg.createdAt!);
+      const prevMsg = arr[index - 1];
+      const prevDate = prevMsg ? new Date(prevMsg.createdAt!) : null;
+
+      // Add date separator if it's a new day
+      if (!prevDate || !isSameDay(msgDate, prevDate)) {
+        acc.push({ type: "separator" as const, date: msgDate });
+      }
+
+      // Determine if this message should show a tail
+      const nextMsg = arr[index + 1];
+      const showTail = !nextMsg || 
+        nextMsg.senderId !== msg.senderId ||
+        !isSameDay(new Date(nextMsg.createdAt!), msgDate);
+
+      acc.push({ type: "message" as const, message: msg, showTail });
+      return acc;
+    }, [] as Array<{ type: "separator"; date: Date } | { type: "message"; message: Message; showTail: boolean }>);
+  }, [paginatedMessages]);
 
   // Thread list content
   const ThreadListContent = (
@@ -1564,6 +1643,31 @@ export default function Messages() {
               </div>
             ) : groupedMessages && groupedMessages.length > 0 ? (
               <>
+                {/* Load More button - appears at top when there are more messages */}
+                {hasMoreMessages && (
+                  <div className="flex justify-center mb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLoadMoreMessages}
+                      disabled={isLoadingMore}
+                      className="gap-2"
+                      data-testid="button-load-more-messages"
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4 rotate-180" />
+                          Load older messages
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
                 {groupedMessages.map((item, index) => {
                   if (item.type === "separator") {
                     return <DateSeparator key={`sep-${index}`} date={item.date} />;
@@ -1604,6 +1708,7 @@ export default function Messages() {
                   src={filePreview} 
                   alt="Preview" 
                   className="max-h-24 max-w-[200px] rounded-lg object-cover border"
+                  loading="lazy"
                 />
                 <Button
                   type="button"

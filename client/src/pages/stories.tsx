@@ -25,7 +25,6 @@ import {
   Heart,
   Send,
   Image as ImageIcon,
-  Video,
   Type,
   Eye,
   Trash2,
@@ -686,33 +685,22 @@ function CreateStoryModal({
               }}
               className="flex-1"
               data-testid="button-story-type-text"
+              aria-label="Create text story"
             >
-              <Type className="w-4 h-4 mr-2" />
+              <Type className="w-4 h-4 mr-2" aria-hidden="true" />
               Text
             </Button>
             <Button
-              variant={storyType === "image" ? "default" : "outline"}
+              variant={(storyType === "image" || storyType === "video") ? "default" : "outline"}
               onClick={() => {
-                setStoryType("image");
                 fileInputRef.current?.click();
               }}
               className="flex-1"
-              data-testid="button-story-type-image"
+              data-testid="button-story-type-media"
+              aria-label="Upload photo or video for story"
             >
-              <ImageIcon className="w-4 h-4 mr-2" />
-              Image
-            </Button>
-            <Button
-              variant={storyType === "video" ? "default" : "outline"}
-              onClick={() => {
-                setStoryType("video");
-                fileInputRef.current?.click();
-              }}
-              className="flex-1"
-              data-testid="button-story-type-video"
-            >
-              <Video className="w-4 h-4 mr-2" />
-              Video
+              <ImageIcon className="w-4 h-4 mr-2" aria-hidden="true" />
+              Media
             </Button>
           </div>
           
@@ -723,6 +711,7 @@ function CreateStoryModal({
             className="hidden"
             onChange={handleFileSelect}
             data-testid="input-story-media"
+            aria-label="Upload photo or video for story"
           />
           
           {storyType === "text" ? (

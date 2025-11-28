@@ -581,22 +581,18 @@ export default function ThePlugPage() {
               className="hidden"
               onChange={handleMediaUpload}
               data-testid="input-post-media"
+              aria-label="Upload photos or videos"
             />
             <Button
               variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full text-primary"
+              size="sm"
+              className="rounded-full text-primary gap-1.5"
               onClick={() => fileInputRef.current?.click()}
+              aria-label="Add photos or videos"
+              data-testid="button-add-media"
             >
               <ImageIcon className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full text-primary"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Video className="h-5 w-5" />
+              <span className="text-xs font-medium">Media</span>
             </Button>
           </div>
           <Button

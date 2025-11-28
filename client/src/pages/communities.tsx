@@ -829,7 +829,7 @@ function CommunityDetailView({
   const sortedPosts = [...pinnedPosts, ...regularPosts];
 
   return (
-    <div className="min-h-screen">
+    <div className="flex flex-col pb-20 lg:pb-4">
       <div className="relative h-40 bg-gradient-to-br from-primary/30 to-primary/10">
         {community.coverUrl && (
           <img 
@@ -1034,7 +1034,7 @@ export default function CommunitiesPage() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto px-4 py-6">
+    <div className="container max-w-4xl mx-auto px-4 py-6 pb-24 lg:pb-6">
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Communities</h1>
