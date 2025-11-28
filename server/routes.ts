@@ -2820,7 +2820,7 @@ Happy trading!`;
       // Enforce email verification - unverified users can only create limited listings
       if (!user.emailVerified && user.role !== "admin" && !isSuperAdmin(userId)) {
         // Count user's existing products
-        const existingProducts = await storage.getProductsByUser(userId);
+        const existingProducts = await storage.getSellerProducts(userId);
         if (existingProducts.length >= MAX_LISTINGS_UNVERIFIED) {
           return res.status(403).json({ 
             message: `Please verify your email to create more listings. Unverified accounts are limited to ${MAX_LISTINGS_UNVERIFIED} listings.`,
@@ -3445,7 +3445,8 @@ Happy trading!`;
       // Filter out threads where either user has blocked the other
       const filteredThreads = [];
       for (const thread of threads) {
-        const otherUserId = thread.otherUser?.id;
+        // Storage returns 'user' property, not 'otherUser'
+        const otherUserId = thread.user?.id;
         if (!otherUserId) continue;
         
         // Skip block checks for system account threads
@@ -3610,10 +3611,9 @@ Happy trading!`;
       await storage.createSupportTicket({
         userId,
         subject: `Auto-generated from DM: ${content.substring(0, 50)}...`,
-        description: content,
+        message: content,
         category: 'general',
         priority: 'medium',
-        status: 'open',
       });
       recentSupportTickets.set(userId, now);
       console.log(`Auto-created support ticket for user ${userId}`);
@@ -11579,35 +11579,33 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       }
 
       // Deduct from buyer's wallet
-      await storage.updateWalletBalance(userId, (balance - price).toFixed(2));
+      await storage.updateWalletBalance(userId, price.toFixed(2), 'subtract');
 
       // Record the purchase
       await storage.purchaseStudyMaterial(id, userId, material.price || "0.00");
 
-      // Create transaction record
+      // Create transaction record for buyer
       await storage.createTransaction({
-        userId,
+        walletId: wallet.id,
         type: "purchase",
-        amount: material.price || "0.00",
+        amount: `-${material.price || "0.00"}`,
         description: `Purchase: ${material.title}`,
         status: "completed",
-        reference: `SM-${id}-${Date.now()}`,
       });
 
       // Credit the seller (90% of the price, 10% platform fee)
       const sellerAmount = (price * 0.9).toFixed(2);
       const sellerWallet = await storage.getWallet(material.uploaderId);
       if (sellerWallet) {
-        const sellerBalance = parseFloat(sellerWallet.balance || "0");
-        await storage.updateWalletBalance(material.uploaderId, (sellerBalance + parseFloat(sellerAmount)).toFixed(2));
+        await storage.updateWalletBalance(material.uploaderId, sellerAmount, 'add');
         
         await storage.createTransaction({
-          userId: material.uploaderId,
-          type: "credit",
+          walletId: sellerWallet.id,
+          type: "sale",
           amount: sellerAmount,
           description: `Sale: ${material.title}`,
           status: "completed",
-          reference: `SM-SALE-${id}-${Date.now()}`,
+          relatedUserId: userId,
         });
       }
 

@@ -332,19 +332,21 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col gap-6 lg:flex-row">
           <aside className="hidden lg:block w-64 flex-shrink-0">
-            <div className="sticky top-24 space-y-6">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">Filters</h2>
-                {activeFilterCount > 0 && (
-                  <Badge variant="secondary" data-testid="badge-active-filters">
-                    {activeFilterCount} active
-                  </Badge>
-                )}
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  Clear
-                </Button>
+            <div className="sticky top-24 z-40 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) transparent' }}>
+              <div className="space-y-6 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-semibold">Filters</h2>
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" data-testid="badge-active-filters">
+                      {activeFilterCount} active
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Clear
+                  </Button>
+                </div>
+                <FilterPanel />
               </div>
-              <FilterPanel />
             </div>
           </aside>
 

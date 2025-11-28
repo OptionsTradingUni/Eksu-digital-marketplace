@@ -23,35 +23,47 @@ const THEME_CLASSES = {
   "high-contrast": ["dark", "high-contrast"],
 } as const;
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  
+  try {
     const stored = localStorage.getItem("theme");
     if (stored && validThemes.includes(stored as Theme)) {
-      setThemeState(stored as Theme);
-    } else if (stored === "dark") {
-      setThemeState("dim");
+      return stored as Theme;
     }
-    setIsInitialized(true);
-  }, []);
+    if (stored === "dark") {
+      return "dim";
+    }
+  } catch {
+  }
+  return "light";
+}
+
+function applyThemeToDOM(theme: Theme) {
+  if (typeof window === "undefined") return;
+  
+  const root = document.documentElement;
+  root.classList.remove(...validThemes, "dark", "light");
+  
+  const themeClasses = THEME_CLASSES[theme];
+  root.classList.add(...themeClasses);
+}
+
+const initialTheme = getInitialTheme();
+applyThemeToDOM(initialTheme);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(initialTheme);
+  const [isInitialized, setIsInitialized] = useState(true);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    applyThemeToDOM(theme);
     
-    const root = document.documentElement;
-    root.classList.remove(...validThemes, "dark", "light");
-    
-    const themeClasses = THEME_CLASSES[theme];
-    root.classList.add(...themeClasses);
-    
-    if (isInitialized) {
+    try {
       localStorage.setItem("theme", theme);
+    } catch {
     }
-  }, [theme, isInitialized]);
+  }, [theme]);
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);

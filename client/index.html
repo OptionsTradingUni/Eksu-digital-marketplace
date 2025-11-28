@@ -15,6 +15,30 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <title>EKSU Campus Marketplace - Buy & Sell on Campus</title>
     <meta name="description" content="EKSU's trusted campus marketplace. Buy and sell textbooks, electronics, fashion, and more. Connect with verified students, chat in real-time, and trade safely on campus.">
+    <script>
+      (function() {
+        var validThemes = ["light", "dim", "lights-out", "sunset", "ocean", "forest", "sepia", "high-contrast"];
+        var themeClasses = {
+          light: ["light"],
+          dim: ["dark", "dim"],
+          "lights-out": ["dark", "lights-out"],
+          sunset: ["dark", "sunset"],
+          ocean: ["dark", "ocean"],
+          forest: ["dark", "forest"],
+          sepia: ["light", "sepia"],
+          "high-contrast": ["dark", "high-contrast"]
+        };
+        var stored = localStorage.getItem("theme");
+        var theme = "light";
+        if (stored && validThemes.indexOf(stored) !== -1) {
+          theme = stored;
+        } else if (stored === "dark") {
+          theme = "dim";
+        }
+        var classes = themeClasses[theme] || ["light"];
+        document.documentElement.classList.add.apply(document.documentElement.classList, classes);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
