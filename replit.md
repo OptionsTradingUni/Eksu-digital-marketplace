@@ -2,9 +2,7 @@
 
 ## Overview
 
-A comprehensive marketplace platform for EKSU students to buy and sell items safely on campus. The platform aims to provide a secure and efficient environment for campus commerce, featuring real-time communication, a robust trust system, and role-based access.
-
-**Business Vision & Ambition:** To be the leading campus marketplace for EKSU students, fostering a secure trading environment and offering diverse revenue streams through features like featured listings, transaction fees, and premium subscriptions.
+The EKSU Campus Marketplace is a secure and efficient platform designed for students of Ekiti State University (EKSU) to buy and sell items. It aims to be the leading campus marketplace, fostering a safe trading environment and generating revenue through features like featured listings, transaction fees, and premium subscriptions. Key capabilities include real-time communication, a robust trust system, role-based access, and advanced safety features.
 
 ## User Preferences
 
@@ -16,214 +14,49 @@ Do not make changes to the file `Y`.
 
 ## System Architecture
 
-The EKSU Campus Marketplace is built with a modern full-stack architecture.
+The marketplace employs a modern full-stack architecture focusing on performance, security, and user experience.
 
 **UI/UX Decisions:**
-- **Design System:** Shadcn UI + Tailwind CSS for a consistent, accessible, and responsive (mobile-first) design.
-- **Color Scheme:** Primary green to convey trust and marketplace theme.
-- **Typography:** Inter font.
-- **Theming:** Full dark mode support with persistent user preference.
-- **Real-Time Features:** WhatsApp-inspired UI for chat, real-time status updates.
-- **Safety Features:** Safety Shield Modal, enhanced seller cards displaying trust scores and verification, and an auto-follow system for new users to receive safety tips.
+- **Design System:** Shadcn UI + Tailwind CSS for a responsive, mobile-first design.
+- **Theming:** Full dark mode support with persistent user preferences.
+- **Real-Time Features:** WhatsApp-inspired chat UI, real-time status updates.
+- **Safety Features:** Safety Shield Modal, enhanced seller cards with trust scores, and an auto-follow system for new users to receive safety tips from the "Campus Hub" system account.
+- **Navigation:** Enhanced bottom navigation and header with dedicated links for messages, VTU Data, and settings.
+- **Social Features:** X/Twitter-style "The Plug" feed with "For You/Following" tabs, bookmarking, and post engagement tracking; user profiles with cover photos, avatars, pinned posts, and content tabs.
+- **Interaction:** Haptic feedback on mobile, pull-to-refresh, and back-to-top functionality.
 
 **Technical Implementations:**
-- **Frontend:** React + TypeScript, Wouter for routing, TanStack Query for data fetching, and a WebSocket client for real-time communication.
-- **Backend:** Express.js, PostgreSQL with Drizzle ORM, Passport.js for authentication, a WebSocket server, and Multer for image uploads.
-- **Authentication:** Email/password authentication with role selection (buyer/seller) during registration, session management, and protected routes.
-- **Products:** Multi-image uploads (up to 10 images), search/filter capabilities, seller dashboard, and admin moderation.
-- **Real-Time Chat:** WebSocket-based messaging with message threads and online/offline status.
-- **User Profiles:** Editable profiles, verification badges, trust scores, and sales history.
-- **Admin Panel:** User and product moderation, platform analytics, and revenue tracking.
-- **AI Chatbot:** Powered by Groq (llama-3.3-70b-versatile) with features like automatic payment scam detection, safety warnings, quick help buttons, and Nigerian language support (Pidgin, Yoruba, Igbo, English).
-- **Error Handling:** Multi-level error boundaries, user-friendly error UI, and global error handlers with backend reporting.
-- **Wallet System:** Virtual wallet, welcome bonuses, transaction history, and escrow support.
-- **Referral System:** Earning rewards for successful signups.
-- **Role Switcher:** Users can dynamically switch between buyer, seller, and admin modes.
-- **Login Streak Rewards:** Daily rewards for consistent platform engagement.
-- **System Account (Campus Hub):** An official marketplace account that auto-follows new users, sends welcome messages, and can post announcements in "The Plug" social feed. Regular users cannot follow back or message this account.
-- **Squad/Habari Payment Integration:** Comprehensive payment processing (Card, Bank Transfer, USSD) with instant settlement (T+0) for bank transfers, fee calculation, seller payouts, and bank verification. Payment callbacks handled via `/payment/callback` route.
-- **Order Management System:** 11 delivery statuses with full audit trail, role-based permissions, unique order numbers, delivery method selection, and escrow integration.
-- **Security:** Role-based access control, user verification, trust scores, reporting mechanisms, admin moderation, session management, and HTTPS enforcement. Admin/Support roles are managed via environment variables and database flags.
+- **Frontend:** React + TypeScript, Wouter for routing, TanStack Query for data fetching, and WebSockets for real-time communication. Lazy loading, image lazy loading, and skeleton loaders optimize performance.
+- **Backend:** Express.js, PostgreSQL with Drizzle ORM, Passport.js for authentication, and a WebSocket server.
+- **Authentication:** Email/password with role selection (buyer/seller), session management, and protected routes. Admin/Support roles managed via environment variables and database flags.
+- **Products:** Multi-image uploads, search/filter, seller dashboard, and admin moderation.
+- **Chat:** WebSocket-based messaging, message threads, online/offline status, image lightbox, voice input, and message deletion.
+- **User Management:** Editable profiles, verification badges, trust scores, sales history, user blocking/reporting, and a virtual wallet with escrow support.
+- **Admin Panel:** User/product moderation, platform analytics, revenue tracking, and comprehensive support ticket management.
+- **AI Chatbot:** Groq-powered with automatic payment scam detection, safety warnings, quick help buttons, Nigerian language support, and a smart handoff system to human support based on frustration detection and issue classification.
+- **Payment System:** Squad/Habari integration for Card, Bank Transfer, USSD with instant settlements, fee calculation, seller payouts, and bank verification.
+- **Order Management:** 11 delivery statuses with audit trails, role-based permissions, unique order numbers, and escrow integration.
+- **Security:** Role-based access control, user verification, reporting, admin moderation, session management, and HTTPS.
+- **Location Services:** Geolocation with IP fallback, campus detection, distance calculation, and location-aware feed algorithms.
+- **KYC Verification:** Multi-step wizard with ID and liveness detection for user verification.
+- **VTU Data Sales:** Integrated SMEDATA.NG API for data resale with phone number validation and wallet integration.
+- **PWA Support:** Service worker for offline caching, install prompt, and offline indicator.
+- **Support Ticket System:** Threaded conversations, atomic ticket numbering, status tracking, and admin management.
+- **Social Post Reporting:** Users can report posts, which are auto-hidden after a threshold.
 
 **System Design Choices:**
-- **Database Schema:** Defined for Users, Products, Categories, Messages, Reviews, Watchlist, and Reports, supporting the core marketplace functionalities.
-- **File Structure:** Organized `client/` for frontend, `server/` for backend logic, and `shared/` for common schemas and utilities.
-- **API Endpoints:** Structured for Auth, Products, Messages, Users, Admin, Categories, Watchlist, Reviews, Chatbot, and Error Reporting.
+- **Database Schema:** Structured for Users, Products, Categories, Messages, Reviews, Watchlist, Reports, Support Tickets, KYC, and Sponsored Ads.
+- **File Structure:** `client/` for frontend, `server/` for backend, `shared/` for common utilities.
+- **API Endpoints:** Organized by functionality (Auth, Products, Messages, Users, Admin, Categories, Watchlist, Reviews, Chatbot, Error Reporting, Support, VTU).
 
 ## External Dependencies
 
 - **PostgreSQL:** Primary database.
-- **Groq API:** For the AI Chatbot (`llama-3.3-70b-versatile`).
-- **Squad/Habari API:** Payment gateway for transactions, payouts, and bank verification. Environment variables: `SQUAD_SECRET_KEY`, `SQUAD_PUBLIC_KEY`.
+- **Groq API:** For AI Chatbot (`llama-3.3-70b-versatile`).
+- **Squad/Habari API:** Payment gateway for transactions, payouts, and bank verification.
 - **Passport.js:** Authentication middleware.
 - **Drizzle ORM:** Database interaction.
 - **Socket.io-like WebSocket:** Real-time communication.
-- **Multer:** For handling multi-part form data, specifically image uploads.
-- **Render:** Recommended deployment platform, handling PostgreSQL and environment variables.
-
-## System Account Setup
-
-The EKSU Marketplace includes an official system account ("Campus Hub") that provides:
-- Welcome messages to new users
-- Auto-follow relationship with all new users
-- Ability to post official announcements in "The Plug" social feed
-- Protection against regular users following back or messaging
-
-**Setup Steps:**
-1. Run `npm run db:seed-system` to create the system account (if not already created)
-2. The script generates credentials and saves them to `SYSTEM_ACCOUNT_CREDENTIALS.md`
-3. The `SYSTEM_USER_ID` environment variable is set automatically
-
-**Environment Variables:**
-- `SYSTEM_USER_ID`: The UUID of the system account (required for auto-follow and welcome messages)
-
-**Security Notes:**
-- The credentials file is excluded from git via `.gitignore`
-- Regular users cannot follow the system account (auto-followed on registration)
-- Regular users cannot send messages to the system account
-
-## Recent Changes (November 2025)
-
-### VTU (Virtual Top-Up) Data Sales
-- **Location:** `/vtu` page
-- **Description:** Integrated SMEDATA.NG API for data resale functionality
-- **Networks Supported:** MTN SME, GLO CG, Airtel CG, 9mobile
-- **Features:**
-  - Phone number validation with automatic network detection
-  - Data plans display with cost/selling prices
-  - Wallet integration for purchases
-  - Transaction history tracking
-- **Environment Variable:** `SME_API` for SMEDATA.NG API key
-
-### Settings Page
-- **Location:** `/settings` page
-- **3 Tabs:**
-  - **General:** Location visibility, distance from campus settings
-  - **Notifications:** Push, email, message, order, promotional notifications; Chat settings (typing status, read receipts, online status)
-  - **Account:** Account info, 30-day account deletion with username confirmation
-
-### Enhanced Navigation
-- **BottomNav:** Added Messages icon (now 6 items: Home, The Plug, Search, Messages, Games, Profile)
-- **Header:** Profile icon dropdown with VTU Data, Settings, and other links
-
-### User Safety Features
-- **Block User:** Prevents all interaction between users
-- **Report User:** Submit reports with categorized reasons (spam, scam, harassment, etc.)
-- **Location:** Profile page 3-dot menu (for other users' profiles)
-
-### Sponsored Ads System (Admin-controlled)
-- **Tables:** `sponsored_ads`, `platform_settings`
-- **Features:** Disabled by default; admin can enable via platform settings
-- **Metrics:** Impression and click tracking with cost calculations
-
-### KYC Verification System
-- **Location:** `/kyc` page
-- **Tables:** `kyc_verifications`, `kyc_verification_logs`
-- **6-Step Wizard Flow:**
-  1. Terms & Conditions acceptance
-  2. Information collection (Full Name, DOB, NIN, Phone)
-  3. Payment (₦500 verification fee with mock PayStack)
-  4. Camera selfie capture with liveness detection prompts
-  5. Processing/verification step
-  6. Results display (verified badge or retry option)
-- **Features:** Camera access via getUserMedia, liveness prompts (blink, turn head, look up, smile), base64 image capture
-
-### X/Twitter-Style Social Features
-- **The Plug Feed:** Enhanced with For You/Following tabs, bookmark functionality, view/share tracking, EKSUPlug official badge styling
-- **Profile Page:** Cover photo, large avatar, username display, pinned posts section, Posts/Selling/Likes/Media tabs
-- **Feed Algorithm:** Smart scoring based on engagement, recency, and user relationships
-- **Database Schema:** Added `replyRestriction`, `locationLatitude`, `locationLongitude`, bookmarks table, post views/shares tracking
-
-### Privacy & Safety Settings
-- **Location:** `/settings` page, Privacy tab (4th tab)
-- **Blocked Accounts:** View and unblock users you've blocked
-- **Muted Accounts:** View and unmute users you've muted
-- **API Endpoints:** `/api/blocked-users`, `/api/users/muted`
-
-### Enhanced ChatBot
-- **Voice Input:** Web Speech API integration with microphone button
-- **Message Deletion:** Trash icon on hover for user messages
-- **Back Navigation:** Proper browser history navigation
-
-### Geolocation Feature
-- **Location:** Settings page, General tab
-- **Update Location Button:** Uses navigator.geolocation to get current coordinates
-- **Error Handling:** Permission denied, position unavailable, timeout, unsupported browsers
-- **Distance Display:** Shows distance from campus on product cards and profiles
-
-### Chat/Messages Routing
-- **Routes:** `/messages`, `/messages/:userId`, `/chat/:userId`
-- **Query Param Support:** Also supports `?user=userId` format
-
-### Performance Optimizations
-- **Code Splitting:** All pages use React.lazy() with Suspense fallback
-- **React Query Caching:** staleTime: 30s, gcTime: 5 minutes
-- **Image Lazy Loading:** All images use `loading="lazy"` attribute
-- **Skeleton Loaders:** Used across pages during data fetching
-
-### PWA (Progressive Web App) Support
-- **Location:** `client/public/manifest.json`, `client/public/sw.js`
-- **Features:**
-  - Service worker with offline caching (static assets + API responses)
-  - Install prompt component for "Add to Home Screen"
-  - Offline indicator UI
-  - App icon and splash screens
-- **File:** `client/src/components/PWAInstallPrompt.tsx`
-
-### Smart Location System
-- **Files:** `client/src/lib/location.ts`, `server/routes.ts`
-- **Features:**
-  - Silent GPS acquisition with IP geolocation fallback
-  - Campus detection (EKSU coordinates: 7.6476° N, 5.2270° E)
-  - Distance-based status labels: "On Campus", "In Ado-Ekiti", "Far away"
-  - Location-aware feed algorithm (campus users prioritized)
-- **API Endpoint:** `PATCH /api/users/me/location` - Update user's coordinates
-- **Feed Enhancement:** `/api/feed` accepts `?lat=&lng=` query params for proximity ranking
-
-### Haptic Feedback
-- **File:** `client/src/lib/haptics.ts`
-- **Features:** Vibration feedback on button interactions (mobile devices)
-- **Pattern Types:** light, medium, heavy, success, warning, error, selection
-
-### Pull-to-Refresh & Back-to-Top
-- **File:** `client/src/components/ui/pull-to-refresh.tsx`
-- **Features:** Swipe-down gesture to refresh feeds, floating back-to-top button
-
-### Enhanced Support Ticket System
-- **Tables:** `support_tickets`, `ticket_replies`, `ticket_number_seq` (PostgreSQL sequence)
-- **Features:**
-  - Threaded conversations with ticket replies
-  - Atomic ticket numbering using PostgreSQL sequence (EKSU-00001 format, race-condition safe)
-  - Status tracking (open, pending, in_progress, resolved, closed)
-  - Admin and user reply differentiation
-  - Open ticket count tracking per user
-  - Comprehensive admin management with filtering, pagination, and stats
-- **API Endpoints:**
-  - `GET /api/support` - List user's tickets
-  - `POST /api/support` - Create new ticket with auto-numbering
-  - `GET /api/support/:id` - Get ticket with all replies
-  - `POST /api/support/:id/reply` - Add reply to ticket
-  - `POST /api/tickets/create` - Create ticket from chatbot handoff
-  - `GET /api/tickets/status` - Check user's open ticket count
-  - `GET /api/admin/tickets` - Admin: list all tickets with filtering
-  - `PATCH /api/admin/tickets/:id` - Admin: update ticket status/priority
-  - `GET /api/admin/tickets/stats` - Admin: ticket statistics dashboard
-
-### AI Chatbot Handoff System
-- **File:** `server/chatbot.ts`
-- **Features:**
-  - Frustration detection using NLP patterns
-  - Automatic handoff detection for:
-    - Scam/fraud reports
-    - Financial issues
-    - Account access problems
-    - Verification issues
-    - Explicit human support requests
-  - Frustration level scoring (0-10 scale)
-  - Smart handoff suggestions with category classification
-  - Conversation history analysis for repeated issues
-- **API Response Additions:**
-  - `shouldHandoff` - Boolean indicating need for human support
-  - `handoffReason` - Explanation of why handoff is needed
-  - `suggestedCategory` - Ticket category suggestion
-  - `frustrationLevel` - Numeric frustration score
+- **Multer:** Image uploads.
+- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data sales.
+- **Render:** Recommended deployment platform.
