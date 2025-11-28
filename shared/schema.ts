@@ -999,6 +999,8 @@ export const updateUserProfileSchema = createInsertSchema(users).pick({
   bio: true,
   profileImageUrl: true,
   gender: true,
+  instagramHandle: true,
+  tiktokHandle: true,
 }).partial();
 
 export const insertProductSchema = createInsertSchema(products, {

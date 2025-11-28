@@ -63,8 +63,10 @@ import {
   Image,
   Pin,
   FileText,
-  ChevronDown
+  ChevronDown,
+  Music
 } from "lucide-react";
+import { SiInstagram } from "react-icons/si";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -328,6 +330,8 @@ export default function Profile() {
       location: "",
       bio: "",
       gender: null,
+      instagramHandle: "",
+      tiktokHandle: "",
     },
   });
 
@@ -340,6 +344,8 @@ export default function Profile() {
         location: currentUser.location || "",
         bio: currentUser.bio || "",
         gender: (currentUser as any).gender || null,
+        instagramHandle: (currentUser as any).instagramHandle || "",
+        tiktokHandle: (currentUser as any).tiktokHandle || "",
       });
       setUsernameInput(currentUser.username || "");
     }
@@ -1091,6 +1097,35 @@ export default function Profile() {
                 {displayUser.bio}
               </p>
             )}
+
+            {((displayUser as any).instagramHandle || (displayUser as any).tiktokHandle) && (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                {(displayUser as any).instagramHandle && (
+                  <a
+                    href={`https://instagram.com/${(displayUser as any).instagramHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid="link-instagram"
+                  >
+                    <SiInstagram className="h-4 w-4" />
+                    <span>@{(displayUser as any).instagramHandle}</span>
+                  </a>
+                )}
+                {(displayUser as any).tiktokHandle && (
+                  <a
+                    href={`https://tiktok.com/@${(displayUser as any).tiktokHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid="link-tiktok"
+                  >
+                    <Music className="h-4 w-4" />
+                    <span>@{(displayUser as any).tiktokHandle}</span>
+                  </a>
+                )}
+              </div>
+            )}
             
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
               {/* GPS-based location badge (if coordinates available) */}
@@ -1631,6 +1666,64 @@ export default function Profile() {
                     </Select>
                     <FormDescription>
                       Used for personalized experience. Optional.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="instagramHandle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <SiInstagram className="h-4 w-4" />
+                      Instagram
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="@username"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/^@/, '');
+                          field.onChange(value);
+                        }}
+                        data-testid="input-instagram"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only letters, numbers, underscores, and periods allowed.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="tiktokHandle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Music className="h-4 w-4" />
+                      TikTok
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="@username"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/^@/, '');
+                          field.onChange(value);
+                        }}
+                        data-testid="input-tiktok"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only letters, numbers, underscores, and periods allowed.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
