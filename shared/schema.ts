@@ -998,6 +998,7 @@ export const updateUserProfileSchema = createInsertSchema(users).pick({
   location: true,
   bio: true,
   profileImageUrl: true,
+  gender: true,
 }).partial();
 
 export const insertProductSchema = createInsertSchema(products, {
