@@ -236,7 +236,7 @@ import {
   type StudyMaterialRating,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
+import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
 
 function generateReferralCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -389,7 +389,7 @@ export interface IStorage {
   // Hostel operations
   createHostel(hostel: InsertHostel & { agentId: string }): Promise<Hostel>;
   getHostel(id: string): Promise<(Hostel & { agent: User }) | undefined>;
-  getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]>;
+  getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number }): Promise<Hostel[]>;
   getUserHostels(agentId: string): Promise<Hostel[]>;
   updateHostel(id: string, data: Partial<Hostel>): Promise<Hostel>;
   deleteHostel(id: string): Promise<void>;
@@ -2029,11 +2029,18 @@ export class DatabaseStorage implements IStorage {
     return { ...result[0].hostels, agent: result[0].users! };
   }
 
-  async getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]> {
+  async getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number }): Promise<Hostel[]> {
     const conditions = [eq(hostels.isAvailable, true)];
     
     if (filters?.location) {
       conditions.push(like(hostels.location, `%${filters.location}%`));
+    }
+    
+    // Support for bedroom filtering: minBedrooms for >= filter (4+), bedrooms for exact match
+    if (filters?.minBedrooms !== undefined) {
+      conditions.push(gte(hostels.bedrooms, filters.minBedrooms));
+    } else if (filters?.bedrooms !== undefined) {
+      conditions.push(eq(hostels.bedrooms, filters.bedrooms));
     }
     
     return await db

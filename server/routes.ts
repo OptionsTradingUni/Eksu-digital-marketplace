@@ -11092,6 +11092,269 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
   });
 
   // ========================================
+  // Hostel & Roommate Finder Routes
+  // ========================================
+
+  // GET /api/hostels - List hostels with filters
+  app.get("/api/hostels", async (req, res) => {
+    try {
+      const { location, minPrice, maxPrice, bedrooms, search } = req.query;
+      
+      const filters: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number } = {};
+      
+      if (location && location !== "all") {
+        filters.location = location as string;
+      }
+      if (minPrice) {
+        filters.minPrice = parseFloat(minPrice as string);
+      }
+      if (maxPrice) {
+        filters.maxPrice = parseFloat(maxPrice as string);
+      }
+      
+      // Handle bedroom filtering at storage layer
+      if (bedrooms && bedrooms !== "all") {
+        const bedroomCount = parseInt(bedrooms as string);
+        if (bedroomCount >= 4) {
+          // "4+" means 4 or more bedrooms - use minBedrooms for >= comparison
+          filters.minBedrooms = 4;
+        } else {
+          // Exact match for 1, 2, 3 bedrooms
+          filters.bedrooms = bedroomCount;
+        }
+      }
+      
+      let hostels = await storage.getHostels(filters);
+      
+      // Search filter (kept in route layer for flexibility)
+      if (search && typeof search === "string" && search.trim()) {
+        const searchLower = search.toLowerCase().trim();
+        hostels = hostels.filter(h => 
+          h.title.toLowerCase().includes(searchLower) ||
+          h.location?.toLowerCase().includes(searchLower) ||
+          h.address?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      res.json(hostels);
+    } catch (error) {
+      console.error("Error fetching hostels:", error);
+      res.status(500).json({ message: "Failed to fetch hostels" });
+    }
+  });
+
+  // GET /api/hostels/my-listings - Get user's hostel listings
+  app.get("/api/hostels/my-listings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const hostels = await storage.getUserHostels(userId);
+      res.json(hostels);
+    } catch (error) {
+      console.error("Error fetching user hostels:", error);
+      res.status(500).json({ message: "Failed to fetch your hostel listings" });
+    }
+  });
+
+  // GET /api/hostels/:id - Get single hostel with agent info
+  app.get("/api/hostels/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+      
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      // Increment views
+      await storage.incrementHostelViews(id);
+      
+      res.json(hostel);
+    } catch (error) {
+      console.error("Error fetching hostel:", error);
+      res.status(500).json({ message: "Failed to fetch hostel" });
+    }
+  });
+
+  // POST /api/hostels - Create hostel (with image upload)
+  app.post("/api/hostels", isAuthenticated, upload.array("images", 10), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate required fields
+      const { title, description, location, address, price, bedrooms, bathrooms, amenities, distanceFromCampus, agentFee } = req.body;
+      
+      // Basic validation
+      if (!title || typeof title !== "string" || title.trim().length < 5) {
+        return res.status(400).json({ message: "Title must be at least 5 characters" });
+      }
+      if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+        return res.status(400).json({ message: "Price must be a valid positive number" });
+      }
+      if (!location || typeof location !== "string" || location.trim().length === 0) {
+        return res.status(400).json({ message: "Location is required" });
+      }
+
+      // Upload images to object storage
+      let imageUrls: string[] = [];
+      if (req.files && req.files.length > 0) {
+        const prefix = `hostels/${userId}/`;
+        const uploadedUrls = await uploadMultipleToObjectStorage(req.files, prefix);
+        imageUrls = uploadedUrls.filter((url): url is string => url !== null);
+      }
+
+      // Parse amenities if it's a JSON string
+      let parsedAmenities: string[] = [];
+      if (amenities) {
+        try {
+          parsedAmenities = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+        } catch {
+          parsedAmenities = Array.isArray(amenities) ? amenities : [amenities];
+        }
+      }
+
+      const hostel = await storage.createHostel({
+        agentId: userId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        location: location.trim(),
+        address: address?.trim() || null,
+        price: parseFloat(price).toFixed(2),
+        images: imageUrls,
+        bedrooms: bedrooms ? parseInt(bedrooms) : null,
+        bathrooms: bathrooms ? parseInt(bathrooms) : null,
+        amenities: parsedAmenities,
+        distanceFromCampus: distanceFromCampus?.trim() || null,
+        agentFee: agentFee?.trim() || null,
+        isAvailable: true,
+      });
+
+      res.status(201).json(hostel);
+    } catch (error) {
+      console.error("Error creating hostel:", error);
+      res.status(500).json({ message: "Failed to create hostel listing" });
+    }
+  });
+
+  // PUT /api/hostels/:id - Update hostel (owner only)
+  app.put("/api/hostels/:id", isAuthenticated, upload.array("images", 10), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      if (hostel.agentId !== userId) {
+        return res.status(403).json({ message: "You can only update your own hostel listings" });
+      }
+
+      // Handle new image uploads
+      let imageUrls = hostel.images || [];
+      if (req.files && req.files.length > 0) {
+        const prefix = `hostels/${userId}/`;
+        const uploadedUrls = await uploadMultipleToObjectStorage(req.files, prefix);
+        const newUrls = uploadedUrls.filter((url): url is string => url !== null);
+        imageUrls = [...imageUrls, ...newUrls];
+      }
+
+      // Handle existing images from form data
+      if (req.body.existingImages) {
+        try {
+          const existingImages = typeof req.body.existingImages === "string" 
+            ? JSON.parse(req.body.existingImages) 
+            : req.body.existingImages;
+          imageUrls = Array.isArray(existingImages) ? existingImages : imageUrls;
+        } catch {
+          // Keep existing images if parsing fails
+        }
+      }
+
+      const { 
+        title, 
+        description, 
+        location, 
+        address, 
+        price, 
+        bedrooms, 
+        bathrooms, 
+        amenities, 
+        distanceFromCampus,
+        agentFee,
+        isAvailable 
+      } = req.body;
+
+      // Parse amenities if it's a JSON string
+      let parsedAmenities: string[] | undefined;
+      if (amenities) {
+        try {
+          parsedAmenities = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+        } catch {
+          parsedAmenities = Array.isArray(amenities) ? amenities : [amenities];
+        }
+      }
+
+      const updated = await storage.updateHostel(id, {
+        title,
+        description,
+        location,
+        address,
+        price,
+        images: imageUrls,
+        bedrooms: bedrooms ? parseInt(bedrooms) : undefined,
+        bathrooms: bathrooms ? parseInt(bathrooms) : undefined,
+        amenities: parsedAmenities,
+        distanceFromCampus,
+        agentFee,
+        isAvailable: isAvailable === "true" || isAvailable === true,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating hostel:", error);
+      res.status(500).json({ message: "Failed to update hostel listing" });
+    }
+  });
+
+  // DELETE /api/hostels/:id - Delete hostel (owner only)
+  app.delete("/api/hostels/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      if (hostel.agentId !== userId) {
+        return res.status(403).json({ message: "You can only delete your own hostel listings" });
+      }
+
+      await storage.deleteHostel(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting hostel:", error);
+      res.status(500).json({ message: "Failed to delete hostel listing" });
+    }
+  });
+
+  // ========================================
   // Study Materials (Past Questions) Routes
   // ========================================
 

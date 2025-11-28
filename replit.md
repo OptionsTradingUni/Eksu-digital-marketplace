@@ -183,3 +183,46 @@ The marketplace employs a modern full-stack architecture focusing on performance
 - Ghost icon branding with feature cards explaining anonymous messaging
 - Call-to-action buttons for signing in and getting started
 - Fully accessible without authentication
+
+### Study Materials (Past Questions) Feature
+- Complete schema with studyMaterials, studyMaterialPurchases, studyMaterialRatings tables
+- Material types: past_question, handout, summary, textbook, lab_report, project, lecture_note
+- Academic levels: 100L-500L, postgraduate
+- Wallet-based purchases with 90% seller / 10% platform revenue split
+- File upload to object storage with download tracking
+- Rating and review system
+
+### Hostel & Roommate Finder Feature
+- Hostel listings with multi-image support (up to 10 images)
+- Filter by location (EKSU areas), bedrooms (1-4+), price range
+- Amenities tracking: WiFi, electricity, water, security, parking, etc.
+- Agent contact integration with messaging
+- Distance from campus field
+- Database-level bedroom filtering with >= support for "4+" option
+
+## Known Configuration Issues
+
+### Email Service (Resend)
+- **Status:** API key configured but domain verification required
+- **Issue:** Resend requires DNS records (DKIM, SPF) to be added to your domain
+- **Solution:** 
+  1. Log into Resend dashboard (resend.com)
+  2. Add your domain and get DNS records
+  3. Add the records to your domain's DNS settings
+  4. Verify domain in Resend dashboard
+- **Fallback:** Gmail SMTP is available as backup (GMAIL_USER, GMAIL_APP_PASSWORD configured)
+
+### Payment Gateway (Squad/Habari)
+- **Status:** API keys configured but may need verification
+- **Issue:** 403 errors may indicate credentials need revalidation
+- **Solution:**
+  1. Log into Squad dashboard (squadco.com)
+  2. Verify API credentials (Public Key, Secret Key)
+  3. Ensure account is in correct mode (test vs live)
+  4. Check webhook URL configuration points to your app URL
+- **Fallback:** Users can still use wallet balance for internal transactions
+
+### Database Games Tables
+- **Status:** Created via direct SQL (drizzle-kit push has interactive prompts)
+- **Tables Created:** games, game_matches, trivia_questions, typing_texts, price_guess_products
+- **Note:** Schema is synced with database, no migration issues
