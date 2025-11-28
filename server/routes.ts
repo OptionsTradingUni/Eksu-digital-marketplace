@@ -403,7 +403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (systemUser) {
             // Create follow relationship (new user follows system user)
             await storage.followUser(user.id, systemUserId);
-            console.log(`New user ${user.email} now follows system user @${systemUser.firstName || 'CampusPlugOfficial'}`);
+            console.log(`New user ${user.email} now follows system user @${systemUser.firstName || 'EKSUMarketplace'}`);
             
             // Send welcome DM from system user
             const welcomeMessage = `Welcome to EKSU Marketplace! We're excited to have you join our campus trading community.
@@ -4280,13 +4280,30 @@ Happy trading!`;
     }
   });
   
-  // Track post view
-  app.post("/api/social-posts/:id/view", async (req, res) => {
+  // Track post view (unique: 1 view per user per 24 hours)
+  app.post("/api/social-posts/:id/view", async (req: any, res) => {
     try {
       const postId = req.params.id;
-      await storage.incrementPostViews(postId);
-      await storage.updatePostEngagementScore(postId);
-      res.json({ success: true });
+      const userId = getUserId(req);
+      
+      // For authenticated users, use unique view tracking
+      if (userId) {
+        const isNewView = await storage.recordUniquePostView(postId, userId);
+        res.json({ success: true, isNewView });
+      } else {
+        // For anonymous users, use session-based tracking
+        const sessionId = req.session?.id || req.ip;
+        if (sessionId) {
+          const viewerKey = `anon_${sessionId}`;
+          const isNewView = await storage.recordUniquePostView(postId, viewerKey);
+          res.json({ success: true, isNewView });
+        } else {
+          // Fallback: just increment without tracking (rare edge case)
+          await storage.incrementPostViews(postId);
+          await storage.updatePostEngagementScore(postId);
+          res.json({ success: true, isNewView: true });
+        }
+      }
     } catch (error) {
       console.error("Error tracking view:", error);
       res.status(500).json({ message: "Failed to track view" });
@@ -7617,7 +7634,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         currency: "NGN",
         initiate_type: "inline",
         transaction_ref: paymentReference,
-        callback_url: `${process.env.APP_URL || 'https://campusplug.replit.app'}/kyc/payment-callback`,
+        callback_url: `${process.env.APP_URL || 'https://eksu-marketplace.replit.app'}/kyc/payment-callback`,
         metadata: {
           kycId: kyc.id,
           userId: userId,
@@ -8686,6 +8703,34 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
   
+  // GET /api/stories/user/:userId - Get user's active stories
+  // IMPORTANT: This route must be defined BEFORE /api/stories/:id to prevent Express
+  // from matching "/api/stories/user/123" as "/api/stories/:id" with id="user"
+  app.get("/api/stories/user/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const { userId: targetUserId } = req.params;
+      const currentUserId = getUserId(req);
+      
+      // Get user's active stories with hasViewed flag for the current user
+      const userStories = await storage.getUserActiveStories(targetUserId);
+      
+      // Add hasViewed flag for each story
+      const storiesWithViewStatus = await Promise.all(
+        userStories.map(async (story) => {
+          const hasViewed = currentUserId 
+            ? await storage.hasViewedStory(story.id, currentUserId)
+            : false;
+          return { ...story, hasViewed };
+        })
+      );
+      
+      res.json(storiesWithViewStatus);
+    } catch (error) {
+      console.error("Error fetching user stories:", error);
+      res.status(500).json({ message: "Failed to fetch user stories" });
+    }
+  });
+  
   // GET /api/stories/:id - Get single story
   app.get("/api/stories/:id", isAuthenticated, async (req, res) => {
     try {
@@ -8700,18 +8745,6 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error fetching story:", error);
       res.status(500).json({ message: "Failed to fetch story" });
-    }
-  });
-  
-  // GET /api/stories/user/:userId - Get user's active stories
-  app.get("/api/stories/user/:userId", isAuthenticated, async (req, res) => {
-    try {
-      const { userId: targetUserId } = req.params;
-      const stories = await storage.getUserActiveStories(targetUserId);
-      res.json(stories);
-    } catch (error) {
-      console.error("Error fetching user stories:", error);
-      res.status(500).json({ message: "Failed to fetch user stories" });
     }
   });
   
@@ -8988,9 +9021,10 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
-  // GET /api/confessions - Get approved confessions with pagination
-  app.get("/api/confessions", isAuthenticated, async (req, res) => {
+  // GET /api/confessions - Get approved confessions with pagination (allows guest access)
+  app.get("/api/confessions", async (req, res) => {
     try {
+      const userId = getUserId(req);
       const { category, page, limit } = req.query;
 
       const result = await storage.getConfessions({
@@ -9000,15 +9034,36 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         limit: limit ? parseInt(limit as string) : 20,
       });
 
-      res.json(result);
+      // If user is logged in, enrich confessions with their vote status
+      if (userId && result.confessions && result.confessions.length > 0) {
+        const enrichedConfessions = await Promise.all(
+          result.confessions.map(async (confession) => {
+            const userVote = await storage.getUserVote(confession.id, userId);
+            return {
+              ...confession,
+              userVote: userVote?.voteType || null,
+              isOwner: confession.authorId === userId,
+            };
+          })
+        );
+        res.json({ ...result, confessions: enrichedConfessions });
+      } else {
+        // For guests, return confessions without vote info
+        const guestConfessions = result.confessions.map(confession => ({
+          ...confession,
+          userVote: null,
+          isOwner: false,
+        }));
+        res.json({ ...result, confessions: guestConfessions });
+      }
     } catch (error) {
       console.error("Error fetching confessions:", error);
       res.status(500).json({ message: "Failed to fetch confessions" });
     }
   });
 
-  // GET /api/confessions/trending - Get trending confessions
-  app.get("/api/confessions/trending", isAuthenticated, async (req, res) => {
+  // GET /api/confessions/trending - Get trending confessions (allows guest access)
+  app.get("/api/confessions/trending", async (req, res) => {
     try {
       const { limit } = req.query;
       const trending = await storage.getTrendingConfessions(
@@ -9021,14 +9076,10 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
-  // GET /api/confessions/:id - Get single confession with comments
-  app.get("/api/confessions/:id", isAuthenticated, async (req, res) => {
+  // GET /api/confessions/:id - Get single confession with comments (allows guest access for approved confessions)
+  app.get("/api/confessions/:id", async (req, res) => {
     try {
       const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
       const { id } = req.params;
 
       const confession = await storage.getConfession(id);
@@ -9036,22 +9087,61 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         return res.status(404).json({ message: "Confession not found" });
       }
 
-      if (confession.status !== "approved" && confession.authorId !== userId) {
-        return res.status(404).json({ message: "Confession not found" });
+      // Allow guest access only for approved confessions
+      // Non-approved confessions can only be viewed by the owner
+      if (confession.status !== "approved") {
+        if (!userId || confession.authorId !== userId) {
+          return res.status(404).json({ message: "Confession not found" });
+        }
       }
 
       const comments = await storage.getConfessionComments(id);
-      const userVote = await storage.getUserVote(id, userId);
+      const userVote = userId ? await storage.getUserVote(id, userId) : null;
 
       res.json({
         ...confession,
         comments,
         userVote: userVote?.voteType || null,
-        isOwner: confession.authorId === userId,
+        isOwner: userId ? confession.authorId === userId : false,
       });
     } catch (error) {
       console.error("Error fetching confession:", error);
       res.status(500).json({ message: "Failed to fetch confession" });
+    }
+  });
+
+  // POST /api/confessions/:id/view - Track confession view (unique: 1 view per user per 24 hours)
+  app.post("/api/confessions/:id/view", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = getUserId(req);
+      
+      // Verify confession exists
+      const confession = await storage.getConfession(id);
+      if (!confession || confession.status !== "approved") {
+        return res.status(404).json({ message: "Confession not found" });
+      }
+      
+      // For authenticated users, use unique view tracking
+      if (userId) {
+        const isNewView = await storage.recordUniqueConfessionView(id, userId);
+        res.json({ success: true, isNewView });
+      } else {
+        // For anonymous users, use session-based tracking
+        const sessionId = req.session?.id || req.ip;
+        if (sessionId) {
+          const viewerKey = `anon_${sessionId}`;
+          const isNewView = await storage.recordUniqueConfessionView(id, viewerKey);
+          res.json({ success: true, isNewView });
+        } else {
+          // Fallback: just increment without tracking (rare edge case)
+          await storage.incrementConfessionViews(id);
+          res.json({ success: true, isNewView: true });
+        }
+      }
+    } catch (error) {
+      console.error("Error tracking confession view:", error);
+      res.status(500).json({ message: "Failed to track view" });
     }
   });
 
@@ -9060,14 +9150,18 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     try {
       const userId = getUserId(req);
       if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized - please login to vote" });
       }
 
       const { id } = req.params;
-      const { voteType } = req.body;
+      let { voteType } = req.body;
+      
+      // Accept both 'upvote'/'downvote' and 'like'/'dislike' for compatibility
+      if (voteType === "upvote") voteType = "like";
+      if (voteType === "downvote") voteType = "dislike";
 
       if (!voteType || !["like", "dislike"].includes(voteType)) {
-        return res.status(400).json({ message: "Invalid vote type. Must be 'like' or 'dislike'" });
+        return res.status(400).json({ message: "Invalid vote type. Must be 'like', 'dislike', 'upvote', or 'downvote'" });
       }
 
       const confession = await storage.getConfession(id);
@@ -9219,8 +9313,8 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
-  // GET /api/confessions/:id/comments - Get comments for a confession
-  app.get("/api/confessions/:id/comments", isAuthenticated, async (req, res) => {
+  // GET /api/confessions/:id/comments - Get comments for a confession (allows guest access)
+  app.get("/api/confessions/:id/comments", async (req, res) => {
     try {
       const { id } = req.params;
 

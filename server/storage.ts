@@ -47,6 +47,7 @@ import {
   blockedUsers,
   postBookmarks,
   feedEngagementScores,
+  socialPostViews,
   squadPayments,
   squadTransfers,
   negotiations,
@@ -148,6 +149,7 @@ import {
   type PostBookmark,
   type InsertPostBookmark,
   type FeedEngagementScore,
+  type SocialPostView,
   type SquadPayment,
   type InsertSquadPayment,
   type SquadTransfer,
@@ -203,10 +205,12 @@ import {
   confessionVotes,
   confessionComments,
   confessionReports,
+  confessionViews,
   type Confession,
   type InsertConfession,
   type ConfessionVote,
   type ConfessionComment,
+  type ConfessionView,
   communities,
   communityMembers,
   communityPosts,
@@ -526,6 +530,10 @@ export interface IStorage {
   incrementPostViews(postId: string): Promise<void>;
   incrementPostShares(postId: string): Promise<void>;
   
+  // Unique post view tracking (1 view per user per 24 hours)
+  hasViewedPost(postId: string, viewerId: string): Promise<boolean>;
+  recordUniquePostView(postId: string, viewerId: string): Promise<boolean>;
+  
   // User location operations
   updateUserLocation(userId: string, latitude: string, longitude: string): Promise<User>;
   
@@ -677,6 +685,11 @@ export interface IStorage {
   rejectConfession(id: string, moderatedBy: string): Promise<Confession>;
   flagConfession(id: string): Promise<Confession>;
   autoApproveOldConfessions(): Promise<number>;
+  
+  // Unique confession view tracking (1 view per user per 24 hours)
+  hasViewedConfession(confessionId: string, viewerId: string): Promise<boolean>;
+  recordUniqueConfessionView(confessionId: string, viewerId: string): Promise<boolean>;
+  incrementConfessionViews(confessionId: string): Promise<void>;
   
   // Confession vote operations
   voteConfession(confessionId: string, voterId: string, voteType: 'like' | 'dislike'): Promise<ConfessionVote>;
@@ -845,7 +858,7 @@ export class DatabaseStorage implements IStorage {
         return;
       }
       
-      // Auto-follow the system user (new user follows @CampusPlugOfficial)
+      // Auto-follow the system user (new user follows @EKSUMarketplace)
       try {
         await this.followUser(userId, systemUserId);
         console.log(`User ${userId} now follows system user ${systemUserId}`);
@@ -854,7 +867,7 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Send welcome DM from system user
-      const welcomeMessage = "Welcome to the family! Check out 'The Plug' for campus gist and verify your account to start selling. Stay safe and only pay through the CampusPlug Wallet!";
+      const welcomeMessage = "Welcome to the family! Check out 'The Plug' for campus gist and verify your account to start selling. Stay safe and only pay through the EKSU Marketplace Wallet!";
       
       await this.createMessage({
         senderId: systemUserId,
@@ -1120,15 +1133,18 @@ export class DatabaseStorage implements IStorage {
     return product;
   }
 
-  // Unique product view tracking methods
+  // Unique product view tracking methods (1 view per user per 24 hours)
   async hasViewedProduct(productId: string, viewerId: string): Promise<boolean> {
+    // Check if viewer has viewed this product in the last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const existing = await db
       .select()
       .from(productViews)
       .where(
         and(
           eq(productViews.productId, productId),
-          eq(productViews.viewerId, viewerId)
+          eq(productViews.viewerId, viewerId),
+          gt(productViews.createdAt, twentyFourHoursAgo)
         )
       )
       .limit(1);
@@ -1143,7 +1159,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async recordUniqueProductView(productId: string, viewerId: string): Promise<boolean> {
-    // Check if this viewer has already viewed this product
+    // Check if this viewer has already viewed this product in the last 24 hours
     const hasViewed = await this.hasViewedProduct(productId, viewerId);
     
     if (!hasViewed) {
@@ -1154,7 +1170,7 @@ export class DatabaseStorage implements IStorage {
       return true; // New unique view recorded
     }
     
-    return false; // Already viewed, no increment
+    return false; // Already viewed within 24 hours, no increment
   }
 
   // Category operations
@@ -3734,6 +3750,44 @@ export class DatabaseStorage implements IStorage {
       .where(eq(socialPosts.id, postId));
   }
 
+  // Unique post view tracking methods (1 view per user per 24 hours)
+  async hasViewedPost(postId: string, viewerId: string): Promise<boolean> {
+    // Check if viewer has viewed this post in the last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const existing = await db
+      .select()
+      .from(socialPostViews)
+      .where(
+        and(
+          eq(socialPostViews.postId, postId),
+          eq(socialPostViews.viewerId, viewerId),
+          gt(socialPostViews.createdAt, twentyFourHoursAgo)
+        )
+      )
+      .limit(1);
+    return existing.length > 0;
+  }
+
+  async recordUniquePostView(postId: string, viewerId: string): Promise<boolean> {
+    // Check if this viewer has already viewed this post in the last 24 hours
+    const hasViewed = await this.hasViewedPost(postId, viewerId);
+    
+    if (!hasViewed) {
+      // Record the new view
+      await db.insert(socialPostViews).values({
+        postId,
+        viewerId,
+      });
+      // Increment the post's view counter
+      await this.incrementPostViews(postId);
+      // Update engagement score
+      await this.updatePostEngagementScore(postId);
+      return true; // New unique view recorded
+    }
+    
+    return false; // Already viewed within 24 hours, no increment
+  }
+
   async updateUserLocation(userId: string, latitude: string, longitude: string): Promise<User> {
     const [updated] = await db
       .update(users)
@@ -5069,6 +5123,49 @@ export class DatabaseStorage implements IStorage {
       }
       throw error;
     }
+  }
+
+  // Unique confession view tracking methods (1 view per user per 24 hours)
+  async hasViewedConfession(confessionId: string, viewerId: string): Promise<boolean> {
+    // Check if viewer has viewed this confession in the last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const existing = await db
+      .select()
+      .from(confessionViews)
+      .where(
+        and(
+          eq(confessionViews.confessionId, confessionId),
+          eq(confessionViews.viewerId, viewerId),
+          gt(confessionViews.createdAt, twentyFourHoursAgo)
+        )
+      )
+      .limit(1);
+    return existing.length > 0;
+  }
+
+  async incrementConfessionViews(confessionId: string): Promise<void> {
+    await db
+      .update(confessions)
+      .set({ viewsCount: sql`COALESCE(${confessions.viewsCount}, 0) + 1` })
+      .where(eq(confessions.id, confessionId));
+  }
+
+  async recordUniqueConfessionView(confessionId: string, viewerId: string): Promise<boolean> {
+    // Check if this viewer has already viewed this confession in the last 24 hours
+    const hasViewed = await this.hasViewedConfession(confessionId, viewerId);
+    
+    if (!hasViewed) {
+      // Record the new view
+      await db.insert(confessionViews).values({
+        confessionId,
+        viewerId,
+      });
+      // Increment the confession's view counter
+      await this.incrementConfessionViews(confessionId);
+      return true; // New unique view recorded
+    }
+    
+    return false; // Already viewed within 24 hours, no increment
   }
 
   // Confession vote operations

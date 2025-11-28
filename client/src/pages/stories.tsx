@@ -127,7 +127,7 @@ function StoryRing({
   );
 }
 
-function StoryViewer({
+export function StoryViewer({
   stories,
   initialStoryIndex = 0,
   onClose,

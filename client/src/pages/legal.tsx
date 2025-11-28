@@ -151,7 +151,7 @@ export default function LegalPage() {
                   <section>
                     <h3 className="font-semibold text-base mb-2">1. Acceptance of Terms</h3>
                     <p className="text-muted-foreground">
-                      By using Campuspluguni (EKSU Marketplace), you agree to these terms. 
+                      By using EKSU Marketplace, you agree to these terms. 
                       If you do not agree, please do not use our platform.
                     </p>
                   </section>
@@ -266,9 +266,9 @@ export default function LegalPage() {
               <ScrollArea className="h-[60vh] pr-4">
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="what-is">
-                    <AccordionTrigger>What is Campuspluguni?</AccordionTrigger>
+                    <AccordionTrigger>What is EKSU Marketplace?</AccordionTrigger>
                     <AccordionContent className="text-muted-foreground">
-                      Campuspluguni is a secure marketplace platform designed specifically for EKSU students. 
+                      EKSU Marketplace is a secure marketplace platform designed specifically for EKSU students. 
                       You can buy and sell items, purchase VTU data, play games, and connect with other students - 
                       all with built-in safety features like escrow and identity verification.
                     </AccordionContent>
@@ -369,7 +369,7 @@ export default function LegalPage() {
                   <section>
                     <h3 className="font-semibold text-base mb-2">Platform Role</h3>
                     <p className="text-muted-foreground">
-                      Campuspluguni (EKSU Marketplace) is a platform that connects buyers and sellers. 
+                      EKSU Marketplace is a platform that connects buyers and sellers. 
                       We do not own, manufacture, or sell any products listed on the platform. 
                       We are not responsible for the quality, safety, legality, or accuracy of listings.
                     </p>

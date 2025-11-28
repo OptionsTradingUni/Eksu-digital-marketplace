@@ -70,7 +70,7 @@ export function SafetyShieldModal({
                 Do not pay this seller directly via bank transfer
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Direct payments are risky and not protected by CampusPlug
+                Direct payments are risky and not protected by EKSU Marketplace
               </p>
             </div>
           </div>
@@ -79,7 +79,7 @@ export function SafetyShieldModal({
             <Wallet className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-medium text-sm" data-testid="text-safety-rule">
-                Only pay through the CampusPlug Wallet/Escrow
+                Only pay through the EKSU Marketplace Wallet/Escrow
               </p>
               <p className="text-sm text-muted-foreground mt-1">
                 Your money is held safely until you receive your item

@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { updateUserProfileSchema, type User, type SocialPost, type Product } from "@shared/schema";
+import { updateUserProfileSchema, type User, type SocialPost, type Product, type Story } from "@shared/schema";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -85,6 +85,7 @@ import {
 import { format } from "date-fns";
 import { LocationBadge } from "@/components/LocationBadge";
 import { useUserLocationInfo } from "@/hooks/useGeolocation";
+import { StoryViewer } from "./stories";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
@@ -257,6 +258,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState("posts");
   const [usernameInput, setUsernameInput] = useState("");
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+  const [selectedUserStories, setSelectedUserStories] = useState<(Story & { author: User; hasViewed?: boolean })[] | null>(null);
 
   const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
 
@@ -291,6 +293,20 @@ export default function Profile() {
     queryKey: ["/api/products", { sellerId: displayUserId }],
     enabled: !!displayUserId && (displayUser?.role === "seller" || displayUser?.role === "both" || displayUser?.role === "admin"),
   });
+
+  const { data: userStories } = useQuery<(Story & { author: User; hasViewed?: boolean })[]>({
+    queryKey: ["/api/stories/user", displayUserId],
+    enabled: !!displayUserId,
+  });
+
+  const hasActiveStories = userStories && userStories.length > 0;
+  const hasUnviewedStories = userStories?.some(s => !s.hasViewed) || false;
+
+  const handleAvatarClick = () => {
+    if (hasActiveStories && userStories) {
+      setSelectedUserStories(userStories);
+    }
+  };
 
   const form = useForm<UpdateProfileData>({
     resolver: zodResolver(updateUserProfileSchema),
@@ -540,6 +556,9 @@ export default function Profile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Followed",
         description: "You are now following this user",
@@ -560,6 +579,9 @@ export default function Profile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Unfollowed",
         description: "You have unfollowed this user",
@@ -835,13 +857,25 @@ export default function Profile() {
                 <motion.div
                   whileHover={{ scale: 1.02 }}
                   transition={{ type: "spring", stiffness: 300 }}
+                  onClick={hasActiveStories ? handleAvatarClick : undefined}
+                  className={hasActiveStories ? "cursor-pointer" : ""}
                 >
-                  <Avatar className={`h-28 w-28 md:h-36 md:w-36 ring-4 ring-background shadow-2xl ${isSystemAccount ? 'ring-yellow-500/50' : ''}`}>
-                    <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
-                    <AvatarFallback className={`text-3xl md:text-4xl font-bold ${isSystemAccount ? 'bg-gradient-to-br from-yellow-500/30 to-amber-400/20' : 'bg-gradient-to-br from-primary/20 to-primary/5'}`}>
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div 
+                    className={`rounded-full p-1 ${
+                      hasActiveStories 
+                        ? hasUnviewedStories 
+                          ? 'bg-gradient-to-tr from-[#16a34a] via-[#22c55e] to-[#16a34a]' 
+                          : 'bg-muted'
+                        : ''
+                    }`}
+                  >
+                    <Avatar className={`h-28 w-28 md:h-36 md:w-36 ring-4 ring-background shadow-2xl ${isSystemAccount ? 'ring-yellow-500/50' : ''}`}>
+                      <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
+                      <AvatarFallback className={`text-3xl md:text-4xl font-bold ${isSystemAccount ? 'bg-gradient-to-br from-yellow-500/30 to-amber-400/20' : 'bg-gradient-to-br from-primary/20 to-primary/5'}`}>
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
                 </motion.div>
                 {canEdit && (
                   <button
@@ -1344,7 +1378,7 @@ export default function Profile() {
                     Switch Your Role
                   </CardTitle>
                   <CardDescription>
-                    Choose how you want to use CampusPlug
+                    Choose how you want to use EKSU Marketplace
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1585,7 +1619,7 @@ export default function Profile() {
               Report User
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Help us keep Campuspluguni safe. Please tell us why you're reporting this user.
+              Help us keep EKSU Marketplace safe. Please tell us why you're reporting this user.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
@@ -1645,6 +1679,14 @@ export default function Profile() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {selectedUserStories && currentUser && (
+        <StoryViewer
+          stories={selectedUserStories}
+          onClose={() => setSelectedUserStories(null)}
+          currentUserId={currentUser.id}
+        />
+      )}
     </div>
   );
 }

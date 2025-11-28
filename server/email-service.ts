@@ -3,8 +3,8 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
 const APP_NAME = process.env.APP_NAME || 'EKSU Marketplace';
-const APP_URL = process.env.APP_URL || 'https://campusplug.com';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@campusplug.com';
+const APP_URL = process.env.APP_URL || 'https://eksu-marketplace.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@eksu-marketplace.com';
 
 interface EmailProvider {
   name: string;

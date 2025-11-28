@@ -431,8 +431,12 @@ export default function ConfessionsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/confessions"] });
       if (selectedConfessionId) refetchConfession();
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to vote", variant: "destructive" });
+    onError: (error: any) => {
+      if (error?.message?.includes("401") || error?.message?.includes("Unauthorized")) {
+        toast({ title: "Login Required", description: "Please login to vote on confessions", variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: "Failed to vote", variant: "destructive" });
+      }
     },
   });
 
@@ -451,8 +455,12 @@ export default function ConfessionsPage() {
       refetchConfession();
       queryClient.invalidateQueries({ queryKey: ["/api/confessions"] });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to add comment", variant: "destructive" });
+    onError: (error: any) => {
+      if (error?.message?.includes("401") || error?.message?.includes("Unauthorized")) {
+        toast({ title: "Login Required", description: "Please login to add comments", variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: "Failed to add comment", variant: "destructive" });
+      }
     },
   });
 
@@ -490,13 +498,21 @@ export default function ConfessionsPage() {
   });
 
   const handleVote = useCallback((id: string, type: "like" | "dislike") => {
+    if (!user) {
+      toast({ title: "Login Required", description: "Please login to vote on confessions", variant: "destructive" });
+      return;
+    }
     voteMutation.mutate({ id, voteType: type });
-  }, [voteMutation]);
+  }, [voteMutation, user, toast]);
 
   const handleComment = useCallback((id: string) => {
+    if (!user) {
+      toast({ title: "Login Required", description: "Please login to add comments", variant: "destructive" });
+      return;
+    }
     setSelectedConfessionId(id);
     setShowCommentDialog(true);
-  }, []);
+  }, [user, toast]);
 
   const handleDelete = useCallback((id: string) => {
     if (confirm("Are you sure you want to delete this confession?")) {
@@ -536,7 +552,13 @@ export default function ConfessionsPage() {
               </Button>
             </Link>
             <Button 
-              onClick={() => setShowNewDialog(true)} 
+              onClick={() => {
+                if (!user) {
+                  toast({ title: "Login Required", description: "Please login to post a confession", variant: "destructive" });
+                  return;
+                }
+                setShowNewDialog(true);
+              }} 
               className="bg-purple-600 hover:bg-purple-700"
               data-testid="button-new-confession"
             >
@@ -591,7 +613,13 @@ export default function ConfessionsPage() {
                 <h3 className="font-semibold text-foreground mb-1">No confessions yet</h3>
                 <p className="text-sm text-muted-foreground mb-4">Be the first to share something!</p>
                 <Button 
-                  onClick={() => setShowNewDialog(true)}
+                  onClick={() => {
+                    if (!user) {
+                      toast({ title: "Login Required", description: "Please login to post a confession", variant: "destructive" });
+                      return;
+                    }
+                    setShowNewDialog(true);
+                  }}
                   className="bg-purple-600 hover:bg-purple-700"
                 >
                   <Plus className="h-4 w-4 mr-1" />

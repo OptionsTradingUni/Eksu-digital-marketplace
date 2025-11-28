@@ -273,7 +273,7 @@ export default function SendSecretPage() {
                       onClick={() => window.location.href = "/"}
                       data-testid="button-create-own-link"
                     >
-                      Create your link on CampusPlug
+                      Create your link on EKSU Marketplace
                     </Button>
                   </div>
                 </CardContent>
@@ -286,7 +286,7 @@ export default function SendSecretPage() {
                 className="mt-6 text-center"
               >
                 <p className="text-xs text-zinc-500">
-                  Powered by CampusPlug Secret Messages
+                  Powered by EKSU Marketplace Secret Messages
                 </p>
               </motion.div>
             </motion.div>

@@ -1,8 +1,8 @@
 import { Resend } from 'resend';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@campusplug.com';
-const APP_NAME = process.env.APP_NAME || 'CampusPlug';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@eksu-marketplace.com';
+const APP_NAME = process.env.APP_NAME || 'EKSU Marketplace';
 
 let resend: Resend | null = null;
 
@@ -85,7 +85,7 @@ export async function sendWelcomeEmail(
               <li><strong>Earn Rewards:</strong> Refer friends and earn bonus credits</li>
             </ul>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Start Exploring</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Start Exploring</a>
             </div>
             <p style="color: #666; font-size: 14px;">Need help? Reply to this email or visit our support page.</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
@@ -187,7 +187,7 @@ export async function sendOrderConfirmationEmail(
             </p>
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}/messages" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Contact Seller</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}/messages" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Contact Seller</a>
             </div>
 
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
@@ -282,13 +282,13 @@ export async function sendVerificationStatusEmail(
               You can resubmit your verification documents after addressing the issues mentioned above.
             </p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}/kyc" style="display: inline-block; background: ${config.gradient}; color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Resubmit Documents</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}/kyc" style="display: inline-block; background: ${config.gradient}; color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">Resubmit Documents</a>
             </div>
             ` : ''}
             
             ${status === 'approved' ? `
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}/profile" style="display: inline-block; background: ${config.gradient}; color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">View Your Profile</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}/profile" style="display: inline-block; background: ${config.gradient}; color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">View Your Profile</a>
             </div>
             ` : ''}
 
@@ -356,13 +356,13 @@ export async function sendNewMessageNotification(
             </p>
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}/messages" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">View Message</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}/messages" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; font-size: 16px;">View Message</a>
             </div>
 
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
             <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
               You're receiving this because you have email notifications enabled.<br>
-              <a href="${process.env.APP_URL || 'https://campusplug.com'}/settings" style="color: #3b82f6; text-decoration: none;">Manage notification preferences</a>
+              <a href="${process.env.APP_URL || 'https://eksu-marketplace.com'}/settings" style="color: #3b82f6; text-decoration: none;">Manage notification preferences</a>
             </p>
             <p style="color: #999; font-size: 12px; text-align: center; margin: 10px 0 0 0;">
               © ${new Date().getFullYear()} ${APP_NAME}. All rights reserved.

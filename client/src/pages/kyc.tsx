@@ -499,7 +499,7 @@ export default function KycPage() {
                       <div className="space-y-1 leading-none">
                         <FormLabel>I consent to verification</FormLabel>
                         <FormDescription>
-                          I allow Campuspluguni to compare my selfie with my NIN photo for 
+                          I allow EKSU Marketplace to compare my selfie with my NIN photo for 
                           one-time verification. Both images will be deleted immediately after verification.
                         </FormDescription>
                       </div>

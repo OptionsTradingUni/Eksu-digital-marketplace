@@ -1686,6 +1686,19 @@ export const feedEngagementScores = pgTable("feed_engagement_scores", {
   index("idx_engagement_score").on(table.engagementScore),
 ]);
 
+// Social post views tracking for unique view counts (1 view per user per 24 hours)
+export const socialPostViews = pgTable("social_post_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  viewerId: varchar("viewer_id").notNull(), // User ID for logged-in users, or hashed IP+session for guests
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("social_post_views_post_viewer_idx").on(table.postId, table.viewerId),
+  index("social_post_views_post_idx").on(table.postId),
+]);
+
+export type SocialPostView = typeof socialPostViews.$inferSelect;
+
 // Insert schemas for social posts
 export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({
   id: true,
@@ -2552,7 +2565,7 @@ export const confessions = pgTable("confessions", {
 export const confessionVotes = pgTable("confession_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   confessionId: varchar("confession_id").notNull().references(() => confessions.id, { onDelete: "cascade" }),
-  voterId: varchar("voter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  voterId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   voteType: varchar("vote_type", { length: 10 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -2582,6 +2595,19 @@ export const confessionReports = pgTable("confession_reports", {
   status: varchar("status", { length: 20 }).default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Confession views tracking for unique view counts (1 view per user per 24 hours)
+export const confessionViews = pgTable("confession_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  confessionId: varchar("confession_id").notNull().references(() => confessions.id, { onDelete: "cascade" }),
+  viewerId: varchar("viewer_id").notNull(), // User ID for logged-in users, or hashed IP+session for guests
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("confession_views_confession_viewer_idx").on(table.confessionId, table.viewerId),
+  index("confession_views_confession_idx").on(table.confessionId),
+]);
+
+export type ConfessionView = typeof confessionViews.$inferSelect;
 
 export const insertConfessionSchema = createInsertSchema(confessions).omit({
   id: true,

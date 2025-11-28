@@ -123,9 +123,11 @@ export default function ProductView() {
       return await apiRequest("POST", `/api/users/${product?.sellerId}/follow`, {});
     },
     onSuccess: () => {
-      // Invalidate follow stats and product query to refresh follower counts
       queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "followers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Followed",
         description: "You are now following this seller",
@@ -145,9 +147,11 @@ export default function ProductView() {
       return await apiRequest("DELETE", `/api/users/${product?.sellerId}/follow`, {});
     },
     onSuccess: () => {
-      // Invalidate follow stats and product query to refresh follower counts
       queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", product?.sellerId, "followers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Unfollowed",
         description: "You have unfollowed this seller",

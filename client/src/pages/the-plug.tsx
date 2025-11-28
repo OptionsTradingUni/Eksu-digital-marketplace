@@ -374,6 +374,9 @@ export default function ThePlugPage() {
       }
       setOptimisticFollows(new Map());
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", data.userId, "follow-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", data.userId, "followers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
     },
     onError: (error: any, { userId }) => {
       setOptimisticFollows(prev => {
