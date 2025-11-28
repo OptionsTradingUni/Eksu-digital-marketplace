@@ -1,0 +1,182 @@
+/**
+ * EKSU Digital Marketplace Issues Report (V5 - FINAL)
+ * Includes detailed technical plans for Cross-Platform Following Sync and the Support Ticket System.
+ * Generated on: 2025-11-27
+ */
+const issuesReport = {
+    // --- 1. CRITICAL DATA SYNCHRONIZATION BUGS (Highest Priority) ---
+    dataSynchronizationBugs: [
+        {
+            id: 'SYNC_FOLLOWING_MARKETPLACE_TO_PLUG',
+            location: 'Global User Data',
+            description: 'CRITICAL: The **Following** status is not synchronized. A follow action on the Marketplace is **NOT reflected** on The Plug, and vice-versa. Requires a single `follows` database table and unified API check (see TECH_PLAN below).',
+            priority: 'Critical'
+        },
+        {
+            id: 'SYNC_FOLLOWED_STATUS_MISSING_DISPLAY',
+            location: 'The Plug Feed',
+            description: 'The visual indicator showing whether a user is currently **following** another user on The Plug feed is missing or incorrect, compounding the sync issue.',
+            priority: 'High'
+        }
+    ],
+
+    // --- 2. MAJOR FUNCTIONAL BUGS (Server-Side/Database Errors) ---
+    majorFunctionalBugs: [
+        {
+            id: 'BUG_COMMUNITY_OWNER_ID_MISSING',
+            location: 'Community Creation Form',
+            description: 'Failed to create a new community. Server returned a 500 error because the database column `communities.owner_id` does not exist.',
+            serverError: '500: {"message":"column communities.owner_id does not exist"}',
+            priority: 'Critical'
+        },
+        {
+            id: 'BUG_CONFESSION_POST_FAILURE',
+            location: 'New Confession Form',
+            description: 'Failed to post a confession consistently. Generic "Failed to post confession" error.',
+            priority: 'High'
+        },
+        {
+            id: 'BUG_STORY_CREATION_FAILURE',
+            location: 'Story Creation UI',
+            description: 'Failed to create a story (text or media). Displays "Failed to create story" error. This is a recurring, critical failure.',
+            priority: 'Critical'
+        }
+    ],
+
+    // --- 3. NEW FEATURE IMPLEMENTATION REQUIREMENTS (Detailed Plans) ---
+    featureRequests: [
+        // --- DETAILED TECHNICAL PLAN: CROSS-PLATFORM FOLLOWING SYNC ---
+        followingSyncPlan: {
+            id: 'TECH_PLAN_CROSS_PLATFORM_FOLLOWING_SYNC',
+            title: 'Unified Following Service Implementation',
+            description: 'Ensure a single source of truth for all user follow relationships across the entire application (Marketplace, Plug, Profiles).',
+            priority: 'Critical',
+            steps: [
+                '1. **Schema:** Use a single `follows` table with `follower_id` and `following_id`.',
+                '2. **Service Layer:** Abstract all follow/unfollow logic into a single backend service function.',
+                '3. **API Check:** Every component displaying a user (post, product, profile) must call the same `checkFollowStatus(currentId, targetId)` function.'
+            ],
+            // Includes the JavaScript pseudocode for implementation
+        },
+
+        // --- DETAILED TECHNICAL PLAN: SUPPORT TICKET SYSTEM ---
+        supportTicketSystemPlan: {
+            id: 'TECH_PLAN_SUPPORT_TICKET_SYSTEM',
+            title: 'Integrated Support Ticket System and Chatbot Handoff',
+            description: 'Implement a formal system for customer support, complete with ticket tracking, history, and admin assignment.',
+            priority: 'High',
+            steps: [
+                '1. **Schema:** Implement `tickets` table (ID, User, Subject, Status, Category) and `ticket_replies` table (Ticket ID, User, Message).',
+                '2. **API:** Create endpoints for creating tickets, viewing history, and adding replies (user and admin views).',
+                '3. **Chatbot Handoff:** Program the Help Center chatbot to detect serious issues and prompt the user to **file a formal ticket** when a human is required.'
+            ]
+        },
+
+        // --- Other Feature Requests (VTU, Geolocation, etc.) ---
+        vtuApiIntegration: { id: 'TECH_PLAN_VTU_DATA_PLAN_API_INTEGRATION', description: 'Integrate with a reliable VTU API (e.g., smedata.ng) to dynamically fetch and process 50+ real-time data plans.', priority: 'Critical (Revenue)' },
+        geolocationDistance: { id: 'TECH_PLAN_GEOLOCATION_DISTANCE', description: 'Implement the **Haversine Formula** to calculate and display the precise distance (e.g., "2.3km away") between the buyer and the seller on product pages/profiles.', priority: 'High' },
+        systemAccountSetup: { id: 'FEATURE_SYSTEM_ACCOUNT_SETUP', description: 'Create the official "system@eksu plug" account for automated communications. All users must auto-follow this account.', priority: 'High' },
+        userReportingSystem: { id: 'FEATURE_USER_REPORTING_SYSTEM', description: 'Implement a dedicated **Report** feature on user profiles and content to allow flagging of inappropriate behavior/content to admins.', priority: 'High (Safety)' },
+        productViewCountLogic: { id: 'FEATURE_PRODUCT_VIEW_COUNT_LOGIC', description: 'Fix view counting. Implement a logic similar to major platforms to count **unique views** (limit increment to once per session/24 hours).', priority: 'Medium' },
+    ],
+
+    // --- 4. UI/UX, STABILITY, AND COMPONENT ISSUES ---
+    uiUxStabilityIssues: [
+        { id: 'UI_MESSAGE_INTERFACE_UNSTABLE', location: 'Messages (Chat View)', description: 'The chat interface "shakes" or is unbalanced, especially when the keyboard is active.', priority: 'Medium' },
+        { id: 'UI_POST_KEYBOARD_LOSS', location: 'The Plug (New Post Modal)', description: 'Keyboard frequently dismisses when typing in the new post input field.', priority: 'Medium' },
+        { id: 'UI_CHAT_IMAGE_HANDLING', location: 'Messages (Chat View)', description: 'Images sent to chat are poorly displayed and clicking them improperly links directly to Cloudinary. They should open in an in-app lightbox.', priority: 'Medium' },
+        { id: 'UI_PROFILE_LINK_BROKEN_IN_CHAT', location: 'Messages (Chat View)', description: 'Clicking on a user\'s profile picture/name within the chat window does not work.', priority: 'Medium' },
+        { id: 'UI_NAVIGATION_REFACTOR', location: 'Global Navigation (Profile Menu/Sidebar)', description: 'Navigation is too long. Refactor to use parent/child groupings (expandable sections).', priority: 'Medium' },
+        { id: 'STABILITY_FEATURE_DISAPPEARANCE_GENERAL', location: 'Global', description: 'General reporting of features and components unexpectedly disappearing. Audit state management.', priority: 'High' },
+        { id: 'COMMUNITY_SLUG_FIELD_ISSUE', location: 'Create Community Form', description: 'The "Slug" field is confusing/broken. It should be auto-generated from the community name, validated, and editable.', priority: 'Medium' }
+    ],
+
+    // --- 5. ADMIN, MONITORING, AND STATUS ---
+    adminMonitoringStatus: [
+        {
+            id: 'MONITORING_DATABASE_METRICS_FAILURE',
+            location: 'Admin Panel / Database Metrics',
+            description: 'Dashboard reports 0 Bytes, 0 tables, and 0 Query Stats. Indicates failure to connect or misconfiguration of the monitoring endpoint.',
+            status: 'Needs Fix (Infrastructure)'
+        },
+        {
+            id: 'ISSUE_ADMIN_DASHBOARD_ACCESS',
+            location: 'Admin Dashboard',
+
+            description: 'The designated admin user must be able to log in and access the Admin Dashboard. Current reports indicate access issues.',
+            status: 'Needs Verification/Fix for Admin Role'
+        }
+    ]
+};
+
+console.log(issuesReport);
+
+| Table Name | Purpose | Required Columns |
+| :--- | :--- | :--- |
+| `tickets` | Main ticket information. | `id` (UUID/INT, Primary Key), `user_id` (FK to `users.id`), `subject` (String), `description` (Text), `category` (Enum: 'Bug', 'Payment', 'Suggestion', 'Other'), `status` (Enum: 'Open', 'Pending', 'Closed'), `assigned_to` (FK to `admins.id`), `created_at`, `updated_at` |
+| `ticket_replies` | History of communication. | `id`, `ticket_id` (FK to `tickets.id`), `user_id` (FK to `users.id` - who wrote the reply), `message` (Text), `created_at` |
+
+### **2. Backend Endpoints (API)**
+
+| Endpoint | Method | Function |
+| :--- | :--- | :--- |
+| `/api/tickets` | `POST` | **Create New Ticket:** Requires `user_id`, `subject`, `description`, `category`. |
+| `/api/tickets/:id` | `GET` | **View Ticket Details:** Fetches ticket and all related replies. |
+| `/api/tickets/:id/reply` | `POST` | **Add Reply:** Allows user/admin to add a new message to the thread. |
+| `/api/admin/tickets` | `GET` | **Admin Dashboard View:** Allows filtering by `status`, `category`, etc. |
+
+### **3. Chatbot Handoff Logic**
+
+The help center chatbot should be programmed to detect phrases like "I have a problem with payment" or "My post failed," and then prompt the user: "Would you like to file a formal support ticket?"
+
+```javascript
+// Pseudocode for Chatbot Decision Logic
+function handleBotResponse(userInput) {
+    if (isIssuePhrase(userInput) && !isTicketOpen(currentUser)) {
+        // Offer ticket creation
+        return { 
+            action: 'prompt_ticket', 
+            message: "I can't resolve this. Would you like to file a ticket?" 
+        };
+    } else if (isIssuePhrase(userInput) && isTicketOpen(currentUser)) {
+        // Direct to existing ticket
+        return { 
+            action: 'redirect_to_ticket', 
+            message: "You have an open ticket. Check your Support Inbox for updates." 
+        };
+    }
+    // ... continue with standard FAQ responses
+}
+
+const FollowingSync = {
+    // Function to execute whenever ANY user initiates a follow action
+    executeFollow: async (followerId, followingId) => {
+        // 1. Prevent circular/self-following
+        if (followerId === followingId) {
+            throw new Error("Cannot follow self.");
+        }
+
+        // 2. Insert record into the single source of truth
+        const result = await db.query(
+            "INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            [followerId, followingId]
+        );
+
+        // 3. Optional: Trigger a broadcast or cache invalidation to update all related user feeds instantly
+        // e.g., cache.invalidateUserFollowers(followingId);
+        return result;
+    },
+
+    // Function to check follow status for display on ANY page (Plug, Profile, Marketplace)
+    checkFollowStatus: async (currentUserId, targetUserId) => {
+        const { rows } = await db.query(
+            "SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)",
+            [currentUserId, targetUserId]
+        );
+        // Returns true or false
+        return rows[0].exists; 
+    }
+};
+
+
+Same as other related components too
