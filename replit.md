@@ -200,6 +200,30 @@ The marketplace employs a modern full-stack architecture focusing on performance
 - Distance from campus field
 - Database-level bedroom filtering with >= support for "4+" option
 
+### Game Library Feature (November 28, 2024)
+- **15+ multiplayer betting games** integrated into the platform
+- **Game Categories:**
+  - Traditional Nigerian: Ludo, Whot, Ayo Olopon
+  - Reaction Games: Quick Draw, Rock Paper Scissors
+  - Casino-style: Aviator, Colour Colour, Spin Wheel, Dice Duel
+  - Board Games: Draughts (10x10), Chess Blitz (3/5 min)
+  - Skill Games: Trivia Quiz, Typing Race, Price Guess, Memory Match, Number Puzzle
+- **Game Modes:**
+  - Practice: Free play, no stakes
+  - Challenge AI: Play against AI with wallet-based betting
+- **Key Features:**
+  - Wallet integration with 5% platform fee
+  - Secure random number generation (crypto.getRandomValues)
+  - Real-time WebSocket support for multiplayer
+  - Consistent UI with Shadcn components
+- **Game Components:** Located in `client/src/components/games/`
+  - DraughtsGame.tsx: 10x10 board, flying kings, mandatory capture, multi-jump
+  - ChessBlitzGame.tsx: Full chess rules, en passant, castling, timed games
+  - AviatorGame.tsx: Crash-style betting game with multiplier
+  - DiceDuelGame.tsx: Dice rolling with AI opponent
+  - Plus shared infrastructure for all game types
+- **Database Schema:** games, game_matches tables for tracking results
+
 ## Known Configuration Issues
 
 ### Email Service (Resend)
