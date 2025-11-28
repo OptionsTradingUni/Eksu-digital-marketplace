@@ -259,6 +259,16 @@ export default function Profile() {
   const [usernameInput, setUsernameInput] = useState("");
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const [selectedUserStories, setSelectedUserStories] = useState<(Story & { author: User; hasViewed?: boolean })[] | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState({
+    social: true,
+    services: true,
+    account: true
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
 
@@ -829,6 +839,16 @@ export default function Profile() {
                   <Camera className="h-6 w-6" />
                 </div>
               </button>
+            </>
+          )}
+          
+          {!canEdit && coverPhoto && (
+            <button
+              type="button"
+              onClick={() => setLightboxImage(coverPhoto)}
+              className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-colors"
+              data-testid="button-view-cover"
+            />
               <input
                 ref={coverInputRef}
                 type="file"
