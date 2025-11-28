@@ -1045,20 +1045,9 @@ Happy trading!`;
     }
   });
 
-  app.post('/api/wallet/deposit', isAuthenticated, async (req: any, res) => {
+  app.post('/api/wallet/deposit', isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
-      // Enforce email verification for financial transactions
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
-      }
-      
       const { amount } = req.body;
 
       if (!amount || parseFloat(amount) < 100) {
@@ -1085,20 +1074,9 @@ Happy trading!`;
     }
   });
 
-  app.post('/api/wallet/withdraw', isAuthenticated, async (req: any, res) => {
+  app.post('/api/wallet/withdraw', isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
-      // Enforce email verification for financial transactions
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
-      }
-      
       const { amount, bankName, accountNumber, accountName } = req.body;
 
       if (!amount || parseFloat(amount) < 500) {
@@ -1591,19 +1569,9 @@ Happy trading!`;
   // ==================== NEGOTIATION ROUTES ====================
 
   // Submit a price offer on a product
-  app.post('/api/negotiations', isAuthenticated, async (req: any, res) => {
+  app.post('/api/negotiations', isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = req.user.id;
-
-      // Enforce email verification for making offers
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
-      }
 
       const { productId, offerPrice, message } = req.body;
 
@@ -3468,21 +3436,11 @@ Happy trading!`;
     }
   });
 
-  app.post("/api/messages", isAuthenticated, async (req: any, res) => {
+  app.post("/api/messages", isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Enforce email verification for sending messages
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
       }
 
       const validated = insertMessageSchema.parse({
@@ -3538,21 +3496,11 @@ Happy trading!`;
   });
 
   // Message with image attachment route
-  app.post("/api/messages/with-attachment", isAuthenticated, upload.single("attachment"), async (req: any, res) => {
+  app.post("/api/messages/with-attachment", isAuthenticated, requireEmailVerified, upload.single("attachment"), async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Enforce email verification for sending messages
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
       }
 
       let imageUrl: string | null = null;
@@ -4412,21 +4360,11 @@ Happy trading!`;
   });
 
   // Create a new social post (supports images and videos)
-  app.post("/api/social-posts", isAuthenticated, uploadMedia.array("media", 10), async (req: any, res) => {
+  app.post("/api/social-posts", isAuthenticated, requireEmailVerified, uploadMedia.array("media", 10), async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Enforce email verification for posting in The Plug
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
       }
 
       const { content } = req.body;
@@ -4524,21 +4462,11 @@ Happy trading!`;
   });
 
   // Add a comment to a post
-  app.post("/api/social-posts/:id/comments", isAuthenticated, async (req: any, res) => {
+  app.post("/api/social-posts/:id/comments", isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Enforce email verification for commenting
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
       }
 
       const postId = req.params.id;
@@ -6797,21 +6725,11 @@ Happy trading!`;
   };
 
   // Create a new order
-  app.post("/api/orders", isAuthenticated, async (req: any, res) => {
+  app.post("/api/orders", isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Enforce email verification for placing orders
-      const emailCheck = await checkEmailVerified(userId);
-      if (!emailCheck.verified) {
-        return res.status(403).json({ 
-          message: emailCheck.message,
-          code: "EMAIL_NOT_VERIFIED",
-          action: "verify_email"
-        });
       }
 
       const validationResult = createOrderSchema.safeParse(req.body);

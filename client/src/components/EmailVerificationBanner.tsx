@@ -1,18 +1,48 @@
 import { AlertCircle, Mail, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+const BANNER_DISMISS_KEY = "eksu_email_verify_dismissed";
+const BANNER_DISMISS_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
 
 interface EmailVerificationBannerProps {
   email?: string;
   onDismiss?: () => void;
 }
 
+function isDismissedInStorage(): boolean {
+  try {
+    const dismissed = localStorage.getItem(BANNER_DISMISS_KEY);
+    if (!dismissed) return false;
+    
+    const dismissedAt = parseInt(dismissed, 10);
+    const now = Date.now();
+    
+    // Check if dismissal has expired (24 hours)
+    if (now - dismissedAt > BANNER_DISMISS_DURATION) {
+      localStorage.removeItem(BANNER_DISMISS_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setDismissedInStorage(): void {
+  try {
+    localStorage.setItem(BANNER_DISMISS_KEY, Date.now().toString());
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationBannerProps) {
   const [isResending, setIsResending] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
 
   const handleResendVerification = async () => {
@@ -35,6 +65,7 @@ export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationB
   };
 
   const handleDismiss = () => {
+    setDismissedInStorage();
     setIsDismissed(true);
     onDismiss?.();
   };
