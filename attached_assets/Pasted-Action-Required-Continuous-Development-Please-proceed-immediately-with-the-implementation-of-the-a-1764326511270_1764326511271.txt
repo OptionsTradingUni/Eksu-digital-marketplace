@@ -1,0 +1,37 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+
+1. I want you to work on the sign up option, I've set my resend Gmail user and password , when users sign up they get verification code or link to verify their account, there should be a way to verify if email address is correct or right, also password security low medium high strong, if it's low it won't work 
+2. When a new user joins, he or she is messaged by the official account and the user always automatically follow that account he or she can unfollow later if he or she wants tho 
+3. Check on campus updates announcements and see what we can do to that 
+4. When there's a notification maybe a new message, any notification important ones, it get sent to the buyer or seller or user email account 
+5. Improve on site security and give more suggestions and add more features ur es 
+6. VTU plan is using plan that is written or coded it's not using SME data api to generate them please work on it it's not functional at all 
+Test it 
+7. I don't know why I keep getting this Checkout Failed
+500: {"message":"Squad API error: Unknown error"}
+8. Improve error message don't show things that should be shown only to the developer to other users too and send every error to Gmail in a good manner or format 
+
+Improve on other features deeply 
+
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.

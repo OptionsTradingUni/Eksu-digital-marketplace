@@ -28,6 +28,181 @@ const getSquadBaseUrl = (): string => {
 
 const SQUAD_BASE_URL = getSquadBaseUrl();
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 10000;
+
+// Error types for better categorization
+export enum SquadErrorType {
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  TIMEOUT = 'TIMEOUT',
+  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  INVALID_REQUEST = 'INVALID_REQUEST',
+  INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS',
+  RATE_LIMITED = 'RATE_LIMITED',
+  SERVER_ERROR = 'SERVER_ERROR',
+  UNKNOWN = 'UNKNOWN',
+}
+
+// Custom error class for Squad API errors
+export class SquadApiError extends Error {
+  public readonly type: SquadErrorType;
+  public readonly statusCode: number;
+  public readonly rawError: any;
+  public readonly userMessage: string;
+  public readonly isRetryable: boolean;
+
+  constructor(
+    message: string,
+    type: SquadErrorType,
+    statusCode: number,
+    rawError?: any,
+    userMessage?: string
+  ) {
+    super(message);
+    this.name = 'SquadApiError';
+    this.type = type;
+    this.statusCode = statusCode;
+    this.rawError = rawError;
+    this.userMessage = userMessage || getDefaultUserMessage(type);
+    this.isRetryable = isRetryableError(type, statusCode);
+  }
+}
+
+// Get user-friendly error message based on error type
+function getDefaultUserMessage(type: SquadErrorType): string {
+  switch (type) {
+    case SquadErrorType.NETWORK_ERROR:
+      return 'Unable to connect to payment service. Please check your internet connection and try again.';
+    case SquadErrorType.TIMEOUT:
+      return 'Payment request timed out. Please try again.';
+    case SquadErrorType.INVALID_CREDENTIALS:
+      return 'Payment service configuration error. Please contact support.';
+    case SquadErrorType.INVALID_REQUEST:
+      return 'Invalid payment details. Please check and try again.';
+    case SquadErrorType.INSUFFICIENT_FUNDS:
+      return 'Payment could not be processed due to insufficient funds.';
+    case SquadErrorType.RATE_LIMITED:
+      return 'Too many payment requests. Please wait a moment and try again.';
+    case SquadErrorType.SERVER_ERROR:
+      return 'Payment service is temporarily unavailable. Please try again later.';
+    default:
+      return 'An error occurred processing your payment. Please try again or contact support.';
+  }
+}
+
+// Determine if an error is retryable
+function isRetryableError(type: SquadErrorType, statusCode: number): boolean {
+  // Retry on network errors, timeouts, rate limiting, and 5xx server errors
+  if (type === SquadErrorType.NETWORK_ERROR || 
+      type === SquadErrorType.TIMEOUT ||
+      type === SquadErrorType.RATE_LIMITED ||
+      type === SquadErrorType.SERVER_ERROR) {
+    return true;
+  }
+  // Also retry on 502, 503, 504 status codes
+  if (statusCode >= 500 && statusCode < 600) {
+    return true;
+  }
+  return false;
+}
+
+// Parse error response from Squad API
+function parseSquadError(response: Response, data: any): { type: SquadErrorType; message: string; userMessage?: string } {
+  const status = response.status;
+  const errorMessage = data?.message || data?.error || data?.error_message || '';
+  const errorCode = data?.error_code || data?.code || '';
+  
+  // Log full error details for debugging
+  console.error(`[Squad API] Full error response:`, {
+    status,
+    statusText: response.statusText,
+    errorMessage,
+    errorCode,
+    data: JSON.stringify(data, null, 2),
+  });
+
+  // Categorize based on status code
+  if (status === 401 || status === 403) {
+    return {
+      type: SquadErrorType.INVALID_CREDENTIALS,
+      message: `Authentication failed: ${errorMessage}`,
+      userMessage: 'Payment service authentication failed. Please contact support.',
+    };
+  }
+
+  if (status === 400) {
+    // Parse specific validation errors
+    let details = errorMessage;
+    if (data?.errors && typeof data.errors === 'object') {
+      const errorDetails = Object.entries(data.errors)
+        .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+        .join('; ');
+      details = errorDetails || errorMessage;
+    }
+    return {
+      type: SquadErrorType.INVALID_REQUEST,
+      message: `Invalid request: ${details}`,
+      userMessage: parseValidationError(data),
+    };
+  }
+
+  if (status === 402 || errorMessage.toLowerCase().includes('insufficient')) {
+    return {
+      type: SquadErrorType.INSUFFICIENT_FUNDS,
+      message: `Insufficient funds: ${errorMessage}`,
+    };
+  }
+
+  if (status === 429) {
+    return {
+      type: SquadErrorType.RATE_LIMITED,
+      message: 'Rate limited by Squad API',
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      type: SquadErrorType.SERVER_ERROR,
+      message: `Squad server error (${status}): ${errorMessage}`,
+    };
+  }
+
+  return {
+    type: SquadErrorType.UNKNOWN,
+    message: errorMessage || `HTTP ${status}: ${response.statusText}`,
+  };
+}
+
+// Parse validation errors into user-friendly messages
+function parseValidationError(data: any): string {
+  if (data?.errors) {
+    if (data.errors.email) return 'Please provide a valid email address.';
+    if (data.errors.amount) return 'The payment amount is invalid.';
+    if (data.errors.phone || data.errors.mobile_num) return 'Please provide a valid phone number.';
+  }
+  if (data?.message?.toLowerCase().includes('email')) {
+    return 'Please provide a valid email address.';
+  }
+  if (data?.message?.toLowerCase().includes('amount')) {
+    return 'The payment amount is invalid. Please check and try again.';
+  }
+  return 'Please check your payment details and try again.';
+}
+
+// Sleep function for retry delays
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Calculate exponential backoff delay
+function getRetryDelay(attempt: number): number {
+  const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 0.3 * delay; // Add 0-30% jitter
+  return Math.min(delay + jitter, MAX_RETRY_DELAY_MS);
+}
+
 export interface SquadCredentials {
   secretKey: string;
   publicKey: string;
@@ -38,45 +213,119 @@ function getCredentials(): SquadCredentials {
   const publicKey = process.env.SQUAD_PUBLIC_KEY;
 
   if (!secretKey || !publicKey) {
-    throw new Error('Squad credentials not configured. Please set SQUAD_SECRET_KEY and SQUAD_PUBLIC_KEY environment variables.');
+    throw new SquadApiError(
+      'Squad credentials not configured',
+      SquadErrorType.INVALID_CREDENTIALS,
+      500,
+      null,
+      'Payment service is not configured. Please contact support.'
+    );
   }
 
   return { secretKey, publicKey };
 }
 
 /**
- * Make authenticated API request to Squad
+ * Make authenticated API request to Squad with retry logic
  */
 async function squadRequest<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
-  body?: any
+  body?: any,
+  retryCount: number = 0
 ): Promise<T> {
   const { secretKey } = getCredentials();
   const baseUrl = getSquadBaseUrl();
+  const requestId = crypto.randomBytes(4).toString('hex');
 
-  console.log(`[Squad API] ${method} ${baseUrl}${endpoint}`);
+  console.log(`[Squad API] [${requestId}] ${method} ${baseUrl}${endpoint} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
 
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    method,
-    headers: {
-      'Authorization': `Bearer ${secretKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-  const data = await response.json();
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      method,
+      headers: {
+        'Authorization': `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
 
-  console.log(`[Squad API] Response status: ${response.status}, success: ${data.success}`);
+    clearTimeout(timeoutId);
 
-  if (!response.ok || !data.success) {
-    const errorMessage = data.message || data.error || data.error_message || 'Unknown error';
-    console.error(`[Squad API] Error: ${errorMessage}`, JSON.stringify(data, null, 2));
-    throw new Error(`Squad API error: ${errorMessage}`);
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      console.error(`[Squad API] [${requestId}] Failed to parse response:`, parseError);
+      throw new SquadApiError(
+        'Invalid response from payment service',
+        SquadErrorType.SERVER_ERROR,
+        response.status
+      );
+    }
+
+    console.log(`[Squad API] [${requestId}] Response status: ${response.status}, success: ${data.success}`);
+
+    if (!response.ok || !data.success) {
+      const { type, message, userMessage } = parseSquadError(response, data);
+      const error = new SquadApiError(message, type, response.status, data, userMessage);
+      
+      // Retry if error is retryable and we haven't exceeded max retries
+      if (error.isRetryable && retryCount < MAX_RETRIES - 1) {
+        const delay = getRetryDelay(retryCount);
+        console.log(`[Squad API] [${requestId}] Retryable error, waiting ${delay}ms before retry...`);
+        await sleep(delay);
+        return squadRequest<T>(endpoint, method, body, retryCount + 1);
+      }
+      
+      throw error;
+    }
+
+    return data.data as T;
+  } catch (error: any) {
+    // Handle fetch errors (network, timeout, etc.)
+    if (error instanceof SquadApiError) {
+      throw error;
+    }
+
+    if (error.name === 'AbortError') {
+      const squadError = new SquadApiError(
+        'Request timed out',
+        SquadErrorType.TIMEOUT,
+        0
+      );
+      
+      if (squadError.isRetryable && retryCount < MAX_RETRIES - 1) {
+        const delay = getRetryDelay(retryCount);
+        console.log(`[Squad API] [${requestId}] Timeout, waiting ${delay}ms before retry...`);
+        await sleep(delay);
+        return squadRequest<T>(endpoint, method, body, retryCount + 1);
+      }
+      
+      throw squadError;
+    }
+
+    // Network error
+    const networkError = new SquadApiError(
+      `Network error: ${error.message}`,
+      SquadErrorType.NETWORK_ERROR,
+      0,
+      error
+    );
+
+    if (networkError.isRetryable && retryCount < MAX_RETRIES - 1) {
+      const delay = getRetryDelay(retryCount);
+      console.log(`[Squad API] [${requestId}] Network error, waiting ${delay}ms before retry...`);
+      await sleep(delay);
+      return squadRequest<T>(endpoint, method, body, retryCount + 1);
+    }
+
+    throw networkError;
   }
-
-  return data.data as T;
 }
 
 export interface InitializePaymentRequest {

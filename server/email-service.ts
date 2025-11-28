@@ -428,3 +428,159 @@ export async function sendPasswordReset(email: string, resetLink: string): Promi
   `;
   return sendEmail(email, 'Reset Your Password', getBaseTemplate('Password Reset', content));
 }
+
+export async function sendEmailVerificationCode(
+  email: string, 
+  firstName: string, 
+  verificationCode: string, 
+  verificationLink: string
+): Promise<EmailResult> {
+  const content = `
+    <p style="font-size: 18px; margin-top: 0;">Hey ${firstName}, verify your email</p>
+    <p>Thanks for signing up! Please verify your email address to complete your registration and unlock all features.</p>
+    
+    <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 30px; border-radius: 12px; margin: 25px 0; text-align: center; border: 2px dashed #16a34a;">
+      <p style="font-size: 14px; color: #166534; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">Your Verification Code</p>
+      <p style="font-size: 36px; font-weight: bold; color: #15803d; margin: 0; letter-spacing: 8px; font-family: monospace;">${verificationCode}</p>
+      <p style="font-size: 12px; color: #166534; margin: 15px 0 0 0;">Code expires in 24 hours</p>
+    </div>
+    
+    <p style="text-align: center; color: #666;">Or click the button below to verify instantly:</p>
+    
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${verificationLink}" style="display: inline-block; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-weight: bold; font-size: 16px;">Verify Email Address</a>
+    </div>
+    
+    <div style="background: #fefce8; padding: 15px; border-radius: 8px; margin-top: 20px;">
+      <p style="margin: 0; font-size: 13px; color: #854d0e;">
+        <strong>Security tip:</strong> If you didn't create an account on ${APP_NAME}, please ignore this email. Someone may have entered your email by mistake.
+      </p>
+    </div>
+  `;
+  return sendEmail(email, `Verify your email - ${APP_NAME}`, getBaseTemplate('Verify Your Email', content));
+}
+
+// Admin email address for error reports
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@eksu-marketplace.com';
+
+/**
+ * Send error report to admin Gmail
+ * This function is used to notify administrators about critical errors
+ */
+export async function sendErrorReportToAdmin(
+  errorTitle: string,
+  errorMessage: string,
+  details?: Record<string, any>
+): Promise<EmailResult> {
+  const timestamp = new Date().toISOString();
+  
+  // Format details for display
+  let detailsHtml = '';
+  if (details) {
+    const sanitizedDetails = { ...details };
+    // Remove sensitive information
+    delete sanitizedDetails.password;
+    delete sanitizedDetails.token;
+    delete sanitizedDetails.apiKey;
+    delete sanitizedDetails.secretKey;
+    
+    detailsHtml = `
+      <div style="background: #1e1e1e; padding: 15px; border-radius: 8px; margin: 15px 0; overflow-x: auto;">
+        <pre style="color: #d4d4d4; font-family: 'Monaco', 'Consolas', monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; margin: 0;">${JSON.stringify(sanitizedDetails, null, 2)}</pre>
+      </div>
+    `;
+  }
+  
+  const content = `
+    <div style="background: #fef2f2; border: 2px solid #ef4444; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+      <h2 style="color: #dc2626; margin: 0 0 10px 0; font-size: 20px;">⚠️ Error Report: ${errorTitle}</h2>
+      <p style="color: #7f1d1d; margin: 0;">An error occurred in the ${APP_NAME} application</p>
+    </div>
+    
+    <div style="margin: 20px 0;">
+      <h3 style="color: #374151; margin: 0 0 10px 0;">Error Message</h3>
+      <div style="background: #fff1f2; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
+        <p style="color: #dc2626; margin: 0; font-family: monospace;">${errorMessage}</p>
+      </div>
+    </div>
+    
+    <div style="margin: 20px 0;">
+      <h3 style="color: #374151; margin: 0 0 10px 0;">Timestamp</h3>
+      <p style="color: #6b7280; margin: 0;">${timestamp}</p>
+    </div>
+    
+    ${details ? `
+    <div style="margin: 20px 0;">
+      <h3 style="color: #374151; margin: 0 0 10px 0;">Technical Details</h3>
+      ${detailsHtml}
+    </div>
+    ` : ''}
+    
+    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 25px;">
+      <p style="margin: 0; font-size: 13px; color: #6b7280;">
+        This is an automated error notification from the ${APP_NAME} system. Please investigate and resolve the issue as soon as possible.
+      </p>
+    </div>
+  `;
+  
+  console.log(`[Email] Sending error report to admin: ${errorTitle}`);
+  return sendEmail(ADMIN_EMAIL, `[ERROR] ${APP_NAME}: ${errorTitle}`, getBaseTemplate('Error Report', content));
+}
+
+/**
+ * Send VTU sync status report to admin
+ */
+export async function sendVtuSyncReport(
+  syncResult: { success: boolean; message: string; plansUpdated?: number; plansCreated?: number; errors?: string[] }
+): Promise<EmailResult> {
+  const statusColor = syncResult.success ? '#16a34a' : '#dc2626';
+  const statusText = syncResult.success ? 'Success' : 'Failed';
+  const timestamp = new Date().toISOString();
+  
+  let errorsHtml = '';
+  if (syncResult.errors && syncResult.errors.length > 0) {
+    errorsHtml = `
+      <div style="margin: 20px 0;">
+        <h3 style="color: #374151; margin: 0 0 10px 0;">Errors (${syncResult.errors.length})</h3>
+        <ul style="background: #fef2f2; padding: 15px 15px 15px 30px; border-radius: 8px; margin: 0;">
+          ${syncResult.errors.map(err => `<li style="color: #dc2626; margin: 5px 0;">${err}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  const content = `
+    <div style="background: ${syncResult.success ? '#f0fdf4' : '#fef2f2'}; border: 2px solid ${statusColor}; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+      <h2 style="color: ${statusColor}; margin: 0 0 10px 0; font-size: 20px;">VTU Plans Sync: ${statusText}</h2>
+      <p style="color: #374151; margin: 0;">${syncResult.message}</p>
+    </div>
+    
+    ${syncResult.success ? `
+    <div style="display: flex; gap: 20px; margin: 20px 0;">
+      <div style="flex: 1; background: #f0fdf4; padding: 20px; border-radius: 8px; text-align: center;">
+        <p style="font-size: 32px; font-weight: bold; color: #16a34a; margin: 0;">${syncResult.plansUpdated || 0}</p>
+        <p style="color: #166534; margin: 5px 0 0 0;">Plans Updated</p>
+      </div>
+      <div style="flex: 1; background: #eff6ff; padding: 20px; border-radius: 8px; text-align: center;">
+        <p style="font-size: 32px; font-weight: bold; color: #2563eb; margin: 0;">${syncResult.plansCreated || 0}</p>
+        <p style="color: #1d4ed8; margin: 5px 0 0 0;">Plans Created</p>
+      </div>
+    </div>
+    ` : ''}
+    
+    ${errorsHtml}
+    
+    <div style="margin: 20px 0;">
+      <h3 style="color: #374151; margin: 0 0 10px 0;">Timestamp</h3>
+      <p style="color: #6b7280; margin: 0;">${timestamp}</p>
+    </div>
+    
+    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 25px;">
+      <p style="margin: 0; font-size: 13px; color: #6b7280;">
+        This is an automated VTU sync notification from the ${APP_NAME} system.
+      </p>
+    </div>
+  `;
+  
+  return sendEmail(ADMIN_EMAIL, `[VTU Sync] ${APP_NAME}: ${statusText}`, getBaseTemplate('VTU Plans Sync Report', content));
+}

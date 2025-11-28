@@ -53,11 +53,72 @@ The marketplace employs a modern full-stack architecture focusing on performance
 
 - **PostgreSQL:** Primary database.
 - **Groq API:** For AI Chatbot (`llama-3.3-70b-versatile`).
-- **Squad/Habari API:** Payment gateway for transactions, payouts, and bank verification.
+- **Squad/Habari API:** Payment gateway with retry logic (3 attempts, exponential backoff) and user-friendly error messages.
 - **Passport.js:** Authentication middleware.
 - **Drizzle ORM:** Database interaction.
 - **Socket.io-like WebSocket:** Real-time communication.
 - **Multer:** Image uploads.
+- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data sales (graceful fallback to database if API unavailable).
+- **Resend Email API:** Primary email service with Brevo, Gmail, Mailgun fallbacks.
+- **Render:** Recommended deployment platform.
+
+## Recently Completed Features (V2)
+
+### ✅ **Email Verification System**
+- 6-digit code generation with email delivery
+- One-click verification link support
+- Token-based verification with expiry
+- Professional email templates
+- Email verification endpoint: `/api/auth/verify-email`
+- Resend code endpoint: `/api/auth/resend-verification`
+
+### ✅ **Password Strength Validation**
+- Real-time strength indicator (Weak/Medium/Strong)
+- Minimum "Medium" strength enforcement
+- Requirements: 8+ chars, uppercase, lowercase, numbers, special chars
+- Visual feedback in signup form
+- Validation before account creation
+
+### ✅ **System Account (@EksuMarketplaceOfficial)**
+- Official account: `@EksuMarketplaceOfficial`
+- Email: `system@eksucampusmarketplace.com`
+- Auto-follows new users on signup
+- Sends welcome DM with campus trading tips
+- System account type flags for special handling
+
+### ✅ **Email Notifications**
+- **New Messages:** `sendMessageNotification()` triggers when user receives message
+- **Order Updates:** Emails sent to buyer/seller on order status changes (confirmation, shipped, delivered, completed)
+- Professional HTML email templates
+- Async sending to prevent request blocking
+
+### ✅ **Enhanced Error Handling**
+- User-facing messages hide developer details
+- Full error details logged to console
+- 500 errors automatically emailed to admin (system@eksucampusmarketplace.com)
+- Sanitized error responses prevent information leakage
+- Error tracking and reporting system
+
+### ✅ **Squad Payment API Improvements**
+- Retry logic with exponential backoff (3 attempts)
+- Error categorization: payment_error, network_error, validation_error
+- User-friendly error messages
+- Automatic transaction status updates
+- Webhook handling for payment confirmations
+
+### ✅ **VTU Integration (Graceful Fallback)**
+- Primary: SMEDATA.NG API `/plans` endpoint
+- Fallback: Static database plans if API returns 404
+- Phone number validation
+- Wallet integration for data purchase
+- Error handling prevents app crash on API failure
+
+### ✅ **Security Enhancements**
+- Error sanitization prevents dev detail leakage
+- Admin email notifications for system errors
+- Session security with Passport.js
+- Protected routes with authentication middleware
+- Email notifications for sensitive operations
 - **SMEDATA.NG API:** For Virtual Top-Up (VTU) data sales.
 - **Render:** Recommended deployment platform.
 
