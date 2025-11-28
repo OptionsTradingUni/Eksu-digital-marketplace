@@ -1,0 +1,77 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+Subject: AGENT 1 – Your Complete Task List (Backend + Core Features + Payments)
+
+Hi Agent 1,
+
+You are responsible for EVERYTHING below. Complete 100%. No overlap with Agent 2.
+
+1. Payment Fix – URGENT (Checkout is completely broken)
+   - Current error: 503 {"message":"Payment service authentication failed","code":"INVALID_CREDENTIALS"}
+   - I have pasted the correct Paystack/Flutterwave/Squad keys
+   - My merchant account is still under review but dashboard gave live keys
+   - Fix: Switch code to TEST MODE + use TEST KEYS immediately
+   - Add toggle in admin panel: Test Mode / Live Mode
+   - Make test payments work 100% first
+
+2. Email Verification During Sign-Up (Currently Missing)
+   - Right now user signs up with email → instantly logged in, no verification
+   - Fix: After email entry → send 6-digit verification code/email
+   - User MUST verify before full access
+   - Unverified users: max 3 listings, cannot message, cannot buy, cannot post in plug
+   - Show big banner: “Verify your email to unlock full features”
+
+3. VTU / Data & Airtime Plans
+   - Currently using hardcoded prices in files
+   - Remove ALL hardcoded plans completely
+   - Connect to real VTU provider API → fetch plans and real-time prices automatically
+   - Cache for 10 mins if API fails
+
+4. Official Campus Account (Campus Plug) – Full Upgrade
+   - Add profile picture (use the current favicon)
+   - Make it always show as ONLINE
+   - Give it a special verified badge (different from normal users)
+   - Make it SMART: when messaged → reply intelligently like a chatbot (use Grok/OpenAI API)
+   - If user types “help”, “support”, “agent” → auto-create support ticket
+   - Remove Follow/Unfollow button completely (everyone is auto-followed, don’t show in following list)
+   - Messages from official account MUST trigger notification (currently not showing)
+   - As admin → option to post as my normal account OR as official “Campus Plug” account
+   - Campus-wide announcements → send via official account from admin dashboard
+
+5. Block & Report System – Make It Actually Work
+   - Currently blocking does nothing
+   - Fix: When A blocks B →
+     • All messages disappear from both sides
+     • Profile shows blank / “This account is not available”
+     • Cannot send or receive messages
+     • Auto-unfollow both ways
+     • Add “Blocked Users” list in settings
+
+6. Hostel & Roommate Finder Feature
+   - Implement fully with filters: price, gender, faculty, location, etc.
+
+7. Search in Messages
+   - Allow search by username AND message content
+
+8. Follow Button Bug in The Plug / Campus Feed
+   - Users I already follow still show “Follow” button
+   - When clicked → says “Followed” but button still says “Follow”
+   - Fix the state properly
+
+9. Add any other backend, security, or admin features you think are obviously needed in 2025 for a campus marketplace
+
+Work in branch: agent1-full-work  
+Use JavaScript / Node.js / React / Next.js only  
+Reply “AGENT 1 READY” when you start.
+
+Thank you!
