@@ -17,6 +17,7 @@ import {
   Smile, 
   Check, 
   CheckCheck, 
+  CheckCircle,
   ArrowLeft,
   MessageCircle,
   Users,
@@ -537,6 +538,10 @@ const ThreadItem = memo(function ThreadItem({
   const x = useMotionValue(0);
   const archiveOpacity = useTransform(x, [-100, -50, 0], [1, 0.5, 0]);
   
+  // Check if this is a system/official account (always online)
+  const isSystemAccount = thread.user.isSystemAccount === true;
+  const effectiveOnline = isSystemAccount ? true : isOnline;
+  
   // Memoize time formatting
   const lastMessageTime = useMemo(() => {
     return thread.lastMessage?.createdAt
@@ -576,7 +581,7 @@ const ThreadItem = memo(function ThreadItem({
         onClick={onClick}
         className={`w-full p-4 hover-elevate text-left transition-all duration-200 ${
           isSelected ? "bg-accent" : "bg-background"
-        }`}
+        } ${isSystemAccount ? "border-l-2 border-l-yellow-500/50" : ""}`}
         style={{ x }}
         drag="x"
         dragConstraints={{ left: -100, right: 0 }}
@@ -586,16 +591,16 @@ const ThreadItem = memo(function ThreadItem({
         <div className="flex items-center gap-3">
           {/* Avatar with online indicator */}
           <div className="relative">
-            <Avatar>
+            <Avatar className={isSystemAccount ? "ring-2 ring-yellow-500/50" : ""}>
               <AvatarImage src={thread.user.profileImageUrl || undefined} loading="lazy" />
-              <AvatarFallback>
+              <AvatarFallback className={isSystemAccount ? "bg-gradient-to-br from-yellow-500/30 to-amber-400/20" : ""}>
                 {thread.user.firstName?.[0] || thread.user.email?.[0]}
               </AvatarFallback>
             </Avatar>
-            {/* Online/Offline indicator */}
+            {/* Online/Offline indicator - System accounts always show online */}
             <span
               className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                isOnline ? "bg-green-500" : "bg-muted-foreground/50"
+                effectiveOnline ? "bg-green-500" : "bg-muted-foreground/50"
               }`}
               data-testid={`status-online-${thread.user.id}`}
             />
@@ -603,9 +608,17 @@ const ThreadItem = memo(function ThreadItem({
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
-                {thread.user.firstName || thread.user.email}
-              </p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
+                  {thread.user.firstName || thread.user.email}
+                </p>
+                {isSystemAccount && (
+                  <CheckCircle 
+                    className="h-4 w-4 text-yellow-500 shrink-0" 
+                    data-testid={`badge-verified-${thread.user.id}`}
+                  />
+                )}
+              </div>
               <div className="flex items-center gap-2 shrink-0">
                 {lastMessageTime && (
                   <span 
@@ -1626,29 +1639,39 @@ export default function Messages() {
               data-testid="button-view-seller-profile"
             >
               <div className="relative">
-                <Avatar>
+                <Avatar className={selectedThread?.user.isSystemAccount ? "ring-2 ring-yellow-500/50" : ""}>
                   <AvatarImage src={selectedThread?.user.profileImageUrl || undefined} />
-                  <AvatarFallback>
+                  <AvatarFallback className={selectedThread?.user.isSystemAccount ? "bg-gradient-to-br from-yellow-500/30 to-amber-400/20" : ""}>
                     {selectedThread?.user.firstName?.[0] || selectedThread?.user.email?.[0]}
                   </AvatarFallback>
                 </Avatar>
-                {/* Online indicator */}
+                {/* Online indicator - System accounts always show online */}
                 <span
                   className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                    selectedUser && onlineUserIds.has(selectedUser) ? "bg-green-500" : "bg-muted-foreground/50"
+                    (selectedThread?.user.isSystemAccount || (selectedUser && onlineUserIds.has(selectedUser))) ? "bg-green-500" : "bg-muted-foreground/50"
                   }`}
                   data-testid="status-chat-online"
                 />
               </div>
               <div className="text-left">
-                <p className="font-semibold" data-testid="text-chat-user-name">
-                  {selectedThread?.user.firstName || selectedThread?.user.email}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold" data-testid="text-chat-user-name">
+                    {selectedThread?.user.firstName || selectedThread?.user.email}
+                  </p>
+                  {selectedThread?.user.isSystemAccount && (
+                    <CheckCircle className="h-4 w-4 text-yellow-500" data-testid="badge-official" />
+                  )}
+                </div>
               </div>
             </button>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                {selectedThread?.user.isVerified && (
+                {selectedThread?.user.isSystemAccount && (
+                  <Badge variant="outline" className="text-xs bg-yellow-500/10 border-yellow-500/30 text-yellow-600 dark:text-yellow-400" data-testid="badge-official-account">
+                    Official
+                  </Badge>
+                )}
+                {selectedThread?.user.isVerified && !selectedThread?.user.isSystemAccount && (
                   <Badge variant="outline" className="text-xs" data-testid="badge-verified">
                     Verified
                   </Badge>
@@ -1660,7 +1683,7 @@ export default function Messages() {
                   </Badge>
                 )}
                 <span className="text-xs text-muted-foreground" data-testid="text-chat-status">
-                  {selectedUser && onlineUserIds.has(selectedUser) ? "Online" : "Offline"}
+                  {(selectedThread?.user.isSystemAccount || (selectedUser && onlineUserIds.has(selectedUser))) ? "Online" : "Offline"}
                 </span>
               </div>
             </div>

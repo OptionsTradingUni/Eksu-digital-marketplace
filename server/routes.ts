@@ -3436,6 +3436,137 @@ Happy trading!`;
     }
   });
 
+  // Helper: Check if message contains support keywords
+  function containsSupportKeywords(content: string): boolean {
+    const supportKeywords = ['help', 'support', 'agent', 'human', 'assistance', 'problem', 'issue', 'complaint', 'refund', 'dispute'];
+    const lowerContent = content.toLowerCase();
+    return supportKeywords.some(keyword => lowerContent.includes(keyword));
+  }
+
+  // Track recent support tickets per user to prevent spam (userId -> lastTicketTime)
+  const recentSupportTickets = new Map<string, number>();
+  const SUPPORT_TICKET_COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown between auto-tickets
+
+  // Helper: Generate AI response for system account using Groq (async, non-blocking)
+  async function processSystemAccountMessage(userMessage: string, userId: string, productId?: string | null): Promise<void> {
+    const systemUserId = process.env.SYSTEM_USER_ID;
+    if (!systemUserId) return;
+
+    try {
+      // Get user info for context
+      const user = await storage.getUser(userId);
+      const userName = user?.firstName || 'there';
+
+      // Use the existing chatbot function
+      const response = await getChatbotResponseWithHandoff(
+        [{ role: 'user', content: userMessage }],
+        { 
+          userId, 
+          role: user?.role || 'buyer',
+          currentPage: 'messages' 
+        }
+      );
+
+      // Build AI response message
+      let aiResponse: string;
+      if (response.shouldHandoff) {
+        aiResponse = `Hey ${userName}! I noticed you might need some extra help with this. ${response.message}\n\nIf you need to speak with a human agent, please create a support ticket from the Help section. Our team will get back to you within 24 hours!`;
+      } else {
+        aiResponse = response.message;
+      }
+
+      // Create the AI response message from system account
+      const aiMessage = await storage.createMessage({
+        senderId: systemUserId,
+        receiverId: userId,
+        content: aiResponse,
+        productId: productId || undefined,
+      });
+
+      // Broadcast via websocket so user sees the response immediately
+      const userConnections = wsConnections.get(userId);
+      if (userConnections) {
+        const wsMessage = JSON.stringify({
+          type: "new_message",
+          message: aiMessage,
+        });
+        userConnections.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(wsMessage);
+          }
+        });
+      }
+
+      // Create notification for the AI response
+      const systemAccount = await storage.getUser(systemUserId);
+      if (systemAccount) {
+        await createAndBroadcastNotification({
+          userId,
+          type: "message",
+          title: "New Message from Campus Hub",
+          message: aiResponse.substring(0, 80) + (aiResponse.length > 80 ? "..." : ""),
+          link: `/messages?user=${systemUserId}`,
+          relatedUserId: systemUserId,
+        });
+      }
+
+    } catch (error) {
+      console.error("AI response generation error:", error);
+      // On failure, send a fallback message
+      try {
+        const fallbackMessage = await storage.createMessage({
+          senderId: systemUserId,
+          receiverId: userId,
+          content: "Hey! Thanks for reaching out to Campus Hub. I'm having a small technical glitch right now. Please try again in a moment, or create a support ticket from the Help section if you need immediate assistance.",
+          productId: productId || undefined,
+        });
+        
+        // Broadcast fallback via websocket
+        const userConnections = wsConnections.get(userId);
+        if (userConnections) {
+          const wsMessage = JSON.stringify({
+            type: "new_message",
+            message: fallbackMessage,
+          });
+          userConnections.forEach(ws => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(wsMessage);
+            }
+          });
+        }
+      } catch (fallbackError) {
+        console.error("Failed to send fallback AI message:", fallbackError);
+      }
+    }
+  }
+
+  // Helper: Create support ticket with cooldown check
+  async function maybeCreateSupportTicket(userId: string, content: string): Promise<void> {
+    // Check cooldown
+    const lastTicketTime = recentSupportTickets.get(userId);
+    const now = Date.now();
+    
+    if (lastTicketTime && (now - lastTicketTime) < SUPPORT_TICKET_COOLDOWN_MS) {
+      console.log(`Skipping auto-ticket for user ${userId} - cooldown active`);
+      return;
+    }
+
+    try {
+      await storage.createSupportTicket({
+        userId,
+        subject: `Auto-generated from DM: ${content.substring(0, 50)}...`,
+        description: content,
+        category: 'general',
+        priority: 'medium',
+        status: 'open',
+      });
+      recentSupportTickets.set(userId, now);
+      console.log(`Auto-created support ticket for user ${userId}`);
+    } catch (ticketError) {
+      console.error("Failed to auto-create support ticket:", ticketError);
+    }
+  }
+
   app.post("/api/messages", isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -3448,43 +3579,55 @@ Happy trading!`;
         ...req.body,
       });
 
-      // Prevent regular users from messaging the system account
-      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
-        return res.status(403).json({ 
-          message: "You cannot send messages to the Campus Hub account. For support, please use the Help section." 
-        });
-      }
-
+      // Save the user's message
       const message = await storage.createMessage(validated);
       
-      // Create notification for the message receiver
-      if (validated.receiverId && validated.receiverId !== userId) {
-        const sender = await storage.getUser(userId);
-        const receiver = await storage.getUser(validated.receiverId);
-        if (sender && receiver) {
-          const senderName = sender.firstName && sender.lastName 
-            ? `${sender.firstName} ${sender.lastName}` 
-            : sender.email;
-          
-          // Truncate message content for notification
-          const messagePreview = validated.content.length > 50 
-            ? validated.content.substring(0, 50) + "..." 
-            : validated.content;
-          
-          await createAndBroadcastNotification({
-            userId: validated.receiverId,
-            type: "message",
-            title: "New Message",
-            message: `${senderName}: ${messagePreview}`,
-            link: `/messages?user=${userId}`,
-            relatedUserId: userId,
-            relatedProductId: validated.productId || undefined,
-          });
+      // Check if messaging the system account - trigger async AI response (non-blocking)
+      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
+        // Fire-and-forget: Process AI response and support tickets asynchronously
+        setImmediate(() => {
+          // Check for support keywords to auto-create support ticket (with cooldown)
+          if (containsSupportKeywords(validated.content)) {
+            maybeCreateSupportTicket(userId, validated.content).catch(err => {
+              console.error("Support ticket creation failed:", err);
+            });
+          }
 
-          // Send email notification for new message
-          sendMessageNotification(receiver.email, senderName).catch(err => {
-            console.error("Failed to send message email notification:", err);
+          // Generate and send AI response from system account
+          processSystemAccountMessage(validated.content, userId, validated.productId).catch(err => {
+            console.error("System account AI response failed:", err);
           });
+        });
+      } else {
+        // Regular message - Create notification for the message receiver
+        if (validated.receiverId && validated.receiverId !== userId) {
+          const sender = await storage.getUser(userId);
+          const receiver = await storage.getUser(validated.receiverId);
+          if (sender && receiver) {
+            const senderName = sender.firstName && sender.lastName 
+              ? `${sender.firstName} ${sender.lastName}` 
+              : sender.email;
+            
+            // Truncate message content for notification
+            const messagePreview = validated.content.length > 50 
+              ? validated.content.substring(0, 50) + "..." 
+              : validated.content;
+            
+            await createAndBroadcastNotification({
+              userId: validated.receiverId,
+              type: "message",
+              title: "New Message",
+              message: `${senderName}: ${messagePreview}`,
+              link: `/messages?user=${userId}`,
+              relatedUserId: userId,
+              relatedProductId: validated.productId || undefined,
+            });
+
+            // Send email notification for new message
+            sendMessageNotification(receiver.email, senderName).catch(err => {
+              console.error("Failed to send message email notification:", err);
+            });
+          }
         }
       }
       
@@ -3534,17 +3677,26 @@ Happy trading!`;
         productId: productId || null,
       });
 
-      // Prevent regular users from messaging the system account
-      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
-        return res.status(403).json({ 
-          message: "You cannot send messages to the Campus Hub account. For support, please use the Help section." 
-        });
-      }
-
       const message = await storage.createMessage(validated);
       
-      // Create notification for the message receiver
-      if (validated.receiverId && validated.receiverId !== userId) {
+      // Check if messaging the system account - trigger async AI response (non-blocking)
+      if (isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
+        // Fire-and-forget: Process AI response and support tickets asynchronously
+        setImmediate(() => {
+          if (containsSupportKeywords(validated.content)) {
+            maybeCreateSupportTicket(userId, validated.content).catch(err => {
+              console.error("Support ticket creation failed:", err);
+            });
+          }
+
+          processSystemAccountMessage(validated.content, userId, validated.productId).catch(err => {
+            console.error("System account AI response failed:", err);
+          });
+        });
+      }
+      
+      // Create notification for the message receiver (except for system account)
+      if (validated.receiverId && validated.receiverId !== userId && !isSystemAccount(validated.receiverId)) {
         const sender = await storage.getUser(userId);
         if (sender) {
           const senderName = sender.firstName && sender.lastName 
