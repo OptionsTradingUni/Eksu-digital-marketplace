@@ -119,3 +119,28 @@ The marketplace employs a modern full-stack architecture focusing on performance
 - Session security with Passport.js
 - Protected routes with authentication middleware
 - Email notifications for sensitive operations
+- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data sales.
+- **Render:** Recommended deployment platform.
+
+## Recent Changes (November 2024)
+
+### Theme System Enhancement
+- Added 8 themes: light, dim, lights-out, sunset, ocean, forest, sepia, high-contrast
+- Full CSS variable support for all themes with proper color schemes
+- Theme selector with visual color previews and proper icon contrast
+
+### User Profile Improvements
+- Added gender field to user schema with dropdown selection in settings
+- Values: Male, Female, Other, Prefer not to say
+
+### The Plug Social Feed
+- Redesigned post composer to full-screen Twitter/X-style interface
+- Added scroll lock handling for mobile composer
+- Follow button hides completely for already-followed users
+
+### Confessions Page
+- Added optimistic updates for voting (like/dislike)
+- Instant UI feedback before server response
+
+### Product View
+- Fixed product image sizing on mobile with max-height constraints (max-h-[60vh])

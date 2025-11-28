@@ -311,11 +311,11 @@ export default function ProductView() {
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Image Gallery */}
           <div>
-            <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+            <div className="relative aspect-square md:aspect-auto md:min-h-[400px] max-h-[70vh] md:max-h-none overflow-hidden rounded-lg bg-muted">
               <img
                 src={images[currentImageIndex]}
                 alt={product.title}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain md:object-cover"
                 loading="lazy"
                 data-testid="img-product-main"
               />

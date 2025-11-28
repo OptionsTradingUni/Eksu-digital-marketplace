@@ -62,7 +62,8 @@ import {
   Heart,
   Image,
   Pin,
-  FileText
+  FileText,
+  ChevronDown
 } from "lucide-react";
 import {
   AlertDialog,
@@ -259,6 +260,16 @@ export default function Profile() {
   const [usernameInput, setUsernameInput] = useState("");
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const [selectedUserStories, setSelectedUserStories] = useState<(Story & { author: User; hasViewed?: boolean })[] | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState({
+    social: true,
+    services: true,
+    account: true
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const isOwnProfile = !urlUserId || (currentUser && urlUserId === currentUser.id);
 
@@ -557,7 +568,7 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Followed",
@@ -580,7 +591,7 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "follow-stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users", urlUserId, "followers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", user?.id, "following"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "following"] });
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       toast({
         title: "Unfollowed",
@@ -840,6 +851,15 @@ export default function Profile() {
             </>
           )}
           
+          {!canEdit && coverPhoto && (
+            <button
+              type="button"
+              onClick={() => setLightboxImage(coverPhoto)}
+              className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-colors"
+              data-testid="button-view-cover"
+            />
+          )}
+          
           {isPreviewMode && isOwnProfile && (
             <div className="absolute top-4 right-4 z-10">
               <Badge variant="secondary" className="gap-1.5 bg-black/40 text-white backdrop-blur-sm border-0">
@@ -885,6 +905,16 @@ export default function Profile() {
                     data-testid="button-change-avatar"
                   >
                     <Camera className="h-4 w-4" />
+                  </button>
+                )}
+                {!canEdit && displayUser.profileImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxImage(displayUser.profileImageUrl!)}
+                    className="absolute bottom-1 right-1 p-2 rounded-full bg-background/80 border shadow-md hover:bg-background transition-all"
+                    data-testid="button-view-avatar"
+                  >
+                    <Eye className="h-4 w-4" />
                   </button>
                 )}
                 <input
@@ -1103,7 +1133,35 @@ export default function Profile() {
                 <span className="text-muted-foreground ml-1">Followers</span>
               </button>
             </div>
+
+            {isOwnProfile && (
+              <div className="mt-6 space-y-3">
+                {["social", "services", "account"].map((section) => (
+                  <Card key={section} className="cursor-pointer hover-elevate" onClick={() => toggleSection(section as keyof typeof expandedSections)}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base capitalize">{section === "social" ? "Social & Links" : section === "services" ? "Services" : "Account Settings"}</CardTitle>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${expandedSections[section as keyof typeof expandedSections] ? "" : "-rotate-90"}`} />
+                      </div>
+                    </CardHeader>
+                    {expandedSections[section as keyof typeof expandedSections] && (
+                      <CardContent className="text-sm text-muted-foreground">
+                        {section === "social" ? "Social links and profile connections" : section === "services" ? "Services you offer" : "Account security and settings"}
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
           </motion.div>
+
+          {lightboxImage && (
+            <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
+              <DialogContent className="max-w-3xl p-0 bg-black/90 border-0">
+                <img src={lightboxImage} alt="Preview" className="w-full h-auto" />
+              </DialogContent>
+            </Dialog>
+          )}
 
           <AnimatePresence>
             {showPreviewAfterSave && isOwnProfile && (

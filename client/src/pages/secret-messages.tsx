@@ -165,19 +165,19 @@ function LinkCard({ link, onDelete }: { link: SecretMessageLink; onDelete: (id: 
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
     >
-      <Card className="bg-zinc-900/50 border-zinc-800/50">
+      <Card className="bg-gradient-to-r from-purple-900/40 to-pink-900/30 border-purple-500/30 hover:border-purple-500/50 transition-colors">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <div 
-                  className="w-4 h-4 rounded-full" 
+                  className="w-4 h-4 rounded-full shadow-lg" 
                   style={{ backgroundColor: link.backgroundColor || "#6b21a8" }}
                 />
-                <span className="font-medium text-sm truncate">{link.title}</span>
+                <span className="font-medium text-sm truncate text-purple-100">{link.title}</span>
                 <Badge 
                   variant={link.isActive ? "default" : "secondary"}
-                  className={link.isActive ? "bg-green-500/20 text-green-400" : "bg-zinc-500/20 text-zinc-400"}
+                  className={link.isActive ? "bg-green-500/30 text-green-300 border-green-500/50" : "bg-zinc-500/30 text-zinc-300 border-zinc-500/30"}
                 >
                   {link.isActive ? "Active" : "Inactive"}
                 </Badge>
@@ -260,11 +260,11 @@ function MessageCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
     >
-      <Card className={`bg-zinc-900/50 border-zinc-800/50 ${!message.isRead ? 'border-l-4 border-l-purple-500' : ''}`}>
+      <Card className={`bg-gradient-to-r from-purple-900/30 to-pink-900/20 border-purple-500/30 hover:border-purple-500/50 transition-colors ${!message.isRead ? 'border-l-4 border-l-pink-500 shadow-lg shadow-pink-500/20' : ''}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div 
-              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg"
               style={{ backgroundColor: message.link.backgroundColor || "#6b21a8" }}
             >
               <Eye className="h-5 w-5 text-white" />
@@ -404,20 +404,23 @@ export default function SecretMessagesPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="bg-gradient-to-r from-purple-900/30 to-purple-800/20 border-purple-500/30">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-4">
+          <Card className="bg-gradient-to-r from-purple-900/40 via-purple-800/30 to-pink-900/30 border-purple-500/40 shadow-lg">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <h3 className="font-semibold text-purple-200">Create a new link</h3>
-                  <p className="text-sm text-purple-300/70">Share it and receive anonymous messages</p>
+                  <h3 className="font-semibold text-purple-100 text-lg flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-300" />
+                    Create a new link
+                  </h3>
+                  <p className="text-sm text-purple-300/80 mt-1">Share with anyone and receive anonymous messages</p>
                 </div>
                 <Button 
                   data-testid="button-create-new-link"
                   onClick={() => setShowCreateDialog(true)}
-                  className="bg-purple-600 hover:bg-purple-700"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white whitespace-nowrap"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Create Link
+                  New Link
                 </Button>
               </div>
             </CardContent>

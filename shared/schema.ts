@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   longitude: decimal("longitude", { precision: 10, scale: 7 }), // GPS coordinates for real-time location
   lastLocationUpdate: timestamp("last_location_update"), // When location was last updated
   bio: text("bio"),
+  gender: varchar("gender", { length: 20 }), // Optional: "male", "female", "other", "prefer_not_to_say"
   // System account flags
   isSystemAccount: boolean("is_system_account").default(false), // @EKSUPlug official bot
   systemAccountType: varchar("system_account_type", { length: 20 }), // "official_bot", "support", etc
