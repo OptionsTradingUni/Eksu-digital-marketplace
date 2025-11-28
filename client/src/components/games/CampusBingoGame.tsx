@@ -17,14 +17,12 @@ import {
   Star,
   Crown,
   Target,
-  ArrowLeft,
   Volume2,
   CheckCircle2,
   Megaphone,
   GraduationCap,
-  BookOpen,
-  Library,
-  School
+  Zap,
+  CornerDownRight
 } from "lucide-react";
 
 interface CampusBingoGameProps {
@@ -35,13 +33,12 @@ interface CampusBingoGameProps {
 
 type GamePhase = "ready" | "playing" | "claiming" | "finished";
 
-type WinPattern = "line" | "two_lines" | "full_house" | "campus_L" | "campus_X" | null;
+type WinPattern = "line" | "four_corners" | "full_house" | null;
 
 interface BingoCell {
-  number: number;
+  phrase: string;
   marked: boolean;
   isFreeSpace: boolean;
-  column: "B" | "I" | "N" | "G" | "O";
 }
 
 type BingoCard = BingoCell[][];
@@ -49,72 +46,112 @@ type BingoCard = BingoCell[][];
 interface PatternInfo {
   name: string;
   icon: React.ComponentType<{ className?: string }>;
-  points: number;
+  multiplier: number;
   description: string;
 }
 
 const PATTERNS: Record<string, PatternInfo> = {
-  line: { name: "Line", icon: Target, points: 50, description: "Any horizontal, vertical, or diagonal line" },
-  two_lines: { name: "Two Lines", icon: Star, points: 100, description: "Two complete lines" },
-  full_house: { name: "Full House", icon: Crown, points: 200, description: "All numbers marked" },
-  campus_L: { name: "Library L", icon: Library, points: 75, description: "L-shaped pattern for Library lovers" },
-  campus_X: { name: "Exam X", icon: BookOpen, points: 75, description: "X-shaped pattern for exam season" },
+  line: { name: "Line", icon: Target, multiplier: 0.20, description: "Any horizontal, vertical, or diagonal line" },
+  four_corners: { name: "Four Corners", icon: CornerDownRight, multiplier: 0.30, description: "All four corner cells marked" },
+  full_house: { name: "Full House", icon: Crown, multiplier: 0.50, description: "All cells marked" },
 };
 
-const BINGO_COLUMNS: ("B" | "I" | "N" | "G" | "O")[] = ["B", "I", "N", "G", "O"];
-
-const CALL_INTERVAL = 3000;
-
-const CAMPUS_ANNOUNCEMENTS = [
-  "The Library is calling this number!",
-  "Lecture hall vibes!",
-  "Hostel energy!",
-  "Cafeteria special!",
-  "Sports complex alert!",
-  "Campus gate number!",
-  "Admin block calling!",
-  "Faculty of winners!",
-  "Student union shout!",
-  "Exam hall pressure!",
+const CAMPUS_PHRASES: string[] = [
+  "Lecturer no come",
+  "NEPA take light",
+  "Sign out",
+  "No water in hostel",
+  "Carry over",
+  "Project defense",
+  "Clear course",
+  "Sorority party",
+  "Night class",
+  "No data on phone",
+  "Broke before month end",
+  "SUG election",
+  "School fees deadline",
+  "Crush sat beside me",
+  "Extra credit assignment",
+  "Last minute studying",
+  "Cafe food spoil",
+  "Roommate wahala",
+  "Generator don spoil",
+  "TDB on result",
+  "Surprise test",
+  "Extension on deadline",
+  "Departmental party",
+  "Hostel allocation stress",
+  "Course registration closed",
+  "Library full",
+  "Porter catch you",
+  "VC speech too long",
+  "Convocation postponed",
+  "Textbook too expensive",
+  "Group project drama",
+  "Lab practical cancelled",
+  "Exam hall too hot",
+  "Result delayed",
+  "Power bank die",
+  "Wifi down again",
+  "Class cancelled last minute",
+  "Sign my clearance form",
+  "Missed attendance",
+  "Course clash",
+  "Retake semester",
+  "Dean's list achievement",
+  "All-night reading",
+  "Transport fare increase",
+  "Handout not ready",
+  "Lecturer ask question",
+  "Phone confiscated",
+  "Hostel inspection",
+  "ID card expired",
+  "Burst pipe in hostel",
 ];
 
-const SOUND_EFFECTS = {
-  call: "Bingo ball drops with a satisfying click!",
-  mark: "Pop! Number marked on your card",
-  bingo: "BINGO! Victory bells ring across campus!",
-  aiMark: "AI opponent marks their card...",
-  countdown: "Tick... tick... next number coming!",
+const CALL_INTERVAL = 4000;
+
+const CAMPUS_ANNOUNCEMENTS = [
+  "The Registrar announces:",
+  "Hostel living experience:",
+  "Campus survival moment:",
+  "Academic wahala:",
+  "Student life reality:",
+  "Nigerian university vibes:",
+  "Campus chronicle:",
+  "Hall of residence news:",
+  "Faculty announcement:",
+  "Student union broadcast:",
+];
+
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
 };
 
 const generateBingoCard = (): BingoCard => {
+  const shuffledPhrases = shuffleArray([...CAMPUS_PHRASES]);
   const card: BingoCard = [];
-  const usedNumbers: Set<number> = new Set();
+  let phraseIndex = 0;
   
   for (let row = 0; row < 5; row++) {
     const cardRow: BingoCell[] = [];
     for (let col = 0; col < 5; col++) {
-      const minNum = col * 15 + 1;
-      const maxNum = col * 15 + 15;
-      
       if (row === 2 && col === 2) {
         cardRow.push({
-          number: 0,
+          phrase: "FREE SPACE",
           marked: true,
           isFreeSpace: true,
-          column: BINGO_COLUMNS[col],
         });
       } else {
-        let num: number;
-        do {
-          num = Math.floor(Math.random() * 15) + minNum;
-        } while (usedNumbers.has(num));
-        usedNumbers.add(num);
-        
         cardRow.push({
-          number: num,
+          phrase: shuffledPhrases[phraseIndex++],
           marked: false,
           isFreeSpace: false,
-          column: BINGO_COLUMNS[col],
         });
       }
     }
@@ -124,24 +161,8 @@ const generateBingoCard = (): BingoCard => {
   return card;
 };
 
-const generateCallableNumbers = (): number[] => {
-  const numbers: number[] = [];
-  for (let i = 1; i <= 75; i++) {
-    numbers.push(i);
-  }
-  for (let i = numbers.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
-  }
-  return numbers;
-};
-
-const getColumnLetter = (num: number): "B" | "I" | "N" | "G" | "O" => {
-  if (num <= 15) return "B";
-  if (num <= 30) return "I";
-  if (num <= 45) return "N";
-  if (num <= 60) return "G";
-  return "O";
+const generateCallableList = (): string[] => {
+  return shuffleArray([...CAMPUS_PHRASES]);
 };
 
 const checkLine = (card: BingoCard): boolean => {
@@ -163,63 +184,35 @@ const checkLine = (card: BingoCard): boolean => {
   return false;
 };
 
-const countLines = (card: BingoCard): number => {
-  let count = 0;
-  
-  for (let row = 0; row < 5; row++) {
-    if (card[row].every(cell => cell.marked)) count++;
-  }
-  
-  for (let col = 0; col < 5; col++) {
-    if (card.every(row => row[col].marked)) count++;
-  }
-  
-  if (card[0][0].marked && card[1][1].marked && card[2][2].marked && card[3][3].marked && card[4][4].marked) {
-    count++;
-  }
-  if (card[0][4].marked && card[1][3].marked && card[2][2].marked && card[3][1].marked && card[4][0].marked) {
-    count++;
-  }
-  
-  return count;
+const checkFourCorners = (card: BingoCard): boolean => {
+  return card[0][0].marked && card[0][4].marked && card[4][0].marked && card[4][4].marked;
 };
 
 const checkFullHouse = (card: BingoCard): boolean => {
   return card.every(row => row.every(cell => cell.marked));
 };
 
-const checkCampusL = (card: BingoCard): boolean => {
-  const lPattern = [
-    [0, 0], [1, 0], [2, 0], [3, 0], [4, 0],
-    [4, 1], [4, 2], [4, 3], [4, 4]
-  ];
-  return lPattern.every(([row, col]) => card[row][col].marked);
-};
-
-const checkCampusX = (card: BingoCard): boolean => {
-  const xPattern = [
-    [0, 0], [1, 1], [2, 2], [3, 3], [4, 4],
-    [0, 4], [1, 3], [3, 1], [4, 0]
-  ];
-  return xPattern.every(([row, col]) => card[row][col].marked);
-};
-
 const detectWinPattern = (card: BingoCard): WinPattern => {
   if (checkFullHouse(card)) return "full_house";
-  if (countLines(card) >= 2) return "two_lines";
-  if (checkCampusX(card)) return "campus_X";
-  if (checkCampusL(card)) return "campus_L";
+  if (checkFourCorners(card)) return "four_corners";
   if (checkLine(card)) return "line";
   return null;
 };
 
-const getColumnColor = (column: "B" | "I" | "N" | "G" | "O"): string => {
-  switch (column) {
-    case "B": return "bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30";
-    case "I": return "bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30";
-    case "N": return "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30";
-    case "G": return "bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30";
-    case "O": return "bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30";
+const calculatePoints = (pattern: WinPattern, stake: number, isPractice: boolean): number => {
+  if (!pattern) return 0;
+  if (isPractice) {
+    return Math.round(PATTERNS[pattern].multiplier * 100);
+  }
+  return Math.round(stake * PATTERNS[pattern].multiplier);
+};
+
+const getPatternColor = (pattern: WinPattern): string => {
+  switch (pattern) {
+    case "line": return "bg-blue-500/20 text-blue-600 dark:text-blue-400";
+    case "four_corners": return "bg-amber-500/20 text-amber-600 dark:text-amber-400";
+    case "full_house": return "bg-green-500/20 text-green-600 dark:text-green-400";
+    default: return "bg-muted";
   }
 };
 
@@ -227,18 +220,18 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
   const [gamePhase, setGamePhase] = useState<GamePhase>("ready");
   const [playerCard, setPlayerCard] = useState<BingoCard>([]);
   const [aiCard, setAiCard] = useState<BingoCard>([]);
-  const [calledNumbers, setCalledNumbers] = useState<number[]>([]);
-  const [currentNumber, setCurrentNumber] = useState<number | null>(null);
-  const [callableNumbers, setCallableNumbers] = useState<number[]>([]);
-  const [nextCallIn, setNextCallIn] = useState(3);
+  const [calledPhrases, setCalledPhrases] = useState<string[]>([]);
+  const [currentPhrase, setCurrentPhrase] = useState<string | null>(null);
+  const [callableList, setCallableList] = useState<string[]>([]);
+  const [nextCallIn, setNextCallIn] = useState(4);
   const [playerScore, setPlayerScore] = useState(0);
   const [aiScore, setAiScore] = useState(0);
   const [playerWinPattern, setPlayerWinPattern] = useState<WinPattern>(null);
   const [aiWinPattern, setAiWinPattern] = useState<WinPattern>(null);
   const [winner, setWinner] = useState<"player" | "ai" | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [soundEffect, setSoundEffect] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
+  const [missedPhrases, setMissedPhrases] = useState<string[]>([]);
 
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
@@ -253,22 +246,22 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
   const startGame = useCallback(() => {
     const newPlayerCard = generateBingoCard();
     const newAiCard = generateBingoCard();
-    const numbers = generateCallableNumbers();
+    const phrases = generateCallableList();
     
     setPlayerCard(newPlayerCard);
     setAiCard(newAiCard);
-    setCallableNumbers(numbers);
-    setCalledNumbers([]);
-    setCurrentNumber(null);
+    setCallableList(phrases);
+    setCalledPhrases([]);
+    setCurrentPhrase(null);
     setPlayerScore(0);
     setAiScore(0);
     setPlayerWinPattern(null);
     setAiWinPattern(null);
     setWinner(null);
-    setNextCallIn(3);
+    setNextCallIn(4);
+    setMissedPhrases([]);
     setGamePhase("playing");
-    setAnnouncement("Get ready! First number coming...");
-    setSoundEffect(SOUND_EFFECTS.countdown);
+    setAnnouncement("Get ready! First phrase coming...");
   }, []);
 
   useEffect(() => {
@@ -277,7 +270,7 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     countdownRef.current = setInterval(() => {
       setNextCallIn(prev => {
         if (prev <= 1) {
-          return 3;
+          return 4;
         }
         return prev - 1;
       });
@@ -292,26 +285,24 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     if (gamePhase !== "playing" || winner) return;
 
     callIntervalRef.current = setInterval(() => {
-      setCallableNumbers(prev => {
+      setCallableList(prev => {
         if (prev.length === 0) return prev;
         
-        const [nextNum, ...rest] = prev;
+        const [nextPhrase, ...rest] = prev;
         
-        setCurrentNumber(nextNum);
-        setCalledNumbers(called => [...called, nextNum]);
+        setCurrentPhrase(nextPhrase);
+        setCalledPhrases(called => [...called, nextPhrase]);
         setIsAnimating(true);
         
-        const letter = getColumnLetter(nextNum);
-        setAnnouncement(`${letter}-${nextNum}! ${CAMPUS_ANNOUNCEMENTS[Math.floor(Math.random() * CAMPUS_ANNOUNCEMENTS.length)]}`);
-        setSoundEffect(SOUND_EFFECTS.call);
+        const randomAnnouncement = CAMPUS_ANNOUNCEMENTS[Math.floor(Math.random() * CAMPUS_ANNOUNCEMENTS.length)];
+        setAnnouncement(`${randomAnnouncement} "${nextPhrase}"`);
         
         setTimeout(() => setIsAnimating(false), 500);
         
         setAiCard(prevCard => {
           const newCard = prevCard.map(row => 
             row.map(cell => {
-              if (cell.number === nextNum && !cell.marked) {
-                setSoundEffect(SOUND_EFFECTS.aiMark);
+              if (cell.phrase === nextPhrase && !cell.marked) {
                 return { ...cell, marked: true };
               }
               return cell;
@@ -321,7 +312,7 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
           const aiPattern = detectWinPattern(newCard);
           if (aiPattern && !aiWinPattern) {
             setAiWinPattern(aiPattern);
-            setAiScore(PATTERNS[aiPattern].points);
+            setAiScore(calculatePoints(aiPattern, stake, isPractice));
           }
           
           return newCard;
@@ -334,20 +325,18 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     return () => {
       if (callIntervalRef.current) clearInterval(callIntervalRef.current);
     };
-  }, [gamePhase, winner, aiWinPattern]);
+  }, [gamePhase, winner, aiWinPattern, stake, isPractice]);
 
-  const markNumber = useCallback((row: number, col: number) => {
+  const markPhrase = useCallback((row: number, col: number) => {
     if (gamePhase !== "playing" || winner) return;
     
     const cell = playerCard[row][col];
     if (cell.isFreeSpace || cell.marked) return;
     
-    if (!calledNumbers.includes(cell.number)) {
-      setAnnouncement("That number hasn't been called yet!");
+    if (!calledPhrases.includes(cell.phrase)) {
+      setAnnouncement(`"${cell.phrase}" hasn't been called yet!`);
       return;
     }
-    
-    setSoundEffect(SOUND_EFFECTS.mark);
     
     setPlayerCard(prevCard => {
       const newCard = prevCard.map((r, ri) => 
@@ -362,12 +351,12 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
       const pattern = detectWinPattern(newCard);
       if (pattern) {
         setPlayerWinPattern(pattern);
-        setPlayerScore(PATTERNS[pattern].points);
+        setPlayerScore(calculatePoints(pattern, stake, isPractice));
       }
       
       return newCard;
     });
-  }, [gamePhase, winner, playerCard, calledNumbers]);
+  }, [gamePhase, winner, playerCard, calledPhrases, stake, isPractice]);
 
   const claimBingo = useCallback(() => {
     if (!playerWinPattern) {
@@ -376,13 +365,12 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     }
     
     setGamePhase("claiming");
-    setSoundEffect(SOUND_EFFECTS.bingo);
     
     if (callIntervalRef.current) clearInterval(callIntervalRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     
-    const playerPoints = PATTERNS[playerWinPattern].points;
-    const aiPoints = aiWinPattern ? PATTERNS[aiWinPattern].points : 0;
+    const playerPoints = calculatePoints(playerWinPattern, stake, isPractice);
+    const aiPoints = aiWinPattern ? calculatePoints(aiWinPattern, stake, isPractice) : 0;
     
     if (playerPoints >= aiPoints) {
       setWinner("player");
@@ -397,7 +385,7 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
       const won = playerPoints >= aiPoints;
       onGameEnd(won, playerPoints);
     }, 2000);
-  }, [playerWinPattern, aiWinPattern, onGameEnd]);
+  }, [playerWinPattern, aiWinPattern, stake, isPractice, onGameEnd]);
 
   useEffect(() => {
     if (aiWinPattern && !playerWinPattern && gamePhase === "playing") {
@@ -413,59 +401,91 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     }
   }, [aiWinPattern, playerWinPattern, gamePhase, onGameEnd, playerScore]);
 
+  useEffect(() => {
+    if (gamePhase === "playing" && currentPhrase) {
+      const playerHasPhrase = playerCard.some(row => 
+        row.some(cell => cell.phrase === currentPhrase && !cell.marked && !cell.isFreeSpace)
+      );
+      
+      if (playerHasPhrase) {
+        const timer = setTimeout(() => {
+          const stillUnmarked = playerCard.some(row => 
+            row.some(cell => cell.phrase === currentPhrase && !cell.marked && !cell.isFreeSpace)
+          );
+          if (stillUnmarked) {
+            setMissedPhrases(prev => [...prev, currentPhrase]);
+          }
+        }, CALL_INTERVAL - 500);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [currentPhrase, playerCard, gamePhase]);
+
   const resetGame = useCallback(() => {
     if (callIntervalRef.current) clearInterval(callIntervalRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     setGamePhase("ready");
     setPlayerCard([]);
     setAiCard([]);
-    setCalledNumbers([]);
-    setCurrentNumber(null);
-    setCallableNumbers([]);
+    setCalledPhrases([]);
+    setCurrentPhrase(null);
+    setCallableList([]);
     setPlayerScore(0);
     setAiScore(0);
     setPlayerWinPattern(null);
     setAiWinPattern(null);
     setWinner(null);
-    setNextCallIn(3);
+    setNextCallIn(4);
     setAnnouncement("");
-    setSoundEffect("");
+    setMissedPhrases([]);
   }, []);
+
+  const getUnmarkedCalledPhrases = useCallback(() => {
+    return calledPhrases.filter(phrase => 
+      playerCard.some(row => 
+        row.some(cell => cell.phrase === phrase && !cell.marked && !cell.isFreeSpace)
+      )
+    );
+  }, [calledPhrases, playerCard]);
 
   if (gamePhase === "ready") {
     return (
-      <Card className="max-w-2xl mx-auto">
+      <Card className="max-w-2xl mx-auto" data-testid="bingo-ready-screen">
         <CardHeader className="text-center">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200 }}
           >
-            <Grid3X3 className="h-16 w-16 mx-auto text-green-500 mb-4" />
+            <GraduationCap className="h-16 w-16 mx-auto text-green-500 mb-4" />
           </motion.div>
           <CardTitle className="text-2xl">Campus Bingo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="text-center space-y-2">
             <p className="text-muted-foreground">
-              Mark numbers on your 5x5 card as they're called. First to complete a pattern wins!
+              Mark Nigerian campus life experiences as they're called. First to complete a pattern wins!
             </p>
             <p className="text-sm text-muted-foreground">
-              Numbers called every 3 seconds. Beat the AI to shout BINGO!
+              Phrases called every 4 seconds. Beat the AI to shout BINGO!
             </p>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {Object.entries(PATTERNS).map(([key, pattern]) => {
               const Icon = pattern.icon;
+              const points = isPractice ? Math.round(pattern.multiplier * 100) : Math.round(stake * pattern.multiplier);
               return (
-                <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
+                <div key={key} className={`text-center p-3 rounded-lg ${getPatternColor(key as WinPattern)}`}>
                   <div className="flex items-center justify-center gap-2 mb-1">
                     <Icon className="h-4 w-4" />
-                    <span className="font-semibold">{pattern.name}</span>
+                    <span className="font-semibold text-sm">{pattern.name}</span>
                   </div>
-                  <div className="text-lg font-bold text-green-600 dark:text-green-400">{pattern.points} pts</div>
-                  <div className="text-xs text-muted-foreground">{pattern.description}</div>
+                  <div className="text-lg font-bold">
+                    {isPractice ? `${points} pts` : `${points.toLocaleString()} NGN`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{Math.round(pattern.multiplier * 100)}% of stake</div>
                 </div>
               );
             })}
@@ -496,25 +516,27 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
     );
   }
 
+  const unmarkedCalledPhrases = getUnmarkedCalledPhrases();
+
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-4" data-testid="bingo-game-screen">
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Grid3X3 className="h-5 w-5 text-green-500" />
+              <GraduationCap className="h-5 w-5 text-green-500" />
               Campus Bingo
             </CardTitle>
             
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-blue-500" />
-                <span className="font-semibold">{playerScore}</span>
+                <span className="font-semibold" data-testid="player-score">{playerScore}</span>
               </div>
               <span className="text-muted-foreground">vs</span>
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-red-500" />
-                <span className="font-semibold">{aiScore}</span>
+                <span className="font-semibold" data-testid="ai-score">{aiScore}</span>
               </div>
             </div>
           </div>
@@ -522,86 +544,100 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
         
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50">
-            <div className="flex items-center gap-2">
-              <Megaphone className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-medium">{announcement || "Get ready..."}</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Megaphone className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <span className="text-sm font-medium truncate" data-testid="announcement">{announcement || "Get ready..."}</span>
             </div>
             {gamePhase === "playing" && !winner && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Clock className="h-4 w-4" />
-                <span className="text-sm">Next: {nextCallIn}s</span>
+                <span className="text-sm" data-testid="next-call-timer">Next: {nextCallIn}s</span>
               </div>
             )}
           </div>
 
           <AnimatePresence mode="wait">
-            {currentNumber && (
+            {currentPhrase && (
               <motion.div
-                key={currentNumber}
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
+                key={currentPhrase}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
                 className="flex justify-center"
               >
-                <div className={`w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg ${getColumnColor(getColumnLetter(currentNumber))}`}>
-                  <span className="text-xs font-bold">{getColumnLetter(currentNumber)}</span>
-                  <span className="text-2xl font-bold">{currentNumber}</span>
+                <div className="px-6 py-4 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg text-center">
+                  <Zap className="h-5 w-5 mx-auto mb-1" />
+                  <span className="text-lg font-bold" data-testid="current-phrase">{currentPhrase}</span>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="flex justify-center">
-            <div className="inline-block">
-              <div className="grid grid-cols-5 gap-1 mb-2">
-                {BINGO_COLUMNS.map(letter => (
-                  <div 
-                    key={letter}
-                    className={`w-12 h-10 sm:w-14 sm:h-12 flex items-center justify-center font-bold text-lg rounded-t-md ${getColumnColor(letter)}`}
+          {unmarkedCalledPhrases.length > 0 && (
+            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 mb-1">
+                <Volume2 className="h-3 w-3" />
+                <span>On your card (not marked yet):</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {unmarkedCalledPhrases.slice(-5).map((phrase, index) => (
+                  <Badge 
+                    key={index}
+                    variant="secondary"
+                    className="text-xs bg-amber-500/20"
                   >
-                    {letter}
-                  </div>
+                    {phrase}
+                  </Badge>
                 ))}
               </div>
-              
+            </div>
+          )}
+
+          <div className="flex justify-center overflow-x-auto pb-2">
+            <div className="inline-block min-w-fit">
               <div className="grid grid-cols-5 gap-1">
                 {playerCard.map((row, rowIndex) => (
-                  row.map((cell, colIndex) => (
-                    <motion.button
-                      key={`${rowIndex}-${colIndex}`}
-                      whileHover={!cell.marked && !cell.isFreeSpace ? { scale: 1.05 } : {}}
-                      whileTap={!cell.marked && !cell.isFreeSpace ? { scale: 0.95 } : {}}
-                      onClick={() => markNumber(rowIndex, colIndex)}
-                      disabled={cell.marked || cell.isFreeSpace || gamePhase !== "playing"}
-                      className={`
-                        w-12 h-12 sm:w-14 sm:h-14 
-                        rounded-md border-2 
-                        flex items-center justify-center 
-                        font-bold text-lg
-                        transition-all duration-200
-                        ${cell.isFreeSpace 
-                          ? "bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400" 
-                          : cell.marked
-                            ? "bg-gradient-to-br from-blue-500 to-purple-600 text-white border-blue-400 shadow-md"
-                            : calledNumbers.includes(cell.number)
-                              ? `${getColumnColor(cell.column)} border-current cursor-pointer`
-                              : "bg-card border-border"
-                        }
-                      `}
-                      data-testid={`bingo-cell-${rowIndex}-${colIndex}`}
-                    >
-                      {cell.isFreeSpace ? (
-                        <div className="text-center">
-                          <GraduationCap className="h-5 w-5 mx-auto" />
-                          <span className="text-[10px]">FREE</span>
-                        </div>
-                      ) : cell.marked ? (
-                        <CheckCircle2 className="h-6 w-6" />
-                      ) : (
-                        cell.number
-                      )}
-                    </motion.button>
-                  ))
+                  row.map((cell, colIndex) => {
+                    const isCallable = !cell.marked && !cell.isFreeSpace && calledPhrases.includes(cell.phrase);
+                    return (
+                      <motion.button
+                        key={`${rowIndex}-${colIndex}`}
+                        whileHover={isCallable ? { scale: 1.02 } : {}}
+                        whileTap={isCallable ? { scale: 0.98 } : {}}
+                        onClick={() => markPhrase(rowIndex, colIndex)}
+                        disabled={cell.marked || cell.isFreeSpace || gamePhase !== "playing"}
+                        className={`
+                          w-16 h-16 sm:w-20 sm:h-20 
+                          rounded-md border-2 
+                          flex items-center justify-center 
+                          p-1 text-center
+                          transition-all duration-200
+                          ${cell.isFreeSpace 
+                            ? "bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400" 
+                            : cell.marked
+                              ? "bg-gradient-to-br from-blue-500 to-purple-600 text-white border-blue-400 shadow-md"
+                              : isCallable
+                                ? "bg-amber-500/20 border-amber-500 cursor-pointer ring-2 ring-amber-500/50"
+                                : "bg-card border-border"
+                          }
+                        `}
+                        data-testid={`bingo-cell-${rowIndex}-${colIndex}`}
+                      >
+                        {cell.isFreeSpace ? (
+                          <div className="text-center">
+                            <GraduationCap className="h-5 w-5 mx-auto" />
+                            <span className="text-[8px] font-bold">FREE</span>
+                          </div>
+                        ) : cell.marked ? (
+                          <CheckCircle2 className="h-6 w-6" />
+                        ) : (
+                          <span className="text-[9px] sm:text-[10px] font-medium leading-tight">
+                            {cell.phrase}
+                          </span>
+                        )}
+                      </motion.button>
+                    );
+                  })
                 ))}
               </div>
             </div>
@@ -620,39 +656,38 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
                 data-testid="button-claim-bingo"
               >
                 <Sparkles className="h-5 w-5 mr-2" />
-                BINGO! Claim {PATTERNS[playerWinPattern].name} ({PATTERNS[playerWinPattern].points} pts)
+                BINGO! Claim {PATTERNS[playerWinPattern].name}
               </Button>
             </motion.div>
           )}
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Volume2 className="h-4 w-4" />
-              <span className="italic">{soundEffect}</span>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Called Phrases</span>
+              <span className="font-medium">{calledPhrases.length}/{CAMPUS_PHRASES.length}</span>
             </div>
+            <Progress value={(calledPhrases.length / CAMPUS_PHRASES.length) * 100} className="h-2" />
             
-            <div className="space-y-1">
-              <div className="text-sm font-medium">Called Numbers ({calledNumbers.length}/75)</div>
-              <ScrollArea className="h-16 rounded-md border p-2">
-                <div className="flex flex-wrap gap-1">
-                  {calledNumbers.map((num, index) => (
-                    <Badge 
-                      key={index}
-                      variant="secondary"
-                      className={`text-xs ${getColumnColor(getColumnLetter(num))}`}
-                    >
-                      {getColumnLetter(num)}-{num}
-                    </Badge>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
+            <ScrollArea className="h-20 rounded-md border p-2">
+              <div className="flex flex-wrap gap-1">
+                {calledPhrases.map((phrase, index) => (
+                  <Badge 
+                    key={index}
+                    variant="secondary"
+                    className="text-xs"
+                    data-testid={`called-phrase-${index}`}
+                  >
+                    {phrase}
+                  </Badge>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         </CardContent>
       </Card>
 
       {gamePhase === "finished" && (
-        <Card>
+        <Card data-testid="bingo-result-screen">
           <CardContent className="pt-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -662,16 +697,16 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
               {winner === "player" ? (
                 <>
                   <Trophy className="h-16 w-16 mx-auto text-yellow-500" />
-                  <h3 className="text-2xl font-bold">BINGO! You Won!</h3>
-                  <p className="text-muted-foreground">
-                    {playerWinPattern && `${PATTERNS[playerWinPattern].name} - ${PATTERNS[playerWinPattern].points} points!`}
+                  <h3 className="text-2xl font-bold" data-testid="result-title">BINGO! You Won!</h3>
+                  <p className="text-muted-foreground" data-testid="result-pattern">
+                    {playerWinPattern && `${PATTERNS[playerWinPattern].name} - ${isPractice ? `${playerScore} points` : `${playerScore.toLocaleString()} NGN`}!`}
                   </p>
                 </>
               ) : (
                 <>
                   <Bot className="h-16 w-16 mx-auto text-red-500" />
-                  <h3 className="text-2xl font-bold">AI Wins!</h3>
-                  <p className="text-muted-foreground">
+                  <h3 className="text-2xl font-bold" data-testid="result-title">AI Wins!</h3>
+                  <p className="text-muted-foreground" data-testid="result-pattern">
                     {aiWinPattern && `AI got ${PATTERNS[aiWinPattern].name} first!`}
                   </p>
                 </>
@@ -680,13 +715,17 @@ export default function CampusBingoGame({ stake, onGameEnd, isPractice }: Campus
               <div className="grid grid-cols-2 gap-4 pt-4">
                 <div className="text-center p-3 rounded-lg bg-blue-500/10">
                   <User className="h-5 w-5 mx-auto text-blue-500 mb-1" />
-                  <div className="text-lg font-bold">{playerScore} pts</div>
-                  <div className="text-xs text-muted-foreground">Your Score</div>
+                  <div className="text-lg font-bold" data-testid="final-player-score">
+                    {isPractice ? `${playerScore} pts` : `${playerScore.toLocaleString()} NGN`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Your Winnings</div>
                 </div>
                 <div className="text-center p-3 rounded-lg bg-red-500/10">
                   <Bot className="h-5 w-5 mx-auto text-red-500 mb-1" />
-                  <div className="text-lg font-bold">{aiScore} pts</div>
-                  <div className="text-xs text-muted-foreground">AI Score</div>
+                  <div className="text-lg font-bold" data-testid="final-ai-score">
+                    {isPractice ? `${aiScore} pts` : `${aiScore.toLocaleString()} NGN`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">AI Winnings</div>
                 </div>
               </div>
               
