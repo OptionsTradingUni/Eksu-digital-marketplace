@@ -3016,12 +3016,33 @@ Happy trading!`;
   });
 
   // User profile routes
-  app.get("/api/users/:id", async (req, res) => {
+  app.get("/api/users/:id", async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const targetUserId = req.params.id;
+      const user = await storage.getUser(targetUserId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      
+      // Check if the viewer is authenticated and if they're blocked by the target user
+      const viewerId = getUserId(req);
+      if (viewerId && viewerId !== targetUserId) {
+        // Check if the target user has blocked the viewer
+        const isBlockedByTarget = await storage.isUserBlocked(targetUserId, viewerId);
+        
+        if (isBlockedByTarget) {
+          // Return limited info when blocked
+          return res.json({
+            id: user.id,
+            firstName: "Blocked User",
+            lastName: "",
+            profileImageUrl: null,
+            isBlocked: true,
+            blockedByUser: true,
+          });
+        }
+      }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -3393,7 +3414,17 @@ Happy trading!`;
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const blockedUsers = await storage.getBlockedUsers(userId);
+      const blockedUsersWithRelation = await storage.getBlockedUsers(userId);
+      
+      // Return just the blocked user info that the frontend expects
+      const blockedUsers = blockedUsersWithRelation.map(block => ({
+        id: block.blockedUser.id,
+        firstName: block.blockedUser.firstName,
+        lastName: block.blockedUser.lastName,
+        profileImageUrl: block.blockedUser.profileImageUrl,
+        email: block.blockedUser.email,
+      }));
+      
       res.json(blockedUsers);
     } catch (error: any) {
       console.error("Error getting blocked users:", error);
@@ -3410,7 +3441,31 @@ Happy trading!`;
       }
 
       const threads = await storage.getMessageThreads(userId);
-      res.json(threads);
+      
+      // Filter out threads where either user has blocked the other
+      const filteredThreads = [];
+      for (const thread of threads) {
+        const otherUserId = thread.otherUser?.id;
+        if (!otherUserId) continue;
+        
+        // Skip block checks for system account threads
+        if (isSystemAccount(otherUserId)) {
+          filteredThreads.push(thread);
+          continue;
+        }
+        
+        const [userBlockedOther, otherBlockedUser] = await Promise.all([
+          storage.isUserBlocked(userId, otherUserId),
+          storage.isUserBlocked(otherUserId, userId),
+        ]);
+        
+        // Only include threads where neither user has blocked the other
+        if (!userBlockedOther && !otherBlockedUser) {
+          filteredThreads.push(thread);
+        }
+      }
+      
+      res.json(filteredThreads);
     } catch (error) {
       console.error("Error fetching threads:", error);
       res.status(500).json({ message: "Failed to fetch threads" });
@@ -3579,6 +3634,18 @@ Happy trading!`;
         ...req.body,
       });
 
+      // Check if either user has blocked the other (skip for system account messages)
+      if (!isSystemAccount(validated.receiverId) && !isSystemAccount(userId)) {
+        const [senderBlockedReceiver, receiverBlockedSender] = await Promise.all([
+          storage.isUserBlocked(userId, validated.receiverId),
+          storage.isUserBlocked(validated.receiverId, userId),
+        ]);
+        
+        if (senderBlockedReceiver || receiverBlockedSender) {
+          return res.status(403).json({ message: "You cannot message this user" });
+        }
+      }
+
       // Save the user's message
       const message = await storage.createMessage(validated);
       
@@ -3661,6 +3728,18 @@ Happy trading!`;
 
       if (!receiverId) {
         return res.status(400).json({ message: "Receiver ID is required" });
+      }
+
+      // Check if either user has blocked the other (skip for system account messages)
+      if (!isSystemAccount(receiverId) && !isSystemAccount(userId)) {
+        const [senderBlockedReceiver, receiverBlockedSender] = await Promise.all([
+          storage.isUserBlocked(userId, receiverId),
+          storage.isUserBlocked(receiverId, userId),
+        ]);
+        
+        if (senderBlockedReceiver || receiverBlockedSender) {
+          return res.status(403).json({ message: "You cannot message this user" });
+        }
       }
 
       // Content is optional if there's an image

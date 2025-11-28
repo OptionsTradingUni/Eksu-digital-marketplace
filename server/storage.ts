@@ -3574,9 +3574,9 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(feedEngagementScores, eq(socialPosts.id, feedEngagementScores.postId))
       .where(eq(socialPosts.isVisible, true));
     
-    // Get following list if feedType is 'following'
+    // Get following list for logged-in users (needed for isFollowingAuthor in all feeds)
     let followingIds: string[] = [];
-    if (options?.userId && feedType === 'following') {
+    if (options?.userId) {
       const followingList = await db
         .select({ followingId: follows.followingId })
         .from(follows)
