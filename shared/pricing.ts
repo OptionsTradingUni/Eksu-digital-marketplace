@@ -3,21 +3,38 @@
  * 
  * This module can be used on both frontend and backend for consistent
  * pricing calculations. It handles:
- * - Monnify transaction fees
+ * - Squad transaction fees (official pricing)
  * - Platform commission
  * - Buyer/Seller price breakdowns
  */
 
 // Default values (can be overridden)
 export const DEFAULT_COMMISSION_RATE = 0.10; // 10%
-export const MONNIFY_FEE_CAP = 2000; // Maximum fee in Naira
-export const WAIVER_THRESHOLD = 2500; // ₦50 fixed fee waived below this amount
 
-export type PaymentMethod = 'CARD' | 'ACCOUNT_TRANSFER' | 'USSD' | 'PHONE_NUMBER';
+// Squad Official Pricing (2024)
+export const SQUAD_FEE_CONFIG = {
+  CARD: {
+    percentage: 0.012,  // 1.2%
+    cap: 1500,
+  },
+  TRANSFER: {
+    percentage: 0.0025, // 0.25%
+    cap: 1000,
+  },
+  USSD: {
+    percentage: 0.012,  // 1.2%
+    cap: 1500,
+  },
+  BANK: {
+    percentage: 0.0025, // 0.25%
+    cap: 1000,
+  },
+};
 
-export interface MonnifyFeeResult {
+export type PaymentMethod = 'CARD' | 'TRANSFER' | 'USSD' | 'BANK';
+
+export interface SquadFeeResult {
   feePercentage: number;
-  fixedFee: number;
   totalFee: number;
   cappedFee: number;
 }
@@ -25,48 +42,32 @@ export interface MonnifyFeeResult {
 export interface PricingBreakdown {
   sellerPrice: number;
   platformCommission: number;
-  monnifyFee: number;
+  paymentFee: number;
   buyerPays: number;
   sellerReceives: number;
   commissionRate: number;
 }
 
 /**
- * Calculate Monnify transaction fee based on amount and payment method
+ * Calculate Squad transaction fee based on amount and payment method
+ * Official Squad Pricing: https://squadco.com/pricing
  */
-export function calculateMonnifyFee(
+export function calculateSquadFee(
   amount: number,
   paymentMethod: PaymentMethod = 'CARD'
-): MonnifyFeeResult {
-  let feePercentage: number;
-  let fixedFee: number;
+): SquadFeeResult {
+  const feeConfig = SQUAD_FEE_CONFIG[paymentMethod];
   
-  switch (paymentMethod) {
-    case 'CARD':
-      feePercentage = 0.015; // 1.5%
-      fixedFee = amount < WAIVER_THRESHOLD ? 0 : 50;
-      break;
-    case 'ACCOUNT_TRANSFER':
-    case 'USSD':
-      feePercentage = 0.01; // 1.0% for bank transfers
-      fixedFee = amount < WAIVER_THRESHOLD ? 0 : 50;
-      break;
-    case 'PHONE_NUMBER':
-      feePercentage = 0.015; // 1.5%
-      fixedFee = amount < WAIVER_THRESHOLD ? 0 : 50;
-      break;
-    default:
-      feePercentage = 0.015;
-      fixedFee = amount < WAIVER_THRESHOLD ? 0 : 50;
+  if (!feeConfig) {
+    throw new Error(`Unknown payment method: ${paymentMethod}`);
   }
   
-  const percentageFee = amount * feePercentage;
-  const totalFee = percentageFee + fixedFee;
-  const cappedFee = Math.min(totalFee, MONNIFY_FEE_CAP);
+  const feePercentage = feeConfig.percentage;
+  const totalFee = amount * feePercentage;
+  const cappedFee = Math.min(totalFee, feeConfig.cap);
   
   return {
     feePercentage,
-    fixedFee,
     totalFee,
     cappedFee,
   };
@@ -76,8 +77,8 @@ export function calculateMonnifyFee(
  * Calculate full pricing breakdown based on seller's desired price
  * 
  * Formula:
- * - Platform Commission (B) = Seller Price * WEBSITE_COMMISSION_RATE
- * - Monnify Fee (C) = 1.5% of Seller Price + ₦50 (capped at ₦2000)
+ * - Platform Commission (B) = Seller Price * COMMISSION_RATE
+ * - Squad Fee (C) = Squad fee based on payment method
  * - Total Buyer Pays = Seller Price + B + C
  * - Seller Receives = Seller Price - B
  */
@@ -89,20 +90,17 @@ export function calculatePricingFromSellerPrice(
   // Platform commission on the seller price
   const platformCommission = Math.round(sellerDesiredProfit * commissionRate * 100) / 100;
   
-  // Monnify fee calculation
-  const monnifyResult = calculateMonnifyFee(sellerDesiredProfit, paymentMethod);
-  const monnifyFee = Math.round(monnifyResult.cappedFee * 100) / 100;
+  // Squad fee calculation
+  const squadResult = calculateSquadFee(sellerDesiredProfit, paymentMethod);
+  const paymentFee = Math.round(squadResult.cappedFee * 100) / 100;
   
-  // Total buyer pays = seller price + platform commission + monnify fee
-  const buyerPays = Math.round((sellerDesiredProfit + platformCommission + monnifyFee) * 100) / 100;
-  
-  // Seller receives = seller price - platform commission
+  const buyerPays = Math.round((sellerDesiredProfit + platformCommission + paymentFee) * 100) / 100;
   const sellerReceives = Math.round((sellerDesiredProfit - platformCommission) * 100) / 100;
   
   return {
     sellerPrice: sellerDesiredProfit,
     platformCommission,
-    monnifyFee,
+    paymentFee,
     buyerPays,
     sellerReceives,
     commissionRate,
@@ -123,4 +121,49 @@ export function parseNaira(nairaString: string): number {
   const cleaned = nairaString.replace(/[₦,\s]/g, '');
   const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Get payment method info with correct Squad pricing
+ * Based on official pricing: https://squadco.com/pricing
+ */
+export function getPaymentMethodInfo(method: PaymentMethod) {
+  const info = {
+    CARD: {
+      title: 'Debit/Credit Card',
+      description: 'Standard settlement (T+1)',
+      fee: '1.2% (max ₦1,500)',
+    },
+    TRANSFER: {
+      title: 'Bank Transfer',
+      description: 'Instant settlement via Virtual Account',
+      fee: '0.25% (max ₦1,000)',
+      recommended: true,
+    },
+    USSD: {
+      title: 'USSD',
+      description: 'Standard settlement (T+1)',
+      fee: '1.2% (max ₦1,500)',
+    },
+    BANK: {
+      title: 'Bank Account',
+      description: 'Instant settlement via Virtual Account',
+      fee: '0.25% (max ₦1,000)',
+    },
+  };
+  
+  return info[method] || info.CARD;
+}
+
+// Re-export for backward compatibility
+export function getCommissionRate(): number {
+  return DEFAULT_COMMISSION_RATE;
+}
+
+export function getSecurityDepositAmount(amount: number): number {
+  return Math.round(amount * 0.05); // 5% security deposit
+}
+
+export function isWithdrawalAllowed(availableBalance: number, withdrawalAmount: number): boolean {
+  return availableBalance >= withdrawalAmount && withdrawalAmount > 0;
 }

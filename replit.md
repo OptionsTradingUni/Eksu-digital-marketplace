@@ -99,12 +99,21 @@ The marketplace employs a modern full-stack architecture focusing on performance
 - Sanitized error responses prevent information leakage
 - Error tracking and reporting system
 
-### ✅ **Squad Payment API Improvements**
-- Retry logic with exponential backoff (3 attempts)
-- Error categorization: payment_error, network_error, validation_error
-- User-friendly error messages
-- Automatic transaction status updates
-- Webhook handling for payment confirmations
+### ✅ **Squad Payment Integration (Production-Ready)**
+- **Official Pricing Implementation:**
+  - Card/USSD: 1.2% capped at ₦1,500
+  - Bank Transfer: 0.25% capped at ₦1,000 (instant T+0 settlement)
+- **API Configuration:**
+  - Production URL: api-d.squadco.com
+  - Sandbox URL: sandbox-api-d.squadco.com
+  - Webhook verification: HMAC SHA-512 with x-squad-encrypted-body header
+- **Features:**
+  - Retry logic with exponential backoff (3 attempts)
+  - Error categorization: payment_error, network_error, validation_error
+  - User-friendly error messages
+  - Automatic transaction status updates
+  - Consistent fee calculations across frontend and backend
+- **Removed:** All Paystack, Flutterwave, Monnify references
 
 ### ✅ **VTU Integration (Graceful Fallback)**
 - Primary: SMEDATA.NG API `/plans` endpoint

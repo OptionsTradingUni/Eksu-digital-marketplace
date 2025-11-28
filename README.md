@@ -11,8 +11,8 @@ A comprehensive peer-to-peer marketplace built specifically for EKSU students to
 ## 🚀 Features
 
 - **Student Verification**: NIN-based identity verification with selfie matching
-- **Secure Payments**: Paystack integration with escrow protection
-- **Smart Wallet System**: Deposit, withdraw, track balances
+- **Secure Payments**: Squad (by Habari) payment gateway with multiple channels (Card, Bank Transfer, USSD)
+- **Smart Wallet System**: Deposit, withdraw, track balances with escrow protection
 - **Real-Time Chat**: WebSocket messaging with image & voice note support
 - **Referral Rewards**: Earn bonuses when referred users make purchases
 - **Login Streak Rewards**: Daily login bonuses (₦2-50)
@@ -84,23 +84,23 @@ SESSION_SECRET=my_super_secret_random_key_12345abcdef67890xyz
 
 ---
 
-### **Required for Payment Processing (Paystack)**
+### **Required for Payment Processing (Squad by Habari)**
 
-#### **3. PAYSTACK_SECRET_KEY**
-**What it is**: Your Paystack secret API key (for backend)  
+#### **3. SQUAD_SECRET_KEY**
+**What it is**: Your Squad secret API key (for backend)  
 **Where to get it**:
-1. Create free account at https://paystack.com
-2. Go to Settings → API Keys & Webhooks
-3. Copy your **Test Secret Key** (starts with `sk_test_`)
-4. Later, copy **Live Secret Key** when ready for production
+1. Create free account at https://squadco.com
+2. Go to Settings → API Keys
+3. Copy your **Test Secret Key** (starts with `sk_test_` or `sandbox_sk_`)
+4. Later, copy **Live Secret Key** (starts with `sk_live_`) when ready for production
 
 **Example**:
 ```bash
-PAYSTACK_SECRET_KEY=sk_test_1234567890abcdefghijklmnopqrstuvwxyz
+SQUAD_SECRET_KEY=sk_test_1234567890abcdefghijklmnopqrstuvwxyz
 ```
 
-#### **4. PAYSTACK_PUBLIC_KEY**
-**What it is**: Your Paystack public API key (for frontend)  
+#### **4. SQUAD_PUBLIC_KEY**
+**What it is**: Your Squad public API key (for frontend)  
 **Where to get it**:
 1. Same place as secret key
 2. Copy your **Test Public Key** (starts with `pk_test_`)
