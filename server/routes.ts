@@ -59,7 +59,17 @@ import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam,
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, requeryOrder } from "./smedata";
-import { sendEmailVerificationCode, sendErrorReportToAdmin, sendMessageNotification, sendOrderEmail } from "./email-service";
+import { 
+  sendEmailVerificationCode, 
+  sendErrorReportToAdmin, 
+  sendMessageNotification, 
+  sendOrderEmail,
+  sendWelcomeEmail,
+  sendNewFollowerEmail,
+  sendNewPostFromFollowingEmail,
+  sendNewProductFromFollowingEmail,
+  sendTestEmail
+} from "./email-service";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -616,13 +626,21 @@ Happy trading!`;
       // Send email verification (don't block registration if this fails)
       try {
         const { token, code } = await storage.createEmailVerificationToken(user.id);
-        const appUrl = process.env.APP_URL || 'https://eksu-marketplace.com';
+        const appUrl = process.env.APP_URL || 'https://eksuplug.com.ng';
         const verificationLink = `${appUrl}/verify-email?token=${token}`;
         await sendEmailVerificationCode(user.email, user.firstName || 'User', code, verificationLink);
         console.log(`Verification email sent to ${user.email}`);
       } catch (emailError: any) {
         console.error("Error sending verification email:", emailError.message);
         // Don't fail registration if email fails - user can request resend later
+      }
+
+      // Send welcome email (don't block registration if this fails)
+      try {
+        await sendWelcomeEmail(user.email, user.firstName || 'User');
+        console.log(`Welcome email sent to ${user.email}`);
+      } catch (welcomeEmailError: any) {
+        console.error("Error sending welcome email:", welcomeEmailError.message);
       }
 
       // Remove password from user object before storing in session/sending to client
@@ -3254,7 +3272,9 @@ Happy trading!`;
       
       // Create notification for the followed user
       const follower = await storage.getUser(userId);
-      if (follower && targetUserId !== userId) {
+      const followedUser = await storage.getUser(targetUserId);
+      
+      if (follower && followedUser && targetUserId !== userId) {
         const followerName = follower.firstName && follower.lastName 
           ? `${follower.firstName} ${follower.lastName}` 
           : follower.email;
@@ -3267,6 +3287,18 @@ Happy trading!`;
           link: `/profile/${userId}`,
           relatedUserId: userId,
         });
+        
+        // Send email notification to the followed user
+        try {
+          await sendNewFollowerEmail(
+            followedUser.email,
+            followerName,
+            follower.username || follower.email.split('@')[0]
+          );
+          console.log(`New follower email sent to ${followedUser.email}`);
+        } catch (emailError: any) {
+          console.error("Error sending new follower email:", emailError.message);
+        }
       }
       
       res.json(follow);
@@ -4645,6 +4677,59 @@ Happy trading!`;
 
       // Fetch the full post with author info
       const fullPost = await storage.getSocialPost(post.id);
+      
+      // Notify followers about the new post (run asynchronously, don't block response)
+      (async () => {
+        try {
+          const author = await storage.getUser(userId);
+          if (!author) return;
+          
+          const authorName = author.firstName && author.lastName 
+            ? `${author.firstName} ${author.lastName}` 
+            : author.username || author.email.split('@')[0];
+          
+          const authorUsername = author.username || author.email.split('@')[0];
+          const postPreview = hasContent ? content.trim() : "[Media post]";
+          
+          // Get followers and notify them
+          const followers = await storage.getFollowers(userId);
+          
+          // Limit to first 50 followers for email to avoid overwhelming the service
+          const followersToEmail = followers.slice(0, 50);
+          
+          for (const follow of followers) {
+            // Send in-app notification to all followers
+            await createAndBroadcastNotification({
+              userId: follow.follower.id,
+              type: "new_post",
+              title: "New Post",
+              message: `${authorName} shared a new post`,
+              link: `/the-plug?post=${post.id}`,
+              relatedUserId: userId,
+            });
+          }
+          
+          // Send email notifications to a limited number of followers
+          for (const follow of followersToEmail) {
+            try {
+              await sendNewPostFromFollowingEmail(
+                follow.follower.email,
+                authorName,
+                authorUsername,
+                postPreview,
+                post.id
+              );
+            } catch (emailError: any) {
+              console.error(`Error sending new post email to ${follow.follower.email}:`, emailError.message);
+            }
+          }
+          
+          console.log(`Notified ${followers.length} followers about new post from ${author.email}`);
+        } catch (notifyError: any) {
+          console.error("Error notifying followers about new post:", notifyError.message);
+        }
+      })();
+      
       res.status(201).json(fullPost);
     } catch (error) {
       console.error("Error creating social post:", error);
@@ -11683,6 +11768,49 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error rating study material:", error);
       res.status(500).json({ message: "Failed to rate study material" });
+    }
+  });
+
+  // ==================== TEST EMAIL ENDPOINT ====================
+  // Admin endpoint to send test emails for verifying Resend integration
+  app.post("/api/admin/send-test-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Check if user is admin
+      const user = await storage.getUser(userId);
+      const superAdminIds = (process.env.SUPER_ADMIN_IDS || "").split(",").map(id => id.trim());
+      if (!user || !superAdminIds.includes(userId)) {
+        return res.status(403).json({ message: "Only admins can send test emails" });
+      }
+      
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email address is required" });
+      }
+      
+      const result = await sendTestEmail(email);
+      
+      if (result.success) {
+        console.log(`Test email sent successfully to ${email}`);
+        res.json({ 
+          success: true, 
+          message: `Test email sent successfully to ${email}`,
+          messageId: result.messageId 
+        });
+      } else {
+        console.error(`Failed to send test email to ${email}:`, result.error);
+        res.status(500).json({ 
+          success: false, 
+          message: `Failed to send test email: ${result.error}` 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({ message: error.message || "Failed to send test email" });
     }
   });
 

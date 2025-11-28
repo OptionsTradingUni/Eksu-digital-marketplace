@@ -15,10 +15,6 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 38467
-externalPort = 6000
-
-[[ports]]
 localPort = 38599
 externalPort = 4200
 
@@ -74,6 +70,10 @@ externalPort = 9000
 localPort = 45191
 externalPort = 8081
 
+[[ports]]
+localPort = 45231
+externalPort = 6000
+
 [env]
 PORT = "5000"
 
@@ -115,3 +115,5 @@ SYSTEM_USER_ID = "2bebadee-f30f-43c5-bf57-d94ee04eabe5"
 SUPER_ADMIN_IDS = "e461e9f4-6a83-413f-a2e9-ab346d268f44"
 VITE_SUPER_ADMIN_IDS = "e461e9f4-6a83-413f-a2e9-ab346d268f44"
 SYSTEM_WELCOME_USER_ID = "2bebadee-f30f-43c5-bf57-d94ee04eabe5"
+APP_URL = "https://eksuplug.com.ng"
+APP_NAME = "EKSU Plug"
