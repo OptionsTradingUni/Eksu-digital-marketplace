@@ -84,7 +84,7 @@ const evaluateHand = (dice: number[]): HandResult => {
   const sortedDice = [...dice].sort((a, b) => b - a);
   
   const isStraight = (vals: number[]): boolean => {
-    const sorted = [...new Set(vals)].sort((a, b) => a - b);
+    const sorted = Array.from(new Set(vals)).sort((a, b) => a - b);
     if (sorted.length !== 5) return false;
     return sorted[4] - sorted[0] === 4;
   };
