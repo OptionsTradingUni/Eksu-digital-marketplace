@@ -839,6 +839,14 @@ export default function Profile() {
                   <Camera className="h-6 w-6" />
                 </div>
               </button>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverSelect}
+                className="hidden"
+                data-testid="input-cover-file"
+              />
             </>
           )}
           
@@ -849,15 +857,6 @@ export default function Profile() {
               className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-colors"
               data-testid="button-view-cover"
             />
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleCoverSelect}
-                className="hidden"
-                data-testid="input-cover-file"
-              />
-            </>
           )}
           
           {isPreviewMode && isOwnProfile && (
@@ -905,6 +904,16 @@ export default function Profile() {
                     data-testid="button-change-avatar"
                   >
                     <Camera className="h-4 w-4" />
+                  </button>
+                )}
+                {!canEdit && displayUser.profileImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxImage(displayUser.profileImageUrl!)}
+                    className="absolute bottom-1 right-1 p-2 rounded-full bg-background/80 border shadow-md hover:bg-background transition-all"
+                    data-testid="button-view-avatar"
+                  >
+                    <Eye className="h-4 w-4" />
                   </button>
                 )}
                 <input
@@ -1123,7 +1132,35 @@ export default function Profile() {
                 <span className="text-muted-foreground ml-1">Followers</span>
               </button>
             </div>
+
+            {isOwnProfile && (
+              <div className="mt-6 space-y-3">
+                {["social", "services", "account"].map((section) => (
+                  <Card key={section} className="cursor-pointer hover-elevate" onClick={() => toggleSection(section as keyof typeof expandedSections)}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base capitalize">{section === "social" ? "Social & Links" : section === "services" ? "Services" : "Account Settings"}</CardTitle>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${expandedSections[section as keyof typeof expandedSections] ? "" : "-rotate-90"}`} />
+                      </div>
+                    </CardHeader>
+                    {expandedSections[section as keyof typeof expandedSections] && (
+                      <CardContent className="text-sm text-muted-foreground">
+                        {section === "social" ? "Social links and profile connections" : section === "services" ? "Services you offer" : "Account security and settings"}
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
           </motion.div>
+
+          {lightboxImage && (
+            <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
+              <DialogContent className="max-w-3xl p-0 bg-black/90 border-0">
+                <img src={lightboxImage} alt="Preview" className="w-full h-auto" />
+              </DialogContent>
+            </Dialog>
+          )}
 
           <AnimatePresence>
             {showPreviewAfterSave && isOwnProfile && (
