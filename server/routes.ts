@@ -325,6 +325,7 @@ async function checkEmailVerified(userId: string): Promise<{ verified: boolean; 
 }
 
 // Middleware to enforce email verification for critical actions
+// SECURITY: Fail-closed - blocks on any error (never allows unverified access)
 function requireEmailVerified(req: any, res: any, next: any) {
   const userId = getUserId(req);
   if (!userId) {
@@ -342,7 +343,35 @@ function requireEmailVerified(req: any, res: any, next: any) {
     next();
   }).catch(err => {
     console.error("Email verification check error:", err);
-    next(); // Continue on error to not block users
+    // SECURITY: Fail closed - block access on any error
+    return res.status(500).json({ 
+      message: "Unable to verify email status. Please try again.",
+      code: "VERIFICATION_ERROR"
+    });
+  });
+}
+
+// Synchronous admin check middleware (uses cached check, then DB fallback)
+function requireAdmin(req: any, res: any, next: any) {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  // First check super admin (fast, synchronous)
+  if (isSuperAdmin(userId)) {
+    return next();
+  }
+  
+  // Fall back to database check
+  isAdminUser(userId).then(isAdmin => {
+    if (!isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  }).catch(err => {
+    console.error("Admin check error:", err);
+    return res.status(500).json({ message: "Unable to verify admin status" });
   });
 }
 
@@ -1019,6 +1048,17 @@ Happy trading!`;
   app.post('/api/wallet/deposit', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      
+      // Enforce email verification for financial transactions
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
+      }
+      
       const { amount } = req.body;
 
       if (!amount || parseFloat(amount) < 100) {
@@ -1048,6 +1088,17 @@ Happy trading!`;
   app.post('/api/wallet/withdraw', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      
+      // Enforce email verification for financial transactions
+      const emailCheck = await checkEmailVerified(userId);
+      if (!emailCheck.verified) {
+        return res.status(403).json({ 
+          message: emailCheck.message,
+          code: "EMAIL_NOT_VERIFIED",
+          action: "verify_email"
+        });
+      }
+      
       const { amount, bankName, accountNumber, accountName } = req.body;
 
       if (!amount || parseFloat(amount) < 500) {
@@ -1089,17 +1140,9 @@ Happy trading!`;
   });
 
   // Admin: Get detailed Squad payment configuration status
-  app.get('/api/admin/payment/config', isAuthenticated, async (req: any, res) => {
+  // SECURITY: Protected by requireAdmin middleware - only admins can view payment configuration
+  app.get('/api/admin/payment/config', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      if (!(await isAdminUser(userId))) {
-        return res.status(403).json({ message: "Only admins can view payment configuration" });
-      }
-
       const squadStatus = getSquadConfigStatus();
       const smedataConfigured = isSMEDataConfigured();
 
