@@ -1,0 +1,75 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+
+Subject: AGENT 2 – Your Complete Task List (Frontend + UI/UX + Anonymous Section)
+
+Hi Agent 2,
+
+You are responsible for EVERYTHING below. Complete 100%. No overlap with Agent 1.
+
+1. Anonymous “Secret Messages” Section (Exactly like secretmessage.link)
+   - Route: /secret or secret.eksu.digital
+   - 100% public – NO login required at all
+   - Full dark mode design
+   - NO bottom navigation bar, NO header, NO “inside the app” feel
+   - Anyone can view, post confessions, comment anonymously
+   - Completely separate from main app
+
+2. Fix Huge White Space on Mobile Load (100vh Bug)
+   - Apply this CSS globally:
+     html, body, .app, .page, [class*="container"] { min-height: 100dvh !important; min-height: -webkit-fill-available !important; }
+
+3. Fix Keyboard Covering Input in Chats & Comments
+   - Input bar must stick to bottom
+   - Add padding-bottom: env(safe-area-inset-bottom)
+   - Message list must scroll properly when keyboard opens
+
+4. Comment Input Modal Appears in Middle → Change to Bottom Sheet
+   - Must slide up from bottom like Instagram/TikTok
+
+5. Product Browsing Page – Make It Exactly Like Jumia/Temu/Konga
+   - Currently only 2 columns → make it 2–3 columns on mobile
+   - Sponsored products at top + every 5–6 items
+   - Add sections: “Sellers Near You”, “Sellers in Ado-Ekiti”, “Sellers in Ekiti”
+   - Show seller location on profile and product cards
+
+6. Gender Setting
+   - Move from Settings → to Edit Profile
+   - Fix slow switching
+
+7. System Notifications
+   - Currently white and ugly, don’t auto-dismiss
+   - Make them colored (green/red), beautiful, auto-dismiss after 4 seconds
+
+8. Dark Mode & Profile Screen
+   - Dark mode toggle not working
+   - Fix it fully
+   - Rename to “Appearance” or “Screen Mode”
+   - Or remove from profile and put in top navigation
+
+9. Verification Badges
+   - Normal verified users → blue check
+   - Official Campus account → different (purple star or crown)
+   - Sellers / Brands → different badge (gold ₦ or shop icon)
+
+10. Category Filters
+    - Add search bar inside the filter modal
+
+11. Add any other UI/UX improvements you think will make the app feel premium and modern in 2025
+
+Work in branch: agent2-full-work  
+Use JavaScript / React / Next.js only  
+Test on real iPhone + Android before saying done  
+Reply “AGENT 2 READY” when you start.
+
+Thank you!
