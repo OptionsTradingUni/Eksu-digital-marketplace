@@ -717,7 +717,8 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "announcement", "dispute", "verification_approved", "verification_rejected",
   "escrow_released", "wallet_credit", "boost_expired", "price_alert",
   "negotiation_offer", "negotiation_accepted", "negotiation_rejected", "negotiation_countered",
-  "order_placed", "order_confirmed", "order_shipped", "order_delivered", "order_completed", "order_cancelled"
+  "order_placed", "order_confirmed", "order_shipped", "order_delivered", "order_completed", "order_cancelled",
+  "welcome", "story_reaction"
 ]);
 
 // Notifications for real time updates

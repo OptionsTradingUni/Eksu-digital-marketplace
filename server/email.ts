@@ -1,8 +1,8 @@
 import { Resend } from 'resend';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@eksu-marketplace.com';
-const APP_NAME = process.env.APP_NAME || 'EKSU Marketplace';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'no-reply@eksuplug.com.ng';
+const APP_NAME = process.env.APP_NAME || 'EKSU Plug';
 
 let resend: Resend | null = null;
 
