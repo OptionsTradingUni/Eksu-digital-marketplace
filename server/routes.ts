@@ -59,7 +59,7 @@ import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam,
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, fetchAndParsePlans, type ParsedVtuPlan } from "./smedata";
-import { sendEmailVerificationCode, sendErrorReportToAdmin } from "./email-service";
+import { sendEmailVerificationCode, sendErrorReportToAdmin, sendMessageNotification, sendOrderEmail } from "./email-service";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -562,10 +562,18 @@ Happy trading!`;
         return res.status(400).json({ message: "Email already registered" });
       }
       
-      res.status(500).json({ 
-        message: "Failed to register user. Please try again.",
-        error: process.env.NODE_ENV === "development" ? error.message : undefined
+      // Hide developer details from user
+      const userMessage = "Failed to create account. Please try again or contact support.";
+      
+      // Send error to admin
+      sendErrorReportToAdmin("Registration Error", error.message, { 
+        email: req.body.email,
+        stack: error.stack 
+      }).catch(err => {
+        console.error("Failed to send registration error email:", err);
       });
+
+      res.status(500).json({ message: userMessage });
     }
   });
 
@@ -911,10 +919,14 @@ Happy trading!`;
         timestamp,
       });
 
-      // TODO: In production, you could:
-      // 1. Save to database for error tracking
-      // 2. Send email notification via Resend
-      // 3. Send to error monitoring service (Sentry, LogRocket, etc.)
+      // Send error report to admin email
+      sendErrorReportToAdmin("Frontend Error Report", `URL: ${url}\n\nError: ${message}\n\nStack: ${stack}`, {
+        componentStack,
+        userAgent,
+        timestamp,
+      }).catch(err => {
+        console.error("Failed to send error report email:", err);
+      });
 
       // For now, just acknowledge receipt
       res.json({ success: true, message: "Error report received" });
@@ -3328,7 +3340,8 @@ Happy trading!`;
       // Create notification for the message receiver
       if (validated.receiverId && validated.receiverId !== userId) {
         const sender = await storage.getUser(userId);
-        if (sender) {
+        const receiver = await storage.getUser(validated.receiverId);
+        if (sender && receiver) {
           const senderName = sender.firstName && sender.lastName 
             ? `${sender.firstName} ${sender.lastName}` 
             : sender.email;
@@ -3346,6 +3359,11 @@ Happy trading!`;
             link: `/messages?user=${userId}`,
             relatedUserId: userId,
             relatedProductId: validated.productId || undefined,
+          });
+
+          // Send email notification for new message
+          sendMessageNotification(receiver.email, senderName).catch(err => {
+            console.error("Failed to send message email notification:", err);
           });
         }
       }
@@ -6768,6 +6786,50 @@ Happy trading!`;
 
       // Update the order status
       const updatedOrder = await storage.updateOrderStatus(id, status, userId, notes);
+
+      // Send email notification to both buyer and seller
+      try {
+        const buyer = order.buyerId ? await storage.getUser(order.buyerId) : null;
+        const seller = order.sellerId ? await storage.getUser(order.sellerId) : null;
+        const product = order.productId ? await storage.getProduct(order.productId) : null;
+        
+        if (buyer && product && seller) {
+          const statusMessages: Record<string, 'confirmation' | 'shipped' | 'delivered' | 'completed'> = {
+            'awaiting_payment': 'confirmation',
+            'confirmed': 'confirmation',
+            'shipped': 'shipped',
+            'delivered': 'delivered',
+            'completed': 'completed',
+          };
+          
+          const emailType = statusMessages[status] || 'confirmation';
+          const sellerName = seller.firstName && seller.lastName ? `${seller.firstName} ${seller.lastName}` : seller.username || seller.email;
+          const buyerDisplayName = buyer.firstName || undefined;
+          
+          // Send to buyer
+          sendOrderEmail(buyer.email, {
+            orderId: id,
+            productName: product.title,
+            totalAmount: order.totalAmount.toString(),
+            sellerName,
+            buyerName: buyerDisplayName,
+            type: emailType,
+          }).catch(err => console.error("Failed to send buyer order email:", err));
+          
+          // Send to seller
+          const buyerName = buyer.firstName && buyer.lastName ? `${buyer.firstName} ${buyer.lastName}` : buyer.username || buyer.email;
+          sendOrderEmail(seller.email, {
+            orderId: id,
+            productName: product.title,
+            totalAmount: order.totalAmount.toString(),
+            sellerName: buyerName,
+            type: emailType,
+          }).catch(err => console.error("Failed to send seller order email:", err));
+        }
+      } catch (emailErr) {
+        console.error("Error sending order emails:", emailErr);
+        // Don't fail the request, just log the error
+      }
 
       res.json(updatedOrder);
     } catch (error) {
