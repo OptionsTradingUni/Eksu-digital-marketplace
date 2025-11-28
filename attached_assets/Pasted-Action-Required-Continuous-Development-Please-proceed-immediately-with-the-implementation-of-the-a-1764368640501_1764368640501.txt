@@ -1,0 +1,271 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: squad api are set 
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+// src/lib/squad.ts
+import crypto from 'crypto';
+
+// ──────────────────────────────────────────────────────────────
+// CONFIGURATION (Set these in your .env file)
+// ──────────────────────────────────────────────────────────────
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+const SQUAD_CONFIG = {
+  secretKey: IS_PRODUCTION
+    ? process.env.SQUAD_SECRET_KEY_PROD!
+    : process.env.SQUAD_SECRET_KEY_TEST!,
+  publicKey: IS_PRODUCTION
+    ? process.env.SQUAD_PUBLIC_KEY_PROD!
+    : process.env.SQUAD_PUBLIC_KEY_TEST!,
+  baseUrl: IS_PRODUCTION
+    ? 'https://api.squadco.com'
+    : 'https://sandbox-api.squadco.com',
+  encryptionKey: process.env.SQUAD_ENCRYPTION_KEY!, // 32-byte key from dashboard
+};
+
+// ──────────────────────────────────────────────────────────────
+// TYPES
+// ──────────────────────────────────────────────────────────────
+export interface InitiatePaymentPayload {
+  amount: number;                    // in kobo (e.g., ₦500 = 50000)
+  email: string;
+  currency?: 'NGN';
+  callback_url?: string;             // redirect after payment
+  metadata?: Record<string, any>;    // e.g., { game: "ludo", match_id: "123" }
+  payment_channels?: ('card' | 'bank_transfer' | 'ussd' | 'wallet')[];
+  transaction_ref?: string;          // optional, generate if not provided
+}
+
+export interface PaymentResponse {
+  status: boolean;
+  message: string;
+  data: {
+    payment_link?: string;
+    access_code?: string;
+    transaction_ref: string;
+  };
+}
+
+export interface RefundPayload {
+  transaction_ref: string;
+  refund_amount?: number;            // in kobo, partial refund
+  reason_for_refund?: string;
+}
+
+// ──────────────────────────────────────────────────────────────
+// HELPER: Generate unique transaction ref
+// ──────────────────────────────────────────────────────────────
+function generateTransactionRef(prefix = 'BET'): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`.toUpperCase();
+}
+
+// ──────────────────────────────────────────────────────────────
+// MAIN: Initiate Payment (Card + Bank Transfer + USSD)
+// ──────────────────────────────────────────────────────────────
+export async function initiatePayment(
+  payload: InitiatePaymentPayload
+): Promise<PaymentResponse> {
+  const transaction_ref = payload.transaction_ref || generateTransactionRef('GAME');
+
+  const body = {
+    amount: payload.amount,
+    email: payload.email,
+    currency: payload.currency || 'NGN',
+    callback_url: payload.callback_url || `${process.env.APP_URL}/payment/callback`,
+    transaction_ref,
+    payment_channels: payload.payment_channels || ['card', 'bank_transfer', 'ussd'],
+    metadata: {
+      ...payload.metadata,
+      source: 'ludo-betting-app',
+      initiated_at: new Date().toISOString(),
+    },
+  };
+
+  const response = await fetch(`${SQUAD_CONFIG.baseUrl}/payment/initiate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SQUAD_CONFIG.secretKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(`Squad Error ${response.status}: ${JSON.stringify(data)}`);
+  }
+
+  return data as PaymentResponse;
+}
+
+// ──────────────────────────────────────────────────────────────
+// Partial / Full Refund
+// ──────────────────────────────────────────────────────────────
+export async function refundPayment(payload: RefundPayload) {
+  const body: any = {
+    transaction_ref: payload.transaction_ref,
+    reason_for_refund: payload.reason_for_refund || 'Player forfeited match',
+  };
+
+  if (payload.refund_amount) {
+    body.refund_amount = payload.refund_amount;
+    body.refund_type = 'Partial';
+  }
+
+  const response = await fetch(`${SQUAD_CONFIG.baseUrl}/refund`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SQUAD_CONFIG.secretKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(`Refund failed: ${JSON.stringify(data)}`);
+  }
+
+  return data;
+}
+
+// ──────────────────────────────────────────────────────────────
+// WEBHOOK: Verify & Decrypt Squad Webhook (CRITICAL!)
+// ──────────────────────────────────────────────────────────────
+export function verifyAndDecryptSquadWebhook(
+  encryptedBody: string,
+  expectedHash: string,
+  rawBody: Buffer
+): any {
+  // Step 1: Verify hash
+  const hash = crypto
+    .createHmac('sha512', SQUAD_CONFIG.secretKey)
+    .update(rawBody)
+    .digest('hex');
+
+  if (hash !== expectedHash) {
+    throw new Error('Invalid webhook signature');
+  }
+
+  // Step 2: Decrypt payload
+  const iv = Buffer.from(encryptedBody.substr(0, 32), 'hex');
+  const encrypted = Buffer.from(encryptedBody.substr(32), 'hex');
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-cbc',
+    Buffer.from(SQUAD_CONFIG.encryptionKey!, 'hex'),
+    iv
+  );
+
+  let decrypted = decipher.update(encrypted, undefined, 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return JSON.parse(decrypted);
+}
+
+// ──────────────────────────────────────────────────────────────
+// EXPRESS WEBHOOK ENDPOINT EXAMPLE (Next.js API Route / Express)
+// ──────────────────────────────────────────────────────────────
+/*
+import { verifyAndDecryptSquadWebhook } from '@/lib/squad';
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const encryptedBody = req.headers['x-squad-encrypted-body'] as string;
+  const signature = req.headers['x-squad-signature'] as string;
+
+  if (!encryptedBody || !signature) {
+    return res.status(400).json({ error: 'Missing webhook headers' });
+  }
+
+  try {
+    const payload = verifyAndDecryptSquadWebhook(
+      encryptedBody,
+      signature,
+      req.rawBody || req.body // make sure rawBody is enabled
+    );
+
+    console.log('Squad Event:', payload.Event);
+    console.log('Ref:', payload.TransactionRef);
+
+    if (payload.Event === 'charge_successful') {
+      const { transaction_ref, amount, email } = payload.Body;
+      // Credit user wallet, start game, etc.
+      await creditUserAfterPayment(transaction_ref, amount, email);
+    }
+
+    res.status(200).json({ success: true });
+  } catch (err: any) {
+    console.error('Webhook error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+// Important: Enable raw body in Next.js
+export const config = {
+  api: { bodyParser: false },
+};
+*/
+
+// ──────────────────────────────────────────────────────────────
+// USAGE EXAMPLES
+// ──────────────────────────────────────────────────────────────
+async function examples() {
+  // 1. Start a ₦500 Ludo match (entry fee)
+  const payment = await initiatePayment({
+    amount: 50000, // ₦500 in kobo
+    email: 'player@gmail.com',
+    metadata: { game: 'ludo', players: 4, bet_amount: 50000 },
+    payment_channels: ['card', 'bank_transfer', 'ussd'],
+  });
+
+  console.log('Pay here →', payment.data.payment_link);
+
+  // 2. Refund 50% if player quits early
+  await refundPayment({
+    transaction_ref: 'GAME_1739876543210_AB12C',
+    refund_amount: 25000, // ₦250
+    reason_for_refund: 'Player left before game started',
+  });
+}
+
+SQUAD_BASE_URL=https://api.squadco.com  # Live URL
+
+Read their api docs to know what to work with 
+
+Set Redirect URL
+
+Set webhook URL
+
+Full API Guide: docs.squadco.com
+	•  Keys Activation: squadinc.gitbook.io/squad-api-documentation (search “live keys”).
+	•  JS Enable Guide: enable-javascript.com (quick checker).
+
+https://squadinc.gitbook.io/squad-api-documentation/webhook-and-redirect-url
+
+https://docs.squadco.com
+
+
+Delete and rewrite everything about squad 
+
+Remove anything paystack, flutterwave , monnify 
+
+Write the squad payment from the scratch 
+Make sure it works 
+Use api docs please
+
+Use production please 
+Remove any mock data or cached data 
+Make it clean 
