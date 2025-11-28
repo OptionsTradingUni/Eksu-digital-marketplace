@@ -1,0 +1,127 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Resend are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+
+Step 1: Deleting Old Email Logic
+Go through your project files and delete or comment out any code that:
+1. Imports or uses Nodemailer, nodemailer, or any library related to general SMTP/Gmail connections.
+2. Contains hostnames like smtp.gmail.com or refers to Gmail passwords/credentials.
+3. Defines the sender email as @gmail.com (e.g., christophermoms@gmail.com).
+Focus on the files referenced in your error logs (index.js or related notification/email service files).
+🚀 Step 2: Resend Setup (The New Code)
+We'll define the required environment variables and the clean, dedicated Resend service code.
+1. ⚙️ Environment Variables (.env file)
+You must define these variables in your deployment environment (e.g., Render, where your app is hosted) and your local development environment (.env file).
+
+Step 2: Resend Setup (The New Code)
+We'll define the required environment variables and the clean, dedicated Resend service code.
+1. ⚙️ Environment Variables (.env file)
+You must define these variables in your deployment environment (e.g., Render, where your app is hosted) and your local 
+development environment (.env file).
+
+FROM_EMAIL The verified sender address.
+
+system@eksuplug.com.ng
+
+Also the email address you send too are email used for configuration or sign up 
+When you’re done send a email using this to my email eksucampusmarketplace@gmail.com and toluchris95@gmail.com
+
+📧 Dedicated Email Service File (e.g., emailService.js)
+Create a new file (or overwrite your old email file) to contain only the Resend logic. This file handles the authorization and the API call.
+// emailService.js
+
+// 1. Import the Resend library
+import { Resend } from 'resend';
+
+// 2. Initialize Resend using the API Key from the environment
+// The Resend constructor automatically looks for the RESEND_API_KEY environment variable.
+const resend = new Resend();
+
+/**
+ * Sends a notification email using the Resend service.
+ * It strictly uses the verified domain defined in RESEND_FROM_EMAIL.
+ *
+ * @param {string} to - The recipient's email address.
+ * @param {string} subject - The subject line of the email.
+ * @param {string} bodyHtml - The HTML body content of the email.
+ * @returns {Promise<object>} - An object indicating success or failure.
+ */
+export async function sendNotificationEmail(to, subject, bodyHtml) {
+    // CRITICAL: Get the verified sender address from the environment
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
+
+    // Safety check to ensure the environment variable is set
+    if (!fromEmail || !fromEmail.endsWith('@eksuplug.com.ng')) {
+        console.error("🚫 RESEND_FROM_EMAIL is missing or invalid. Must use a verified domain!");
+        return { success: false, error: "Missing or unverified sender configuration" };
+    }
+
+    try {
+        console.log(`Attempting to send email from ${fromEmail} to ${to} via Resend...`);
+
+        const { data, error } = await resend.emails.send({
+            from: fromEmail, // <-- THIS IS THE FIXED SENDER ADDRESS
+            to: [to],
+            subject: subject,
+            html: bodyHtml,
+        });
+
+        if (error) {
+            console.error("❌ Resend send failed:", error);
+            // The Resend error object will be returned to the calling function
+            return { success: false, error: error };
+        }
+
+        console.log("✅ Resend email sent successfully. ID:", data.id);
+        return { success: true, data: data };
+
+    } catch (e) {
+        console.error("🚨 An unexpected error occurred during Resend call:", e);
+        return { success: false, error: e };
+    }
+}
+
+Integration with Notification Logic (e.g., in index.js)
+This is where you update your function (createAndBroadcastNotification) to use the new service.
+// index.js (or wherever your notification function is)
+
+import { sendNotificationEmail } from './emailService.js'; // Adjust the path as needed
+
+// ... existing code ...
+
+async function createAndBroadcastNotification(recipientEmail, notificationType, content) {
+    // 1. Call the database function (This is where your 22P02 PostgreSQL error is)
+    // await DatabaseStorage.createNotification(...);
+
+    // 2. Broadcast the notification (using only the new Resend service)
+    if (notificationType === 'EMAIL') {
+        const subject = "Your New Notification"; // Customize subject
+        const bodyHtml = content.html || "<h1>Automated Notification</h1>"; // Ensure you pass valid HTML/text
+
+        const result = await sendNotificationEmail(recipientEmail, subject, bodyHtml);
+
+        if (!result.success) {
+            // Log the specific failure for debugging
+            console.error(`[Email] Notification failed for ${recipientEmail}:`, result.error);
+        }
+    }
+    
+    // ... logic for other notification types (e.g., SMS, push)
+}
+
+
+Read my entire file related to email
+
+Welcome message to any new user too 
+Find a format 
+Every necessary places notification should be sent 
+Someone you followed posted an order etc many more like that bro
