@@ -1,0 +1,773 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+Finish before app testing 
+
+/**
+ * EKSU Digital Marketplace Issues Report (V6 - FINAL PROJECT BRIEF)
+ * Incorporating all critical bugs, UI/UX redesign to match X/Twitter,
+ * full Squad Payment Gateway integration, and all feature requests.
+ * Generated on: 2025-11-27
+ * TARGET GOAL: Continuous, Uninterrupted Implementation. All keys are set.
+ */
+const issuesReport = {
+    // --- 0. BRANDING AND CORE SETUP ---
+    coreSetup: {
+        id: 'SETUP_OFFICIAL_ACCOUNT_AND_EMAIL',
+        description: 'Set up the official system identity.',
+        details: {
+            officialEmail: 'eksucampusmarketplace@gmail.com',
+            officialAccountName: 'Eksu Marketplace',
+            // All users must follow this account automatically on signup.
+        }
+    },
+
+    // --- 1. CRITICAL FUNCTIONAL BUGS & DATA ERRORS ---
+    criticalBugs: [
+        // CRITICAL DATABASE ERRORS (Observed in Images)
+        {
+            id: 'BUG_COMMUNITY_OWNER_ID_MISSING',
+            location: 'Community Creation Form',
+            description: 'Failed to create community (Image): Server returned 500 error because database column `communities.owner_id` does not exist. This is a critical schema missing fix.',
+            serverError: '500: {"message":"column communities.owner_id does not exist"}',
+            priority: 'Critical'
+        },
+        {
+            id: 'BUG_COMMUNITY_MEMBERS_IS_BANNED_MISSING',
+            location: 'Community Membership Management',
+            description: 'Failed to create community (Image): Server returned 500 error because database column `community_members.is_banned` does not exist. This is a critical schema missing fix.',
+            serverError: '500: {"message":"column \"is_banned\" of relation \"community_members\" does not exist"}',
+            priority: 'Critical'
+        },
+        {
+            id: 'BUG_CONFESSION_POST_FAILURE',
+            location: 'New Confession Form',
+            description: 'Failed to post confession consistently (Image). Displays generic red "Error: Failed to post confession".',
+            priority: 'High'
+        },
+        {
+            id: 'BUG_STORY_CREATION_FAILURE',
+            location: 'Story Creation UI',
+            description: 'Failed to create story (Image). Displays red "Error: Failed to create story".',
+            priority: 'High'
+        },
+        // ADMIN METRICS ERRORS (Observed in Images)
+        {
+            id: 'BUG_ADMIN_METRICS_NAN',
+            location: 'Admin Panel / Database Metrics',
+            description: 'Performance Stats show "Temp Data: **NaN undefined**" (Image) and Query Stats show 0, indicating a failure to fetch/parse database metrics. Needs `pg_stat_statements` enabled and correct data parsing.',
+            priority: 'Medium'
+        }
+    ],
+
+    // --- 2. SQUAD PAYMENT GATEWAY INTEGRATION (CRITICAL REVENUE) ---
+    squadIntegration: {
+        id: 'TECH_PLAN_SQUAD_PAYMENT_GATEWAY',
+        description: 'Complete integration of Squad Payment for Deposits, Withdrawals/Payouts, and Internal Transfers. This is CRITICAL for the Wallet to function.',
+        priority: 'Critical (Revenue)',
+        apiClientCode: `
+            // SquadClient.ts - FULL IMPLEMENTATION
+            export interface SquadError { code: string; message: string; }
+            export interface VirtualAccount { account_number: string; bank_code: string; account_name: string; reference: string; }
+            export interface PayoutResponse { status: 'pending' | 'completed' | 'failed'; reference: string; amount: number; fee: number; }
+            export interface TransferResponse { status: 'completed' | 'failed'; reference: string; amount: number; fee: number; }
+            export interface Transaction { reference: string; status: 'successful' | 'pending' | 'failed'; amount: number; type: 'deposit' | 'withdrawal' | 'transfer'; }
+            
+            import axios, { AxiosInstance, AxiosError } from 'axios';
+            
+            const BASE_URL = import.meta.env.VITE_SQUAD_ENV === 'sandbox' 
+              ? 'https://sandbox.squadco.com/v1' 
+              : 'https://api.squadco.com/v1';
+            
+            // Note: PUBLIC_KEY is usually not used for server-side logic (using secret for auth)
+            // const PUBLIC_KEY = import.meta.env.VITE_SQUAD_PUBLIC_KEY; 
+            
+            class SquadClient {
+              private axios: AxiosInstance;
+
+              constructor(secretKey?: string) {
+                this.axios = axios.create({
+                  baseURL: BASE_URL,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(secretKey && { Authorization: \`Bearer \${secretKey}\` }),
+                  },
+                });
+
+                // Interceptor for idempotency
+                this.axios.interceptors.request.use((config) => {
+                  config.headers['idempotency_key'] = crypto.randomUUID();
+                  return config;
+                });
+
+                // Error handler
+                this.axios.interceptors.response.use(
+                  (response) => response,
+                  (error: AxiosError<SquadError>) => {
+                    const msg = error.response?.data?.error?.message || 'Unknown error';
+                    console.error('Squad Error:', msg, error.response?.status);
+                    throw new Error(msg);
+                  }
+                );
+              }
+
+              // Deposits: Create Virtual Account
+              async createVirtualAccount(
+                accountName: string,
+                email: string,
+                amount: number // In NGN
+              ): Promise<VirtualAccount> {
+                const response = await this.axios.post('/virtual-accounts', {
+                  account_name: accountName,
+                  customer_email: email,
+                  amount: amount * 100, // Convert to kobo
+                  narration: 'EKSU Wallet Deposit',
+                });
+                return response.data.data;
+              }
+
+              // Verify Transaction (Poll or Webhook)
+              async verifyTransaction(reference: string): Promise<Transaction> {
+                const response = await this.axios.get(\`/transactions/\${reference}\`);
+                return response.data.data;
+              }
+
+              // Withdrawals: Bulk Payouts
+              async initiatePayout(
+                amount: number,
+                bankCode: string,
+                accountNumber: string,
+                accountName: string
+              ): Promise<PayoutResponse> {
+                const response = await this.axios.post('/payouts', {
+                  amount: amount * 100,
+                  bank_code: bankCode,
+                  account_number: accountNumber,
+                  account_name: accountName,
+                  narration: 'EKSU Wallet Withdrawal',
+                });
+                return response.data.data;
+              }
+
+              // Transfers: Internal User-to-User
+              async internalTransfer(
+                fromWalletId: string, // Replace with User IDs once mapped
+                toWalletId: string, // Replace with User IDs once mapped
+                amount: number
+              ): Promise<TransferResponse> {
+                // NOTE: This should map to your internal wallet logic, then update Squad/Supabase
+                const response = await this.axios.post('/transfers', {
+                  from: fromWalletId,
+                  to: toWalletId,
+                  amount: amount * 100,
+                  narration: 'EKSU Internal Transfer',
+                });
+                return response.data.data;
+              }
+
+              // List Transactions (Pagination)
+              async listTransactions(page = 1, limit = 50): Promise<Transaction[]> {
+                const response = await this.axios.get('/transactions', {
+                  params: { page, limit },
+                });
+                return response.data.data;
+              }
+            }
+
+            // Export instances for use
+            // The frontend should ONLY use squadPublic for client-safe operations (like generating virtual accounts if keys allow)
+            export const squadPublic = new SquadClient(); 
+            // The backend MUST use squadSecret with the server key
+            export const squadSecret = (secretKey: string) => new SquadClient(secretKey);
+
+            // BACKEND IMPLEMENTATION NOTES:
+            // 1. Withdrawal Endpoint: Must deduct from Supabase wallet *before* calling squad.initiatePayout.
+            // 2. Webhook Endpoint: Must be created to receive 'charge.success' events to automatically credit the user's wallet (using Supabase).
+        `,
+    },
+
+    // --- 3. UI/UX REDESIGN & STABILITY (X/TWITTER EMULATION) ---
+    uiUxRedesign: [
+        {
+            id: 'REDESIGN_FULL_X_EMULATION',
+            location: 'Global',
+            description: 'Complete UI/UX overhaul to visually and functionally resemble **X (Twitter)**. This includes: feed layout, post/reply modals, button styles, and color schemes.',
+            priority: 'Highest (Design Mandate)'
+        },
+        {
+            id: 'UI_CHAT_MESSAGES_BALANCING',
+            location: 'Messages (Chat View)',
+            description: 'The chat interface is **unbalanced** and **unstable**. Redesign the layout to be exactly like X/Twitter messages, ensuring the text input area and chat bubbles are correctly positioned and balanced, especially when the mobile keyboard is active (Image).',
+            priority: 'High'
+        },
+        {
+            id: 'UI_KEYBOARD_FOCUS_LOSS',
+            location: 'Chat View / New Post Modal',
+            description: 'BUG: The keyboard frequently **cancels** or **dismisses** when typing a message (e.g., typing "h"). This is highly frustrating and critical to fix.',
+            fixArea: 'Frontend (Ensure the input field retains focus and the component does not unmount/re-render on input change.)',
+            priority: 'Critical'
+        }
+    ],
+
+    // --- 4. FEATURE IMPLEMENTATION & LOGIC FIXES ---
+    featureRequests: [
+        // CONFESSIONS REDESIGN (SecretMessage Link)
+        {
+            id: 'FEATURE_CONFESSIONS_ANONYMITY_LINK',
+            location: 'Confessions',
+            description: 'Redesign Confessions to emulate **secretmessage.link** style. Allow users to: 1) **Remove moderation** (confessions must post immediately). 2) **Generate a shareable link** (guest access) for anonymous messages/confessions to be dropped by anyone (guest or registered user). 3) The creator can then screenshot the messages to share them as a post.',
+            priority: 'High'
+        },
+        // STORY FIXES AND VISIBILITY
+        {
+            id: 'FEATURE_STORY_VISIBILITY_FIX',
+            location: 'Profile/The Plug',
+            description: 'When a story is posted (Image shows "Story posted!"), it **does not appear** on the user\'s own profile or the profiles of followed users. Fix the story display logic on user profiles and the main feed.',
+            priority: 'High'
+        },
+        // GEOLOCATION FIXES
+        {
+            id: 'FEATURE_GEOLOCATION_REAL_TIME',
+            location: 'Global/User Profile',
+            description: 'Implement real-time geolocation to show the user\'s current major location (**Ado Ekiti, Iworoko, EKSU, Osekita**). Must calculate and display the **distance** between the viewing user and the target user (seller/poster).',
+            priority: 'High'
+        },
+        // VTU DATA/AIRTIME FIX
+        {
+            id: 'FIX_VTU_DATA_PLANS',
+            location: 'VTU Data Page (The Plug)',
+            description: 'CRITICAL: The current data plans and prices (Image) are **WRONG** and **DO NOT match** the actual plans from the SME Data API. Must rewrite the plan fetching/display logic to use the live SME Data API (keys are set) to get correct, real-time plans and prices.',
+            priority: 'Critical (Revenue)'
+        },
+        // COMMUNITY FIXES
+        {
+            id: 'UI_COMMUNITY_FORM_SCROLL_LOCKED',
+            location: 'Create Community Form',
+            description: 'BUG: The create community card is **too long** and **fixed**, preventing scrolling/movement (Image). Fix overflow and positioning to allow user to complete the form.',
+            priority: 'Medium'
+        }
+    ],
+
+    // --- 5. DATA SYNCHRONIZATION BUGS (FOLLOW/FOLLOWERS) ---
+    dataSynchronizationBugs: [
+        {
+            id: 'SYNC_FOLLOWING_CROSS_PLATFORM',
+            location: 'Global User Data',
+            description: 'The **Following** status is not synchronized. If a user follows someone on the **Marketplace**, that status is **NOT reflected** on the **Campus Plug** feed, and vice-versa. Must use a single source of truth (unified `follows` table).',
+            priority: 'Critical'
+        }
+    ]
+};
+
+console.log(issuesReport);
+
+
+I want you to check all bugs and features here 
+
+Well what I noticed here 
+My email is eksucampusmarketplace@gmail.com
+Official account name should be Eksu marketplace 
+When I post on story 
+I click on my profile can’t see it there I dunno where it went , others profile should show too those you’re following, their stories should show too… 
+Then I tried to message if I write h my keyboard would cancel etc I don’t like this very frustrating 
+I want you to edit and rewrite and improve the UI UX front end and backend make it look like X or Twitter 
+Also when I went to messages to send a message it wasn’t balanced I want it to look exactly like X too and be balanced 
+When I click on profile 
+Location isn’t available yet 
+It should show real time location ado Ekiti 
+Or iworoko 
+Or eksu 
+Or osekita 
+And should show distance between both of them for anyone checking out 
+Community member does not exist 
+Please check for all made database tables in files, create if none exist please 
+Also the create community card is too long and fixed and I’m unable to move  so bad 
+In confessions, I shouldn’t wait for moderation before my confession goes remove it, also I want it to make it like guest who don’t have account in it can have direct access to this page 
+Also let it look like secretmessage 
+That is someone paste whether as a guest or have an account and as an anonymous not his own account or someone start an anonymous for people to drop messages generate link and share so people join and write message and he would be able to screenshot it and send to post you know those plays 
+Please like I said the airtime and data selling is very wrong something is wrong smedatat itself doesn’t have this kind of plans I keep addressing it but not working please work on this 
+Also integrate this 
+
+export interface SquadError {
+  code: string;
+  message: string;
+}
+
+export interface VirtualAccount {
+  account_number: string;
+  bank_code: string;
+  account_name: string;
+  reference: string;
+}
+
+export interface PayoutResponse {
+  status: 'pending' | 'completed' | 'failed';
+  reference: string;
+  amount: number; // In kobo
+  fee: number;
+}
+
+export interface TransferResponse {
+  status: 'completed' | 'failed';
+  reference: string;
+  amount: number;
+  fee: number;
+}
+
+export interface Transaction {
+  reference: string;
+  status: 'successful' | 'pending' | 'failed';
+  amount: number;
+  type: 'deposit' | 'withdrawal' | 'transfer';
+}
+
+import axios, { AxiosInstance, AxiosError } from 'axios';
+
+const BASE_URL = import.meta.env.VITE_SQUAD_ENV === 'sandbox' 
+  ? 'https://sandbox.squadco.com/v1' 
+  : 'https://api.squadco.com/v1';
+
+const PUBLIC_KEY = import.meta.env.VITE_SQUAD_PUBLIC_KEY;
+
+class SquadClient {
+  private axios: AxiosInstance;
+
+  constructor(secretKey?: string) {
+    this.axios = axios.create({
+      baseURL: BASE_URL,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(secretKey && { Authorization: `Bearer ${secretKey}` }),
+      },
+    });
+
+    // Interceptor for idempotency
+    this.axios.interceptors.request.use((config) => {
+      config.headers['idempotency_key'] = crypto.randomUUID();
+      return config;
+    });
+
+    // Error handler
+    this.axios.interceptors.response.use(
+      (response) => response,
+      (error: AxiosError<SquadError>) => {
+        const msg = error.response?.data?.error?.message || 'Unknown error';
+        console.error('Squad Error:', msg, error.response?.status);
+        throw new Error(msg);
+      }
+    );
+  }
+
+  // Deposits: Create Virtual Account
+  async createVirtualAccount(
+    accountName: string,
+    email: string,
+    amount: number // In NGN
+  ): Promise<VirtualAccount> {
+    const response = await this.axios.post('/virtual-accounts', {
+      account_name: accountName,
+      customer_email: email,
+      amount: amount * 100, // Convert to kobo
+      narration: 'EKSU Wallet Deposit',
+    });
+    return response.data.data;
+  }
+
+  // Verify Transaction (Poll or Webhook)
+  async verifyTransaction(reference: string): Promise<Transaction> {
+    const response = await this.axios.get(`/transactions/${reference}`);
+    return response.data.data;
+  }
+
+  // Withdrawals: Bulk Payouts
+  async initiatePayout(
+    amount: number,
+    bankCode: string,
+    accountNumber: string,
+    accountName: string
+  ): Promise<PayoutResponse> {
+    const response = await this.axios.post('/payouts', {
+      amount: amount * 100,
+      bank_code: bankCode,
+      account_number: accountNumber,
+      account_name: accountName,
+      narration: 'EKSU Wallet Withdrawal',
+    });
+    return response.data.data;
+  }
+
+  // Transfers: Internal User-to-User
+  async internalTransfer(
+    fromWalletId: string,
+    toWalletId: string,
+    amount: number
+  ): Promise<TransferResponse> {
+    const response = await this.axios.post('/transfers', {
+      from: fromWalletId,
+      to: toWalletId,
+      amount: amount * 100,
+      narration: 'EKSU Internal Transfer',
+    });
+    return response.data.data;
+  }
+
+  // List Transactions (Pagination)
+  async listTransactions(page = 1, limit = 50): Promise<Transaction[]> {
+    const response = await this.axios.get('/transactions', {
+      params: { page, limit },
+    });
+    return response.data.data;
+  }
+}
+
+// Export for frontend (public ops only)
+export const squadPublic = new SquadClient(); // No secret
+
+// For backend calls (use with secret)
+export const squadSecret = (secretKey: string) => new SquadClient(secretKey);
+
+// Usage Example in React Component (e.g., WalletPage.tsx)
+import { squadPublic } from './SquadClient';
+import { useState } from 'react';
+
+export default function WalletDeposit() {
+  const [account, setAccount] = useState<VirtualAccount | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleDeposit = async () => {
+    setLoading(true);
+    try {
+      const data = await squadPublic.createVirtualAccount(
+        'EKSU User Wallet',
+        'user@eksu.edu',
+        1000 // ₦1000
+      );
+      setAccount(data);
+      alert(`Pay to: ${data.account_number} (${data.bank_code})`);
+    } catch (error) {
+      alert(`Deposit failed: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-4">
+      <button onClick={handleDeposit} disabled={loading}>
+        {loading ? 'Creating Account...' : 'Deposit ₦1000'}
+      </button>
+      {account && (
+        <div className="mt-4 p-2 bg-green-100 rounded">
+          <p>Bank: {account.bank_code}</p>
+          <p>Account: {account.account_number}</p>
+          <p>Name: {account.account_name}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+import express from 'express';
+import { squadSecret } from '../client/SquadClient'; // From above
+import { SupabaseClient } from '@supabase/supabase-js'; // Your Supabase
+
+const app = express();
+const supabase = new SupabaseClient(process.env.SUPABASE_URL!, process.env.SUPABASE_KEY!);
+const squad = squadSecret(process.env.SQUAD_SECRET_KEY!);
+
+app.use(express.json());
+
+// Withdrawal Endpoint
+app.post('/api/withdraw', async (req, res) => {
+  const { amount, bankCode, accountNumber, accountName, userId } = req.body;
+
+  try {
+    // Check wallet balance
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', userId)
+      .single();
+
+    if (wallet.balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    // Deduct from wallet
+    await supabase
+      .from('wallets')
+      .update({ balance: wallet.balance - amount })
+      .eq('user_id', userId);
+
+    // Initiate payout
+    const payout = await squad.initiatePayout(amount, bankCode, accountNumber, accountName);
+    res.json(payout);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Internal Transfer
+app.post('/api/transfer', async (req, res) => {
+  const { fromUserId, toUserId, amount } = req.body;
+
+  try {
+    // Verify balances
+    const { data: fromWallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', fromUserId)
+      .single();
+
+    if (fromWallet.balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    // Deduct from sender
+    await supabase
+      .from('wallets')
+      .update({ balance: fromWallet.balance - amount - (amount * 0.002) }) // 0.2% fee
+      .eq('user_id', fromUserId);
+
+    // Add to receiver
+    const { data: toWallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', toUserId)
+      .single();
+
+    await supabase
+      .from('wallets')
+      .update({ balance: toWallet.balance + amount })
+      .eq('user_id', toUserId);
+
+    // Log txn
+    await supabase.from('transactions').insert({
+      from_user: fromUserId,
+      to_user: toUserId,
+      amount,
+      type: 'transfer',
+      fee: amount * 0.002,
+      status: 'completed'
+    });
+
+    const transfer = await squad.internalTransfer(fromUserId, toUserId, amount);
+    res.json(transfer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Webhook Endpoint
+app.post('/webhook/squad', (req, res) => {
+  const payload = req.body;
+  const signature = req.headers['squad-signature'];
+
+  try {
+    // Verify webhook (pseudo - use crypto for HMAC)
+    if (!verifySignature(payload, signature, process.env.SQUAD_WEBHOOK_SECRET!)) {
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    if (payload.event === 'charge.success') {
+      const txn = payload.data;
+      const userId = txn.customer; // Map to your user
+
+      // Credit wallet
+      await supabase
+        .from('wallets')
+        .update({ balance: balance + (txn.amount / 100) })
+        .eq('user_id', userId);
+
+      // Log txn
+      await supabase.from('transactions').insert({
+        reference: txn.reference,
+        amount: txn.amount / 100,
+        type: 'deposit',
+        status: 'completed'
+      });
+    }
+
+    res.status(200).json({ status: 'ok' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+function verifySignature(payload: any, signature: string, secret: string): boolean {
+  const crypto = require('crypto');
+  const expected = crypto.createHmac('sha256', secret).update(JSON.stringify(payload)).digest('hex');
+  return expected === signature;
+}
+
+app.listen(5000, () => console.log('Squad backend ready'));
+
+from flask import Flask, request, jsonify
+import hmac
+import hashlib
+import squadco
+from squadco import Squad
+from supabase import create_client
+import os
+
+app = Flask(__name__)
+supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+squad = Squad(os.getenv('SQUAD_SECRET_KEY'))
+
+@app.route('/api/withdraw', methods=['POST'])
+def withdraw():
+  data = request.json
+  try:
+    # Balance check
+    wallet = supabase.table('wallets').select('balance').eq('user_id', data['user_id']).execute()
+    if wallet.data[0]['balance'] < data['amount']:
+      return jsonify({'error': 'Insufficient balance'}), 400
+
+    # Deduct
+    supabase.table('wallets').update({'balance': wallet.data[0]['balance'] - data['amount']}).eq('user_id', data['user_id']).execute()
+
+    # Payout
+    payout = squad.payout.create(
+      amount=data['amount'] * 100,
+      bank_code=data['bank_code'],
+      account_number=data['account_number'],
+      account_name=data['account_name']
+    )
+    return jsonify(payout)
+  except Exception as e:
+    return jsonify({'error': str(e)}), 500
+
+@app.route('/webhook/squad', methods=['POST'])
+def squad_webhook():
+  payload = request.json
+  signature = request.headers.get('Squad-Signature')
+
+  # Verify HMAC
+  expected = hmac.new(
+    os.getenv('SQUAD_WEBHOOK_SECRET').encode(),
+    str(payload).encode(),
+    hashlib.sha256
+  ).hexdigest()
+
+  if not hmac.compare_digest(signature, expected):
+    return jsonify({'error': 'Invalid signature'}), 401
+
+  if payload['event'] == 'charge.success':
+    txn = payload['data']
+    user_id = txn['customer']  # Map to your users
+
+    # Credit wallet
+    wallet = supabase.table('wallets').select('balance').eq('user_id', user_id).execute()
+    new_balance = wallet.data[0]['balance'] + (txn['amount'] / 100)
+    supabase.table('wallets').update({'balance': new_balance}).eq('user_id', user_id).execute()
+
+    # Log
+    supabase.table('transactions').insert({
+      'reference': txn['reference'],
+      'amount': txn['amount'] / 100,
+      'type': 'deposit',
+      'status': 'completed'
+    }).execute()
+
+  return jsonify({'status': 'ok'})
+
+if __name__ == '__main__':
+  app.run(debug=True)
+
+Payment isn’t working so I want it to make it work too I use squad
+
+/**
+ * EKSU Digital Marketplace Issues Report (V7 - Final)
+ * Includes Email Verification and Notification Email Services.
+ */
+const issuesReport = {
+    // ... (All previous sections: Core Setup, Critical Bugs, Squad Integration, UI/UX, etc.)
+
+    // --- 6. EMAIL AND NOTIFICATION SERVICES (NEW SECTION) ---
+    emailNotificationServices: {
+        id: 'SERVICE_EMAIL_INTEGRATION',
+        description: 'Implement secure email functionality for user verification and real-time activity notifications.',
+        priority: 'High',
+        // 6.1: Supabase Authentication for Sign-Up Verification
+        emailVerification: {
+            title: 'User Sign-Up Email Verification',
+            tech: 'Supabase Auth',
+            requirement: 'Ensure "Enable email confirmation" is active in Supabase Auth settings. The frontend sign-up form must use `supabase.auth.signUp()` to trigger the verification link automatically.',
+            frontendCode: `
+                // Example Frontend Signup Logic
+                const handleSignup = async (email, password) => {
+                    const { error } = await supabase.auth.signUp({ 
+                        email: email, 
+                        password: password 
+                    });
+                    if (error) throw error;
+                    alert('Check your email for the verification link!');
+                };
+            `
+        },
+        // 6.2: Custom Notification Emails (e.g., New Message, New Follow)
+        notificationService: {
+            title: 'Activity Notification Emailer',
+            tech: 'Node.js + Nodemailer',
+            requirement: 'Create a dedicated backend service to send templated emails for key activity events.',
+            backendCode: `
+                // mailerService.js (Backend, using Nodemailer)
+                const nodemailer = require('nodemailer');
+
+                // NOTE: Use environment variables for AUTH credentials!
+                const transporter = nodemailer.createTransport({
+                    service: 'gmail', // Or use a reliable service like SendGrid, Mailgun, etc.
+                    auth: {
+                        user: process.env.EMAIL_USERNAME, 
+                        pass: process.env.EMAIL_PASSWORD  // Use App Password for Gmail
+                    }
+                });
+
+                // Function to be called from backend routes/services
+                async function sendActivityNotification(recipientEmail, subject, activityMessage) {
+                    const mailOptions = {
+                        from: 'Eksu Marketplace <eksucampusmarketplace@gmail.com>',
+                        to: recipientEmail,
+                        subject: subject,
+                        html: \`
+                            <h1>New Activity on Eksu Marketplace!</h1>
+                            <p>\${activityMessage}</p>
+                            <p>Click <a href="\${process.env.APP_URL}/notifications">here</a> to view all notifications.</p>
+                        \`,
+                        text: \`New Activity: \${activityMessage}\` // Plain text fallback
+                    };
+
+                    try {
+                        const info = await transporter.sendMail(mailOptions);
+                        console.log('Notification Email Sent:', info.messageId);
+                    } catch (error) {
+                        console.error('ERROR sending notification email:', error);
+                        // Implement retry logic if needed
+                    }
+                }
+
+                module.exports = { sendActivityNotification };
+
+                // USAGE EXAMPLE (e.g., in a chat message creation route)
+                // const { sendActivityNotification } = require('./mailerService');
+                // ... when a new message is saved:
+                // sendActivityNotification(recipient.email, 'New Message Received', \`\${sender.name} sent you a message.\`);
+            `
+        }
+    },
+    
+    // ... (rest of the issuesReport remains the same)
+};
+
+console.log(issuesReport);
+
+When you click on product , the image shown is too big it makes the page irregular making everywhere big 
