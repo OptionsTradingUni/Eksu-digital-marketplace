@@ -83,6 +83,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { LocationBadge } from "@/components/LocationBadge";
+import { useUserLocationInfo } from "@/hooks/useGeolocation";
 
 type UpdateProfileData = z.infer<typeof updateUserProfileSchema>;
 
@@ -1024,8 +1026,17 @@ export default function Profile() {
               </p>
             )}
             
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {displayUser.location && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              {/* GPS-based location badge (if coordinates available) */}
+              {(displayUser as any).latitude && (displayUser as any).longitude && (
+                <LocationBadge
+                  latitude={(displayUser as any).latitude}
+                  longitude={(displayUser as any).longitude}
+                  variant="default"
+                />
+              )}
+              {/* Text-based location fallback */}
+              {displayUser.location && !(displayUser as any).latitude && (
                 <span className="flex items-center gap-1" data-testid="text-location">
                   <MapPin className="h-4 w-4" />
                   {displayUser.location}

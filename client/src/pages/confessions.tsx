@@ -53,9 +53,11 @@ import {
   MessageSquare,
   Smile,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Link2
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Link } from "wouter";
 import type { Confession, ConfessionComment } from "@shared/schema";
 
 const CATEGORIES = [
@@ -522,14 +524,26 @@ export default function ConfessionsPage() {
             </h1>
             <p className="text-sm text-muted-foreground">Share anonymously with the community</p>
           </div>
-          <Button 
-            onClick={() => setShowNewDialog(true)} 
-            className="bg-purple-600 hover:bg-purple-700"
-            data-testid="button-new-confession"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Confess
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/secret-messages">
+              <Button 
+                variant="outline"
+                className="border-purple-500/30 text-purple-400"
+                data-testid="button-secret-messages"
+              >
+                <Link2 className="h-4 w-4 mr-1" />
+                Secret Links
+              </Button>
+            </Link>
+            <Button 
+              onClick={() => setShowNewDialog(true)} 
+              className="bg-purple-600 hover:bg-purple-700"
+              data-testid="button-new-confession"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Confess
+            </Button>
+          </div>
         </div>
 
         <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="mb-4">

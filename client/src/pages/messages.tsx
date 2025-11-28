@@ -743,6 +743,11 @@ export default function Messages() {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Focus tracking refs for mobile keyboard retention
+  const isTextareaFocusedRef = useRef(false);
+  const shouldRestoreFocusRef = useRef(false);
+  const contentRef = useRef("");
 
   useEffect(() => {
     if (preselectedUserId) {
@@ -1019,8 +1024,22 @@ export default function Messages() {
       setSelectedFile(null);
       setFilePreview(null);
       setIsUploading(false);
+      contentRef.current = "";
+      
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
+        
+        // Restore focus after sending on mobile to keep keyboard open
+        if (isMobile) {
+          // Use multiple techniques to ensure focus is maintained
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+            // Also try after a short delay for slower devices
+            setTimeout(() => {
+              textareaRef.current?.focus();
+            }, 50);
+          });
+        }
       }
 
       if (!(data as any)?.viaWebSocket) {
@@ -1245,24 +1264,61 @@ export default function Messages() {
     };
   }, [selectedUser, wsStatus]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change - with mobile keyboard awareness
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    // On mobile, only scroll if textarea is not focused to avoid keyboard dismissal
+    if (isMobile && isTextareaFocusedRef.current) {
+      // Use a gentler scroll that doesn't interfere with keyboard
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      });
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isTyping, isMobile]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea - optimized to prevent focus loss
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessageContent(e.target.value);
+    const value = e.target.value;
+    contentRef.current = value;
+    
+    // Update state without losing focus by using functional update
+    setMessageContent(value);
+    
+    // Auto-resize logic - directly modify DOM to avoid re-render
     const textarea = e.target;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
   }, []);
+  
+  // Focus retention effect - restore focus after state updates if needed
+  useEffect(() => {
+    if (shouldRestoreFocusRef.current && textareaRef.current) {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        shouldRestoreFocusRef.current = false;
+      });
+    }
+  }, [messageContent]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if ((!messageContent.trim() && !selectedFile) || !selectedUser) return;
+    
+    // Mark that we should restore focus after sending
+    shouldRestoreFocusRef.current = true;
+    
     sendMutation.mutate({ content: messageContent, file: selectedFile });
-  };
+    
+    // Immediately refocus on mobile to keep keyboard open
+    if (isMobile && textareaRef.current) {
+      // Use setTimeout to refocus after state update
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+    }
+  }, [messageContent, selectedFile, selectedUser, isMobile, sendMutation]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1305,12 +1361,19 @@ export default function Messages() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Only handle Enter key for sending
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation();
       handleSend(e);
+      
+      // Ensure focus is maintained after Enter key on mobile
+      if (isMobile) {
+        e.currentTarget.focus();
+      }
     }
-  };
+  }, [handleSend, isMobile]);
 
   const handleSelectThread = (userId: string) => {
     if (hasSafetyBeenAcknowledged(userId)) {
@@ -1338,10 +1401,21 @@ export default function Messages() {
     setShowMobileChat(false);
   };
 
-  const handleEmojiSelect = (emoji: string) => {
+  const handleEmojiSelect = useCallback((emoji: string) => {
     setMessageContent((prev) => prev + emoji);
-    textareaRef.current?.focus();
-  };
+    contentRef.current = contentRef.current + emoji;
+    
+    // Immediately refocus after emoji selection
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      // On mobile, use additional techniques to ensure focus
+      if (isMobile) {
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+      }
+    }
+  }, [isMobile]);
 
   const handleArchiveConversation = (userId: string) => {
     archiveMutation.mutate(userId);
@@ -1769,15 +1843,46 @@ export default function Messages() {
                   data-testid="input-message"
                   inputMode="text"
                   enterKeyHint="send"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onFocus={(e) => {
-                    setTimeout(() => {
-                      e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 300);
+                    isTextareaFocusedRef.current = true;
+                    // Delay scroll to avoid keyboard flickering on mobile
+                    if (isMobile) {
+                      setTimeout(() => {
+                        if (isTextareaFocusedRef.current) {
+                          e.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }
+                      }, 350);
+                    }
+                  }}
+                  onBlur={() => {
+                    isTextareaFocusedRef.current = false;
+                  }}
+                  onTouchStart={(e) => {
+                    // Prevent any default behavior that might dismiss keyboard
+                    e.stopPropagation();
+                  }}
+                  onTouchEnd={(e) => {
+                    // Ensure focus is maintained on touch end
+                    if (isMobile) {
+                      e.currentTarget.focus();
+                    }
                   }}
                 />
                 
                 {/* Emoji picker */}
-                <Popover>
+                <Popover
+                  onOpenChange={(open) => {
+                    // Restore focus to textarea when popover closes
+                    if (!open && isMobile) {
+                      requestAnimationFrame(() => {
+                        textareaRef.current?.focus();
+                      });
+                    }
+                  }}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
@@ -1785,11 +1890,31 @@ export default function Messages() {
                       size="icon"
                       className="absolute right-1 bottom-1 h-8 w-8"
                       data-testid="button-emoji"
+                      onTouchEnd={(e) => {
+                        // Prevent touch end from stealing focus on mobile
+                        e.stopPropagation();
+                      }}
                     >
                       <Smile className="h-5 w-5" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-72" align="end">
+                  <PopoverContent 
+                    className="w-72" 
+                    align="end"
+                    onOpenAutoFocus={(e) => {
+                      // Prevent auto focus on mobile to keep keyboard visible
+                      if (isMobile) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onCloseAutoFocus={(e) => {
+                      // Prevent auto focus on close to avoid focus issues
+                      if (isMobile) {
+                        e.preventDefault();
+                        textareaRef.current?.focus();
+                      }
+                    }}
+                  >
                     <EmojiPicker onSelect={handleEmojiSelect} />
                   </PopoverContent>
                 </Popover>
@@ -1802,6 +1927,21 @@ export default function Messages() {
                 disabled={(!messageContent.trim() && !selectedFile) || sendMutation.isPending || isUploading}
                 className="shrink-0"
                 data-testid="button-send-message"
+                onTouchEnd={(e) => {
+                  // Prevent default to avoid focus loss on mobile
+                  if (isMobile) {
+                    e.preventDefault();
+                    // Trigger form submit manually
+                    const form = e.currentTarget.closest('form');
+                    if (form) {
+                      form.requestSubmit();
+                    }
+                    // Refocus textarea after sending
+                    requestAnimationFrame(() => {
+                      textareaRef.current?.focus();
+                    });
+                  }
+                }}
               >
                 <Send className="h-4 w-4" />
               </Button>

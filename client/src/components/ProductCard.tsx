@@ -10,7 +10,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Product, Watchlist, UserSettings } from "@shared/schema";
 import { useState } from "react";
-import { getDistanceDisplay } from "@/lib/distance";
+import { SellerLocationBadge, DistanceBadge } from "@/components/LocationBadge";
+import { getSellerLocationName } from "@/lib/geolocation";
 
 interface SellerSettings {
   latitude: string | null;
@@ -42,16 +43,15 @@ export function ProductCard({ product }: ProductCardProps) {
     enabled: isAuthenticated,
   });
 
-  const distanceDisplay = isAuthenticated && 
+  // Determine if we can show distance and location
+  const canShowDistance = isAuthenticated && 
     userSettings?.locationVisible && 
-    product.sellerSettings?.locationVisible
-      ? getDistanceDisplay(
-          userSettings.latitude,
-          userSettings.longitude,
-          product.sellerSettings.latitude,
-          product.sellerSettings.longitude
-        )
-      : null;
+    product.sellerSettings?.locationVisible;
+
+  // Get seller's mapped location name from GPS coordinates
+  const sellerLocationName = product.sellerSettings?.locationVisible && product.sellerSettings?.latitude && product.sellerSettings?.longitude
+    ? getSellerLocationName(product.sellerSettings.latitude, product.sellerSettings.longitude)
+    : null;
 
   const isInWishlist = wishlistItems.some(item => item.productId === product?.id);
 
@@ -244,16 +244,32 @@ export function ProductCard({ product }: ProductCardProps) {
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-            {product.location && (
-              <div className="flex items-center gap-0.5">
-                <MapPin className="h-3 w-3" />
-                <span className="truncate max-w-[80px]">{product.location}</span>
-              </div>
+            {/* Show GPS-based location badge if available */}
+            {product.sellerSettings?.locationVisible && product.sellerSettings?.latitude && product.sellerSettings?.longitude ? (
+              <SellerLocationBadge
+                sellerLat={product.sellerSettings.latitude}
+                sellerLng={product.sellerSettings.longitude}
+                userLat={canShowDistance ? userSettings?.latitude : undefined}
+                userLng={canShowDistance ? userSettings?.longitude : undefined}
+                showDistance={canShowDistance}
+              />
+            ) : (
+              /* Fallback to text-based location */
+              product.location && (
+                <div className="flex items-center gap-0.5">
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate max-w-[80px]">{product.location}</span>
+                </div>
+              )
             )}
-            {distanceDisplay && (
-              <Badge variant="secondary" className="text-[10px] py-0 px-1" data-testid={`badge-distance-${product.id}`}>
-                {distanceDisplay}
-              </Badge>
+            {/* Show distance badge separately if we have GPS but no seller location */}
+            {canShowDistance && !product.sellerSettings?.latitude && userSettings?.latitude && (
+              <DistanceBadge
+                userLat={userSettings.latitude}
+                userLng={userSettings.longitude}
+                sellerLat={null}
+                sellerLng={null}
+              />
             )}
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">

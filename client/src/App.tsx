@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -42,6 +42,8 @@ const KYCVerification = lazy(() => import("@/pages/kyc-verification"));
 const StoriesPage = lazy(() => import("@/pages/stories"));
 const ConfessionsPage = lazy(() => import("@/pages/confessions"));
 const CommunitiesPage = lazy(() => import("@/pages/communities"));
+const SecretMessagesPage = lazy(() => import("@/pages/secret-messages"));
+const SendSecretPage = lazy(() => import("@/pages/send-secret"));
 
 function PageLoadingSpinner() {
   return (
@@ -56,9 +58,13 @@ function PageLoadingSpinner() {
 
 function Router() {
   const { isAuthenticated, isLoading, isError } = useAuth();
+  const [location] = useLocation();
 
-  // Show loading spinner while checking authentication
-  if (isLoading) {
+  // Check if current path is a public secret message link page
+  const isPublicSecretRoute = location.startsWith('/secret/');
+
+  // Show loading spinner while checking authentication (but not for public routes)
+  if (isLoading && !isPublicSecretRoute) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="text-center">
@@ -66,6 +72,28 @@ function Router() {
           <p className="mt-4 text-muted-foreground">Loading...</p>
         </div>
       </div>
+    );
+  }
+
+  // Handle public secret message route - accessible without authentication
+  if (isPublicSecretRoute) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoadingSpinner />}>
+          <Switch>
+            <Route path="/secret/:code" component={() => (
+              <ErrorBoundary>
+                <SendSecretPage />
+              </ErrorBoundary>
+            )} />
+            <Route component={() => (
+              <ErrorBoundary>
+                <NotFound />
+              </ErrorBoundary>
+            )} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
@@ -225,6 +253,11 @@ function Router() {
             <Route path="/communities" component={() => (
               <ErrorBoundary>
                 <CommunitiesPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/secret-messages" component={() => (
+              <ErrorBoundary>
+                <SecretMessagesPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (
