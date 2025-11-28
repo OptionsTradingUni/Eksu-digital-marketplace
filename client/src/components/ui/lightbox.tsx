@@ -125,18 +125,18 @@ export function Lightbox({
             onClick={e => e.stopPropagation()}
             data-testid="lightbox-container"
           >
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+            <div className="absolute top-2 right-2 z-10 bg-black/70 backdrop-blur-sm rounded-md p-1 flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleZoomOut}
                 disabled={zoom <= 0.5}
-                className="bg-black/50 text-white hover:bg-black/70"
+                className="text-white"
                 data-testid="lightbox-zoom-out"
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
-              <span className="text-white text-sm bg-black/50 px-2 py-1 rounded">
+              <span className="text-white text-sm px-2">
                 {Math.round(zoom * 100)}%
               </span>
               <Button
@@ -144,7 +144,7 @@ export function Lightbox({
                 size="icon"
                 onClick={handleZoomIn}
                 disabled={zoom >= 3}
-                className="bg-black/50 text-white hover:bg-black/70"
+                className="text-white"
                 data-testid="lightbox-zoom-in"
               >
                 <ZoomIn className="h-4 w-4" />
@@ -153,7 +153,7 @@ export function Lightbox({
                 variant="ghost"
                 size="icon"
                 onClick={handleDownload}
-                className="bg-black/50 text-white hover:bg-black/70"
+                className="text-white"
                 data-testid="lightbox-download"
               >
                 <Download className="h-4 w-4" />
@@ -162,7 +162,7 @@ export function Lightbox({
                 variant="ghost"
                 size="icon"
                 onClick={handleOpenInNewTab}
-                className="bg-black/50 text-white hover:bg-black/70"
+                className="text-white"
                 data-testid="lightbox-external"
               >
                 <ExternalLink className="h-4 w-4" />
@@ -171,7 +171,7 @@ export function Lightbox({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="bg-black/50 text-white hover:bg-black/70"
+                className="text-white"
                 data-testid="lightbox-close"
               >
                 <X className="h-4 w-4" />
@@ -180,24 +180,28 @@ export function Lightbox({
             
             {hasMultipleImages && (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handlePrevious}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white hover:bg-black/70"
-                  data-testid="lightbox-previous"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white hover:bg-black/70"
-                  data-testid="lightbox-next"
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </Button>
+                <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/70 backdrop-blur-sm rounded-md p-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handlePrevious}
+                    className="text-white"
+                    data-testid="lightbox-previous"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                </div>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/70 backdrop-blur-sm rounded-md p-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleNext}
+                    className="text-white"
+                    data-testid="lightbox-next"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </div>
               </>
             )}
             
@@ -213,7 +217,7 @@ export function Lightbox({
             </div>
             
             {hasMultipleImages && (
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1">
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 bg-black/70 backdrop-blur-sm rounded-md px-3 py-1.5 flex items-center gap-2">
                 {images.map((_, index) => (
                   <button
                     key={index}
@@ -224,7 +228,7 @@ export function Lightbox({
                     data-testid={`lightbox-dot-${index}`}
                   />
                 ))}
-                <span className="text-white text-xs ml-2 bg-black/50 px-2 py-0.5 rounded">
+                <span className="text-white text-xs ml-1">
                   {currentIndex + 1} / {images.length}
                 </span>
               </div>
