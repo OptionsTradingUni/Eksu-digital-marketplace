@@ -227,9 +227,16 @@ import {
   type SecretMessage,
   emailVerificationTokens,
   type EmailVerificationToken,
+  studyMaterials,
+  studyMaterialPurchases,
+  studyMaterialRatings,
+  type StudyMaterial,
+  type InsertStudyMaterial,
+  type StudyMaterialPurchase,
+  type StudyMaterialRating,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, like, desc, sql, gt } from "drizzle-orm";
+import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
 
 function generateReferralCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -382,7 +389,7 @@ export interface IStorage {
   // Hostel operations
   createHostel(hostel: InsertHostel & { agentId: string }): Promise<Hostel>;
   getHostel(id: string): Promise<(Hostel & { agent: User }) | undefined>;
-  getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]>;
+  getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number }): Promise<Hostel[]>;
   getUserHostels(agentId: string): Promise<Hostel[]>;
   updateHostel(id: string, data: Partial<Hostel>): Promise<Hostel>;
   deleteHostel(id: string): Promise<void>;
@@ -797,6 +804,20 @@ export interface IStorage {
   verifyEmailCode(userId: string, code: string): Promise<boolean>;
   markUserEmailVerified(userId: string): Promise<void>;
   isUserEmailVerified(userId: string): Promise<boolean>;
+
+  // Study Materials operations
+  getStudyMaterials(filters?: { level?: string; faculty?: string; courseCode?: string; materialType?: string; search?: string }): Promise<(StudyMaterial & { uploader: User })[]>;
+  getStudyMaterial(id: string): Promise<(StudyMaterial & { uploader: User }) | undefined>;
+  createStudyMaterial(data: Partial<InsertStudyMaterial> & { uploaderId: string; fileUrl: string }): Promise<StudyMaterial>;
+  updateStudyMaterial(id: string, data: Partial<StudyMaterial>): Promise<StudyMaterial>;
+  deleteStudyMaterial(id: string): Promise<void>;
+  purchaseStudyMaterial(materialId: string, buyerId: string, amount: string): Promise<StudyMaterialPurchase>;
+  hasUserPurchasedMaterial(materialId: string, userId: string): Promise<boolean>;
+  getUserStudyMaterials(userId: string): Promise<StudyMaterial[]>;
+  incrementMaterialViews(id: string): Promise<void>;
+  incrementMaterialDownloads(id: string): Promise<void>;
+  rateStudyMaterial(materialId: string, userId: string, rating: number, review?: string): Promise<StudyMaterialRating>;
+  getMaterialRatings(materialId: string): Promise<(StudyMaterialRating & { user: User })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2008,11 +2029,18 @@ export class DatabaseStorage implements IStorage {
     return { ...result[0].hostels, agent: result[0].users! };
   }
 
-  async getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number }): Promise<Hostel[]> {
+  async getHostels(filters?: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number }): Promise<Hostel[]> {
     const conditions = [eq(hostels.isAvailable, true)];
     
     if (filters?.location) {
       conditions.push(like(hostels.location, `%${filters.location}%`));
+    }
+    
+    // Support for bedroom filtering: minBedrooms for >= filter (4+), bedrooms for exact match
+    if (filters?.minBedrooms !== undefined) {
+      conditions.push(gte(hostels.bedrooms, filters.minBedrooms));
+    } else if (filters?.bedrooms !== undefined) {
+      conditions.push(eq(hostels.bedrooms, filters.bedrooms));
     }
     
     return await db
@@ -6385,6 +6413,196 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(eq(users.id, userId));
     return user?.emailVerified ?? false;
+  }
+
+  // ========================================
+  // Study Materials Operations
+  // ========================================
+
+  async getStudyMaterials(filters?: { level?: string; faculty?: string; courseCode?: string; materialType?: string; search?: string }): Promise<(StudyMaterial & { uploader: User })[]> {
+    let query = db
+      .select()
+      .from(studyMaterials)
+      .innerJoin(users, eq(studyMaterials.uploaderId, users.id))
+      .where(eq(studyMaterials.isActive, true))
+      .orderBy(desc(studyMaterials.createdAt));
+
+    const result = await query;
+
+    let filtered = result.map(row => ({ ...row.study_materials, uploader: row.users }));
+
+    if (filters?.level) {
+      filtered = filtered.filter(m => m.level === filters.level);
+    }
+    if (filters?.faculty) {
+      filtered = filtered.filter(m => m.faculty?.toLowerCase().includes(filters.faculty!.toLowerCase()));
+    }
+    if (filters?.courseCode) {
+      filtered = filtered.filter(m => m.courseCode.toLowerCase().includes(filters.courseCode!.toLowerCase()));
+    }
+    if (filters?.materialType) {
+      filtered = filtered.filter(m => m.materialType === filters.materialType);
+    }
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(m => 
+        m.title.toLowerCase().includes(searchLower) ||
+        m.courseCode.toLowerCase().includes(searchLower) ||
+        m.courseName?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }
+
+  async getStudyMaterial(id: string): Promise<(StudyMaterial & { uploader: User }) | undefined> {
+    const result = await db
+      .select()
+      .from(studyMaterials)
+      .innerJoin(users, eq(studyMaterials.uploaderId, users.id))
+      .where(eq(studyMaterials.id, id));
+
+    if (result.length === 0) return undefined;
+    
+    return { ...result[0].study_materials, uploader: result[0].users };
+  }
+
+  async createStudyMaterial(data: Partial<InsertStudyMaterial> & { uploaderId: string; fileUrl: string }): Promise<StudyMaterial> {
+    const [material] = await db.insert(studyMaterials).values({
+      uploaderId: data.uploaderId,
+      title: data.title || "Untitled Material",
+      description: data.description,
+      materialType: data.materialType || "past_question",
+      courseCode: data.courseCode || "N/A",
+      courseName: data.courseName,
+      faculty: data.faculty,
+      department: data.department,
+      level: data.level || "100L",
+      semester: data.semester,
+      academicYear: data.academicYear,
+      fileUrl: data.fileUrl,
+      previewUrl: data.previewUrl,
+      thumbnailUrl: data.thumbnailUrl,
+      fileSize: data.fileSize,
+      pageCount: data.pageCount,
+      price: data.price || "0.00",
+      isFree: data.isFree ?? true,
+      isApproved: true,
+      isActive: true,
+    }).returning();
+
+    return material;
+  }
+
+  async updateStudyMaterial(id: string, data: Partial<StudyMaterial>): Promise<StudyMaterial> {
+    const [material] = await db.update(studyMaterials)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(studyMaterials.id, id))
+      .returning();
+    return material;
+  }
+
+  async deleteStudyMaterial(id: string): Promise<void> {
+    await db.update(studyMaterials)
+      .set({ isActive: false })
+      .where(eq(studyMaterials.id, id));
+  }
+
+  async purchaseStudyMaterial(materialId: string, buyerId: string, amount: string): Promise<StudyMaterialPurchase> {
+    const [purchase] = await db.insert(studyMaterialPurchases).values({
+      materialId,
+      buyerId,
+      amount,
+    }).returning();
+    return purchase;
+  }
+
+  async hasUserPurchasedMaterial(materialId: string, userId: string): Promise<boolean> {
+    const [purchase] = await db.select()
+      .from(studyMaterialPurchases)
+      .where(and(
+        eq(studyMaterialPurchases.materialId, materialId),
+        eq(studyMaterialPurchases.buyerId, userId)
+      ));
+    return !!purchase;
+  }
+
+  async getUserStudyMaterials(userId: string): Promise<StudyMaterial[]> {
+    return await db.select()
+      .from(studyMaterials)
+      .where(and(
+        eq(studyMaterials.uploaderId, userId),
+        eq(studyMaterials.isActive, true)
+      ))
+      .orderBy(desc(studyMaterials.createdAt));
+  }
+
+  async incrementMaterialViews(id: string): Promise<void> {
+    await db.update(studyMaterials)
+      .set({ views: sql`${studyMaterials.views} + 1` })
+      .where(eq(studyMaterials.id, id));
+  }
+
+  async incrementMaterialDownloads(id: string): Promise<void> {
+    await db.update(studyMaterials)
+      .set({ downloads: sql`${studyMaterials.downloads} + 1` })
+      .where(eq(studyMaterials.id, id));
+  }
+
+  async rateStudyMaterial(materialId: string, userId: string, rating: number, review?: string): Promise<StudyMaterialRating> {
+    const existing = await db.select()
+      .from(studyMaterialRatings)
+      .where(and(
+        eq(studyMaterialRatings.materialId, materialId),
+        eq(studyMaterialRatings.userId, userId)
+      ));
+
+    if (existing.length > 0) {
+      const [updated] = await db.update(studyMaterialRatings)
+        .set({ rating, review })
+        .where(eq(studyMaterialRatings.id, existing[0].id))
+        .returning();
+      
+      await this.updateMaterialRatingStats(materialId);
+      return updated;
+    }
+
+    const [newRating] = await db.insert(studyMaterialRatings).values({
+      materialId,
+      userId,
+      rating,
+      review,
+    }).returning();
+
+    await this.updateMaterialRatingStats(materialId);
+    return newRating;
+  }
+
+  private async updateMaterialRatingStats(materialId: string): Promise<void> {
+    const ratings = await db.select()
+      .from(studyMaterialRatings)
+      .where(eq(studyMaterialRatings.materialId, materialId));
+
+    if (ratings.length === 0) return;
+
+    const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+    
+    await db.update(studyMaterials)
+      .set({ 
+        rating: avgRating.toFixed(2),
+        ratingCount: ratings.length 
+      })
+      .where(eq(studyMaterials.id, materialId));
+  }
+
+  async getMaterialRatings(materialId: string): Promise<(StudyMaterialRating & { user: User })[]> {
+    const result = await db.select()
+      .from(studyMaterialRatings)
+      .innerJoin(users, eq(studyMaterialRatings.userId, users.id))
+      .where(eq(studyMaterialRatings.materialId, materialId))
+      .orderBy(desc(studyMaterialRatings.createdAt));
+
+    return result.map(row => ({ ...row.study_material_ratings, user: row.users }));
   }
 }
 

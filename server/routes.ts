@@ -11091,5 +11091,602 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
+  // ========================================
+  // Hostel & Roommate Finder Routes
+  // ========================================
+
+  // GET /api/hostels - List hostels with filters
+  app.get("/api/hostels", async (req, res) => {
+    try {
+      const { location, minPrice, maxPrice, bedrooms, search } = req.query;
+      
+      const filters: { location?: string; minPrice?: number; maxPrice?: number; minBedrooms?: number; bedrooms?: number } = {};
+      
+      if (location && location !== "all") {
+        filters.location = location as string;
+      }
+      if (minPrice) {
+        filters.minPrice = parseFloat(minPrice as string);
+      }
+      if (maxPrice) {
+        filters.maxPrice = parseFloat(maxPrice as string);
+      }
+      
+      // Handle bedroom filtering at storage layer
+      if (bedrooms && bedrooms !== "all") {
+        const bedroomCount = parseInt(bedrooms as string);
+        if (bedroomCount >= 4) {
+          // "4+" means 4 or more bedrooms - use minBedrooms for >= comparison
+          filters.minBedrooms = 4;
+        } else {
+          // Exact match for 1, 2, 3 bedrooms
+          filters.bedrooms = bedroomCount;
+        }
+      }
+      
+      let hostels = await storage.getHostels(filters);
+      
+      // Search filter (kept in route layer for flexibility)
+      if (search && typeof search === "string" && search.trim()) {
+        const searchLower = search.toLowerCase().trim();
+        hostels = hostels.filter(h => 
+          h.title.toLowerCase().includes(searchLower) ||
+          h.location?.toLowerCase().includes(searchLower) ||
+          h.address?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      res.json(hostels);
+    } catch (error) {
+      console.error("Error fetching hostels:", error);
+      res.status(500).json({ message: "Failed to fetch hostels" });
+    }
+  });
+
+  // GET /api/hostels/my-listings - Get user's hostel listings
+  app.get("/api/hostels/my-listings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const hostels = await storage.getUserHostels(userId);
+      res.json(hostels);
+    } catch (error) {
+      console.error("Error fetching user hostels:", error);
+      res.status(500).json({ message: "Failed to fetch your hostel listings" });
+    }
+  });
+
+  // GET /api/hostels/:id - Get single hostel with agent info
+  app.get("/api/hostels/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+      
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      // Increment views
+      await storage.incrementHostelViews(id);
+      
+      res.json(hostel);
+    } catch (error) {
+      console.error("Error fetching hostel:", error);
+      res.status(500).json({ message: "Failed to fetch hostel" });
+    }
+  });
+
+  // POST /api/hostels - Create hostel (with image upload)
+  app.post("/api/hostels", isAuthenticated, upload.array("images", 10), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate required fields
+      const { title, description, location, address, price, bedrooms, bathrooms, amenities, distanceFromCampus, agentFee } = req.body;
+      
+      // Basic validation
+      if (!title || typeof title !== "string" || title.trim().length < 5) {
+        return res.status(400).json({ message: "Title must be at least 5 characters" });
+      }
+      if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+        return res.status(400).json({ message: "Price must be a valid positive number" });
+      }
+      if (!location || typeof location !== "string" || location.trim().length === 0) {
+        return res.status(400).json({ message: "Location is required" });
+      }
+
+      // Upload images to object storage
+      let imageUrls: string[] = [];
+      if (req.files && req.files.length > 0) {
+        const prefix = `hostels/${userId}/`;
+        const uploadedUrls = await uploadMultipleToObjectStorage(req.files, prefix);
+        imageUrls = uploadedUrls.filter((url): url is string => url !== null);
+      }
+
+      // Parse amenities if it's a JSON string
+      let parsedAmenities: string[] = [];
+      if (amenities) {
+        try {
+          parsedAmenities = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+        } catch {
+          parsedAmenities = Array.isArray(amenities) ? amenities : [amenities];
+        }
+      }
+
+      const hostel = await storage.createHostel({
+        agentId: userId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        location: location.trim(),
+        address: address?.trim() || null,
+        price: parseFloat(price).toFixed(2),
+        images: imageUrls,
+        bedrooms: bedrooms ? parseInt(bedrooms) : null,
+        bathrooms: bathrooms ? parseInt(bathrooms) : null,
+        amenities: parsedAmenities,
+        distanceFromCampus: distanceFromCampus?.trim() || null,
+        agentFee: agentFee?.trim() || null,
+        isAvailable: true,
+      });
+
+      res.status(201).json(hostel);
+    } catch (error) {
+      console.error("Error creating hostel:", error);
+      res.status(500).json({ message: "Failed to create hostel listing" });
+    }
+  });
+
+  // PUT /api/hostels/:id - Update hostel (owner only)
+  app.put("/api/hostels/:id", isAuthenticated, upload.array("images", 10), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      if (hostel.agentId !== userId) {
+        return res.status(403).json({ message: "You can only update your own hostel listings" });
+      }
+
+      // Handle new image uploads
+      let imageUrls = hostel.images || [];
+      if (req.files && req.files.length > 0) {
+        const prefix = `hostels/${userId}/`;
+        const uploadedUrls = await uploadMultipleToObjectStorage(req.files, prefix);
+        const newUrls = uploadedUrls.filter((url): url is string => url !== null);
+        imageUrls = [...imageUrls, ...newUrls];
+      }
+
+      // Handle existing images from form data
+      if (req.body.existingImages) {
+        try {
+          const existingImages = typeof req.body.existingImages === "string" 
+            ? JSON.parse(req.body.existingImages) 
+            : req.body.existingImages;
+          imageUrls = Array.isArray(existingImages) ? existingImages : imageUrls;
+        } catch {
+          // Keep existing images if parsing fails
+        }
+      }
+
+      const { 
+        title, 
+        description, 
+        location, 
+        address, 
+        price, 
+        bedrooms, 
+        bathrooms, 
+        amenities, 
+        distanceFromCampus,
+        agentFee,
+        isAvailable 
+      } = req.body;
+
+      // Parse amenities if it's a JSON string
+      let parsedAmenities: string[] | undefined;
+      if (amenities) {
+        try {
+          parsedAmenities = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+        } catch {
+          parsedAmenities = Array.isArray(amenities) ? amenities : [amenities];
+        }
+      }
+
+      const updated = await storage.updateHostel(id, {
+        title,
+        description,
+        location,
+        address,
+        price,
+        images: imageUrls,
+        bedrooms: bedrooms ? parseInt(bedrooms) : undefined,
+        bathrooms: bathrooms ? parseInt(bathrooms) : undefined,
+        amenities: parsedAmenities,
+        distanceFromCampus,
+        agentFee,
+        isAvailable: isAvailable === "true" || isAvailable === true,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating hostel:", error);
+      res.status(500).json({ message: "Failed to update hostel listing" });
+    }
+  });
+
+  // DELETE /api/hostels/:id - Delete hostel (owner only)
+  app.delete("/api/hostels/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const hostel = await storage.getHostel(id);
+
+      if (!hostel) {
+        return res.status(404).json({ message: "Hostel not found" });
+      }
+
+      if (hostel.agentId !== userId) {
+        return res.status(403).json({ message: "You can only delete your own hostel listings" });
+      }
+
+      await storage.deleteHostel(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting hostel:", error);
+      res.status(500).json({ message: "Failed to delete hostel listing" });
+    }
+  });
+
+  // ========================================
+  // Study Materials (Past Questions) Routes
+  // ========================================
+
+  // GET /api/study-materials - List materials with filters
+  app.get("/api/study-materials", async (req, res) => {
+    try {
+      const { level, faculty, courseCode, materialType, search } = req.query;
+      const materials = await storage.getStudyMaterials({
+        level: level as string,
+        faculty: faculty as string,
+        courseCode: courseCode as string,
+        materialType: materialType as string,
+        search: search as string,
+      });
+      res.json(materials);
+    } catch (error) {
+      console.error("Error fetching study materials:", error);
+      res.status(500).json({ message: "Failed to fetch study materials" });
+    }
+  });
+
+  // GET /api/study-materials/my-uploads - Get user's uploaded materials
+  app.get("/api/study-materials/my-uploads", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const materials = await storage.getUserStudyMaterials(userId);
+      res.json(materials);
+    } catch (error) {
+      console.error("Error fetching user study materials:", error);
+      res.status(500).json({ message: "Failed to fetch your study materials" });
+    }
+  });
+
+  // GET /api/study-materials/:id - Get single material
+  app.get("/api/study-materials/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+      
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Increment views
+      await storage.incrementMaterialViews(id);
+      
+      // Check if user has purchased (if authenticated)
+      let hasPurchased = false;
+      const userId = getUserId(req);
+      if (userId) {
+        hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      }
+
+      // Get ratings
+      const ratings = await storage.getMaterialRatings(id);
+
+      res.json({ ...material, hasPurchased, ratings });
+    } catch (error) {
+      console.error("Error fetching study material:", error);
+      res.status(500).json({ message: "Failed to fetch study material" });
+    }
+  });
+
+  // POST /api/study-materials - Create new material (with file upload)
+  app.post("/api/study-materials", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Please upload a file" });
+      }
+
+      // Upload file to object storage
+      const prefix = `study-materials/${userId}/`;
+      const fileUrl = await uploadToObjectStorage(req.file, prefix);
+      
+      if (!fileUrl) {
+        return res.status(500).json({ message: "Failed to upload file" });
+      }
+
+      const { title, description, materialType, courseCode, courseName, faculty, department, level, semester, academicYear, price, isFree } = req.body;
+
+      const material = await storage.createStudyMaterial({
+        uploaderId: userId,
+        title,
+        description,
+        materialType: materialType || "past_question",
+        courseCode: courseCode || "N/A",
+        courseName,
+        faculty,
+        department,
+        level: level || "100L",
+        semester,
+        academicYear,
+        fileUrl,
+        fileSize: req.file.size,
+        price: price || "0.00",
+        isFree: isFree === "true" || isFree === true,
+      });
+
+      res.status(201).json(material);
+    } catch (error) {
+      console.error("Error creating study material:", error);
+      res.status(500).json({ message: "Failed to create study material" });
+    }
+  });
+
+  // PUT /api/study-materials/:id - Update material
+  app.put("/api/study-materials/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      if (material.uploaderId !== userId) {
+        return res.status(403).json({ message: "You can only update your own materials" });
+      }
+
+      const { title, description, materialType, courseCode, courseName, faculty, department, level, semester, academicYear, price, isFree } = req.body;
+
+      const updated = await storage.updateStudyMaterial(id, {
+        title,
+        description,
+        materialType,
+        courseCode,
+        courseName,
+        faculty,
+        department,
+        level,
+        semester,
+        academicYear,
+        price,
+        isFree,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating study material:", error);
+      res.status(500).json({ message: "Failed to update study material" });
+    }
+  });
+
+  // DELETE /api/study-materials/:id - Delete material
+  app.delete("/api/study-materials/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      if (material.uploaderId !== userId) {
+        return res.status(403).json({ message: "You can only delete your own materials" });
+      }
+
+      await storage.deleteStudyMaterial(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting study material:", error);
+      res.status(500).json({ message: "Failed to delete study material" });
+    }
+  });
+
+  // POST /api/study-materials/:id/purchase - Purchase material (deduct from wallet)
+  app.post("/api/study-materials/:id/purchase", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if already purchased
+      const alreadyPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      if (alreadyPurchased) {
+        return res.status(400).json({ message: "You already own this material" });
+      }
+
+      // If it's free, just record the purchase
+      if (material.isFree) {
+        await storage.purchaseStudyMaterial(id, userId, "0.00");
+        return res.json({ success: true, message: "Material added to your library" });
+      }
+
+      // Get user's wallet
+      const wallet = await storage.getWallet(userId);
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet not found" });
+      }
+
+      const price = parseFloat(material.price || "0");
+      const balance = parseFloat(wallet.balance || "0");
+
+      if (balance < price) {
+        return res.status(400).json({ message: "Insufficient wallet balance" });
+      }
+
+      // Deduct from buyer's wallet
+      await storage.updateWalletBalance(userId, (balance - price).toFixed(2));
+
+      // Record the purchase
+      await storage.purchaseStudyMaterial(id, userId, material.price || "0.00");
+
+      // Create transaction record
+      await storage.createTransaction({
+        userId,
+        type: "purchase",
+        amount: material.price || "0.00",
+        description: `Purchase: ${material.title}`,
+        status: "completed",
+        reference: `SM-${id}-${Date.now()}`,
+      });
+
+      // Credit the seller (90% of the price, 10% platform fee)
+      const sellerAmount = (price * 0.9).toFixed(2);
+      const sellerWallet = await storage.getWallet(material.uploaderId);
+      if (sellerWallet) {
+        const sellerBalance = parseFloat(sellerWallet.balance || "0");
+        await storage.updateWalletBalance(material.uploaderId, (sellerBalance + parseFloat(sellerAmount)).toFixed(2));
+        
+        await storage.createTransaction({
+          userId: material.uploaderId,
+          type: "credit",
+          amount: sellerAmount,
+          description: `Sale: ${material.title}`,
+          status: "completed",
+          reference: `SM-SALE-${id}-${Date.now()}`,
+        });
+      }
+
+      res.json({ success: true, message: "Purchase successful" });
+    } catch (error) {
+      console.error("Error purchasing study material:", error);
+      res.status(500).json({ message: "Failed to purchase study material" });
+    }
+  });
+
+  // GET /api/study-materials/:id/download - Download material (check purchase/free)
+  app.get("/api/study-materials/:id/download", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const material = await storage.getStudyMaterial(id);
+
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if user can download (owner, purchased, or free)
+      const isOwner = material.uploaderId === userId;
+      const hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+      const isFree = material.isFree;
+
+      if (!isOwner && !hasPurchased && !isFree) {
+        return res.status(403).json({ message: "Please purchase this material to download" });
+      }
+
+      // Increment download count
+      await storage.incrementMaterialDownloads(id);
+
+      res.json({ downloadUrl: material.fileUrl });
+    } catch (error) {
+      console.error("Error downloading study material:", error);
+      res.status(500).json({ message: "Failed to download study material" });
+    }
+  });
+
+  // POST /api/study-materials/:id/rate - Rate a material
+  app.post("/api/study-materials/:id/rate", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { rating, review } = req.body;
+
+      if (typeof rating !== "number" || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Rating must be between 1 and 5" });
+      }
+
+      const material = await storage.getStudyMaterial(id);
+      if (!material) {
+        return res.status(404).json({ message: "Study material not found" });
+      }
+
+      // Check if user has purchased or owns the material
+      const isOwner = material.uploaderId === userId;
+      const hasPurchased = await storage.hasUserPurchasedMaterial(id, userId);
+
+      if (!isOwner && !hasPurchased && !material.isFree) {
+        return res.status(403).json({ message: "You can only rate materials you've purchased" });
+      }
+
+      const newRating = await storage.rateStudyMaterial(id, userId, rating, review);
+      res.json(newRating);
+    } catch (error) {
+      console.error("Error rating study material:", error);
+      res.status(500).json({ message: "Failed to rate study material" });
+    }
+  });
+
   return httpServer;
 }

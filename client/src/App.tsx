@@ -46,6 +46,8 @@ const CommunitiesPage = lazy(() => import("@/pages/communities"));
 const SecretMessagesPage = lazy(() => import("@/pages/secret-messages"));
 const SendSecretPage = lazy(() => import("@/pages/send-secret"));
 const SecretHubPage = lazy(() => import("@/pages/secret-hub"));
+const StudyMaterialsPage = lazy(() => import("@/pages/study-materials"));
+const HostelsPage = lazy(() => import("@/pages/hostels"));
 
 function PageLoadingSpinner() {
   return (
@@ -271,6 +273,16 @@ function Router() {
             <Route path="/secret-messages" component={() => (
               <ErrorBoundary>
                 <SecretMessagesPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/study-materials" component={() => (
+              <ErrorBoundary>
+                <StudyMaterialsPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/hostels" component={() => (
+              <ErrorBoundary>
+                <HostelsPage />
               </ErrorBoundary>
             )} />
             <Route component={() => (

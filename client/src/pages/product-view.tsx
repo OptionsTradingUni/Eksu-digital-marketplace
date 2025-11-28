@@ -10,7 +10,8 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, Calendar, CircleDot, Share2, Loader2, Check, ImageOff } from "lucide-react";
+import { MessageSquare, MapPin, Heart, Star, Shield, ChevronLeft, ChevronRight, UserPlus, UserCheck, CheckCircle, Clock, ShoppingBag, ShoppingCart, Calendar, CircleDot, Share2, Loader2, Check, ImageOff, Plus, Minus } from "lucide-react";
+import { useCart } from "@/hooks/use-cart";
 import { SafetyShieldModal, hasSafetyBeenAcknowledged } from "@/components/SafetyShieldModal";
 import type { Product, User, Watchlist, UserSettings } from "@shared/schema";
 import { getDistanceDisplay } from "@/lib/distance";
@@ -70,6 +71,9 @@ export default function ProductView() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  
+  const { addToCart, isAddingToCart, cartItems } = useCart();
 
   const { data: product, isLoading } = useQuery<ProductWithSellerSettings>({
     queryKey: ["/api/products", id],
@@ -97,6 +101,8 @@ export default function ProductView() {
       : null;
 
   const isInWishlist = wishlistItems.some(item => item.productId === id);
+  const isInCart = cartItems.some(item => item.productId === id);
+  const cartItem = cartItems.find(item => item.productId === id);
 
   // Reset safety modal state when product/seller changes
   useEffect(() => {
@@ -245,6 +251,35 @@ export default function ProductView() {
       });
     }
   };
+
+  const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to add items to your cart",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await addToCart({ productId: id!, quantity });
+      toast({
+        title: "Added to Cart",
+        description: `${quantity} item${quantity > 1 ? 's' : ''} added to your cart`,
+      });
+      setQuantity(1);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add to cart",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const incrementQuantity = () => setQuantity(q => Math.min(q + 1, 10));
+  const decrementQuantity = () => setQuantity(q => Math.max(q - 1, 1));
 
   const startChat = () => {
     if (!isAuthenticated) {
@@ -628,14 +663,80 @@ export default function ProductView() {
                   Edit Listing
                 </Button>
               ) : (
-                <Button
-                  className="w-full"
-                  onClick={startChat}
-                  data-testid="button-chat-seller"
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Chat with Seller
-                </Button>
+                <>
+                  {/* Quantity Selector and Add to Cart */}
+                  {product.isAvailable && !product.isSold && (
+                    <div className="flex gap-2">
+                      <div className="flex items-center border rounded-md">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={decrementQuantity}
+                          disabled={quantity <= 1}
+                          data-testid="button-decrease-quantity"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="px-4 font-medium min-w-[40px] text-center" data-testid="text-quantity">
+                          {quantity}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={incrementQuantity}
+                          disabled={quantity >= 10}
+                          data-testid="button-increase-quantity"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Button
+                        className="flex-1"
+                        onClick={handleAddToCart}
+                        disabled={isAddingToCart}
+                        data-testid="button-add-to-cart"
+                      >
+                        {isAddingToCart ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                        )}
+                        {isInCart ? "Add More" : "Add to Cart"}
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* View Cart Button (if items in cart) */}
+                  {isInCart && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setLocation("/checkout")}
+                      data-testid="button-view-cart"
+                    >
+                      <ShoppingBag className="mr-2 h-4 w-4" />
+                      View Cart ({cartItem?.quantity} item{(cartItem?.quantity || 0) > 1 ? 's' : ''})
+                    </Button>
+                  )}
+                  
+                  {/* Chat with Seller */}
+                  <Button
+                    variant={product.isAvailable && !product.isSold ? "outline" : "default"}
+                    className="w-full"
+                    onClick={startChat}
+                    data-testid="button-chat-seller"
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Chat with Seller
+                  </Button>
+                  
+                  {/* Product unavailable notice */}
+                  {(!product.isAvailable || product.isSold) && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      This item is no longer available for purchase
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
