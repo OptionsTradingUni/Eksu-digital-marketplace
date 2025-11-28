@@ -61,7 +61,13 @@ import {
   Crown,
   Target,
   ArrowLeft,
-  Circle
+  Circle,
+  Plane,
+  Palette,
+  RotateCcw,
+  Dices,
+  Zap,
+  Grid2X2
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Game, User as UserType, Wallet } from "@shared/schema";
@@ -74,10 +80,17 @@ import TruthOrDareGame from "@/components/games/TruthOrDareGame";
 import GuessThePriceGame from "@/components/games/GuessThePriceGame";
 import CampusBingoGame from "@/components/games/CampusBingoGame";
 import AyoOloponGame from "@/components/games/AyoOloponGame";
+import AviatorGame from "@/components/games/AviatorGame";
+import ColourColourGame from "@/components/games/ColourColourGame";
+import SpinWheelGame from "@/components/games/SpinWheelGame";
+import QuickDrawGame from "@/components/games/QuickDrawGame";
+import DiceDuelGame from "@/components/games/DiceDuelGame";
+import DraughtsGame from "@/components/games/DraughtsGame";
+import ChessBlitzGame from "@/components/games/ChessBlitzGame";
 
 type GameWithPlayer = Game & { player1: UserType };
 
-type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price" | "ayo_olopon";
+type GameType = "ludo" | "word_battle" | "trivia" | "whot" | "quick_draw" | "speed_typing" | "campus_bingo" | "truth_or_dare" | "guess_the_price" | "ayo_olopon" | "aviator" | "colour_colour" | "spin_wheel" | "dice_duel" | "draughts" | "chess_blitz";
 
 type GameMode = "single_player" | "multiplayer";
 
@@ -144,13 +157,13 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
   },
   quick_draw: {
     name: "Quick Draw",
-    description: "Draw and guess! Like Pictionary but faster and funnier.",
-    icon: Pencil,
+    description: "Test your reflexes! First to tap when DRAW appears wins.",
+    icon: Zap,
     color: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
     stakeAmounts: ["100", "200", "500", "1000", "2000", "5000", "10000"],
     platformFee: 15,
-    playerType: "2-4 Players",
-    supportsSinglePlayer: false,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
     supportsMultiplayer: true,
   },
   speed_typing: {
@@ -208,9 +221,75 @@ const GAME_INFO: Record<GameType, GameInfoType> = {
     supportsSinglePlayer: true,
     supportsMultiplayer: false,
   },
+  aviator: {
+    name: "Aviator",
+    description: "Watch the plane fly! Cash out before it crashes to win big.",
+    icon: Plane,
+    color: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    stakeAmounts: EXPANDED_STAKES,
+    platformFee: 3,
+    playerType: "Solo Betting",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: false,
+  },
+  colour_colour: {
+    name: "Colour Colour",
+    description: "Bet on colours or numbers. Watch the wheel spin!",
+    icon: Palette,
+    color: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    stakeAmounts: EXPANDED_STAKES,
+    platformFee: 5,
+    playerType: "Solo Betting",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: false,
+  },
+  spin_wheel: {
+    name: "Spin The Wheel",
+    description: "Spin to win! Land on multipliers from 1x to 100x jackpot.",
+    icon: RotateCcw,
+    color: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400",
+    stakeAmounts: EXPANDED_STAKES,
+    platformFee: 4,
+    playerType: "Solo Betting",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: false,
+  },
+  dice_duel: {
+    name: "Dice Duel",
+    description: "Roll 5 dice and form poker hands. Best hand wins!",
+    icon: Dices,
+    color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000", "10000"],
+    platformFee: 10,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
+  },
+  draughts: {
+    name: "Draughts",
+    description: "Classic checkers! Capture all opponent pieces to win.",
+    icon: Grid2X2,
+    color: "bg-stone-500/10 text-stone-600 dark:text-stone-400",
+    stakeAmounts: ["100", "200", "500", "1000", "2000", "5000"],
+    platformFee: 5,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
+  },
+  chess_blitz: {
+    name: "Chess Blitz",
+    description: "3-minute rapid chess against AI. Checkmate to win!",
+    icon: Crown,
+    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    stakeAmounts: ["200", "500", "1000", "2000", "5000", "10000"],
+    platformFee: 5,
+    playerType: "vs AI",
+    supportsSinglePlayer: true,
+    supportsMultiplayer: true,
+  },
 };
 
-const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "ayo_olopon"];
+const ALL_GAME_TYPES: GameType[] = ["ludo", "word_battle", "trivia", "whot", "quick_draw", "speed_typing", "campus_bingo", "truth_or_dare", "guess_the_price", "ayo_olopon", "aviator", "colour_colour", "spin_wheel", "dice_duel", "draughts", "chess_blitz"];
 
 interface LeaderboardEntry {
   rank: number;
@@ -498,6 +577,20 @@ export default function GamesPage() {
         return <CampusBingoGame {...commonProps} />;
       case "ayo_olopon":
         return <AyoOloponGame {...commonProps} />;
+      case "aviator":
+        return <AviatorGame {...commonProps} />;
+      case "colour_colour":
+        return <ColourColourGame {...commonProps} />;
+      case "spin_wheel":
+        return <SpinWheelGame {...commonProps} />;
+      case "quick_draw":
+        return <QuickDrawGame {...commonProps} />;
+      case "dice_duel":
+        return <DiceDuelGame {...commonProps} />;
+      case "draughts":
+        return <DraughtsGame {...commonProps} />;
+      case "chess_blitz":
+        return <ChessBlitzGame {...commonProps} />;
       default:
         return (
           <Card className="p-8 text-center">
