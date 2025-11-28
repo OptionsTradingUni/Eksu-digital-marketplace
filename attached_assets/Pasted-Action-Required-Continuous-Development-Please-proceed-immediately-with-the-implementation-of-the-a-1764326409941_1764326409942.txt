@@ -1,0 +1,39 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Cloudinary, SME Data API, and Groq are all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+
+2. ⁠1. When I click on dark mode I profile navigation , I'm not able to choose those themes I want and I want you to add more themes 
+
+2. Tho there's a set location for seller or buyer whenever they sign up but I still want a geolocation that detects their real time location and find a way to put it on their profile , and when they're selling products and if possible distance away from the customer 
+
+3. The image placement on product list when you click on it it showed image, product name price etc , the image looks like desktop it's too big making the whole page somehow 
+
+4. I'm following a seller or I followed via home when I go to the-plug I saw the seller post but the follow button is still showing beside, if I've followed someone, on the plug it needs to show that it has been followed and not show the follow button or perhaps it doesn't show at all and would needs me to visit the person profile to follow 
+
+5. In the plug , after I click the + sign to create a post, it's a medium size post and whenever I type it disturb the keyboard functionality, I want you to change the post option to look like twitter excatly. You know X normally covers the whole page you know what I'm saying. Just change the whole UI and improve it and make it work 
+
+6.  Let views be consistent, track it , let it oook like how X or twitter monitor theirs 
+
+7. There should be an option to view profile too and cover photo make sure it doesn't affect story ring 
+
+8. When you click on profile you'll see social , services, account, make sure you can toggle on and off and it disappear it's fixed or static now 
+
+9. I think there should be a settings parent where help and support, legal and privacy would be inside including settings itself that is in profile too 
+
+10. Also now in a situation whereby someone wants to sell account logs or vpn etc like acctbazaar site. They would have filled in the necessary details after buyer makes payment would it be visible and there's a time limit showing when he or she can make a dispute, but now how do we prevent situations whereby buyer would collect account finish and run a dispute perhaps there should be a 2 factor verification compulsory to know if buyer enters and buyer should be able to report chat if seller wants to act funny, also when payment is done, money would be on hold for that period of dispute time , also find ways to add necessary security  while for other means it's still intact 
+
+11. Another thing now is adding those seeking for hostels , roommates, agent posting available housing etc.. you can't make payment for hostel you haven't seen, how do agents get their supervision fee, from where do I get money, also how do they posts hostels etc like that everything that way reason it too 
+
+12. In settings there should be an option to add gender which is optional and would be added to profile or perhaps it's added to sign up stuff too and optional and can use male female etc
+13. This option is still not working I mean in confession, liking is slow or voting is slow, algorithm applies there too, I’m unable to add a comment or comment , it’s not showing any message box etc 
+14. ⁠like I said let guest be able to access secret link , let them be able to write and create secret links without necessarily having an account, anytime I get to create it would send me to sign up mode… also let confession be visible there but let it that it can’t be accessed unless he or she has an account on it 
+15. ⁠I don’t like how it looks like the secret message UI or decoration improve it some parts are too dull or faded , work on them please 
