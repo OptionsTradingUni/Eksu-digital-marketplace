@@ -4779,34 +4779,34 @@ Happy trading!`;
 
   // ========== EKSUPLUG SYSTEM ACCOUNT ENDPOINTS ==========
   
-  // Get or create EKSUPlug system account
-  app.get("/api/system/eksuplug", async (req, res) => {
+  // Get or create Marketplace system account
+  app.get("/api/system/marketplace", async (req, res) => {
     try {
-      let eksuplug = await storage.getSystemAccount("eksuplug");
+      let marketplace = await storage.getSystemAccount("marketplace");
       
-      if (!eksuplug) {
-        // Create the @EKSUPlug system account
-        eksuplug = await storage.createSystemAccount({
-          email: "eksuplug@system.local",
-          username: "eksuplug",
+      if (!marketplace) {
+        // Create the @EksuMarketplaceOfficial system account
+        marketplace = await storage.createSystemAccount({
+          email: "system@eksucampusmarketplace.com",
+          username: "EksuMarketplaceOfficial",
           firstName: "EKSU",
-          lastName: "Plug",
-          type: "eksuplug",
-          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
-          profileImageUrl: "/eksu-plug-avatar.png"
+          lastName: "Marketplace",
+          type: "marketplace",
+          bio: "Official EKSU Campus Marketplace. Your trusted platform for campus trading, announcements, and community updates.",
+          profileImageUrl: "/eksu-marketplace-avatar.png"
         });
       }
       
-      const { password, ...safeUser } = eksuplug;
+      const { password, ...safeUser } = marketplace;
       res.json(safeUser);
     } catch (error) {
-      console.error("Error getting EKSUPlug account:", error);
-      res.status(500).json({ message: "Failed to get EKSUPlug account" });
+      console.error("Error getting Marketplace account:", error);
+      res.status(500).json({ message: "Failed to get Marketplace account" });
     }
   });
   
-  // Post as EKSUPlug (Admin only)
-  app.post("/api/system/eksuplug/post", isAuthenticated, async (req: any, res) => {
+  // Post as Marketplace (Admin only)
+  app.post("/api/system/marketplace/post", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
@@ -4815,19 +4815,19 @@ Happy trading!`;
       
       // Check if user is admin
       if (!(await isAdminUser(userId))) {
-        return res.status(403).json({ message: "Only admins can post as EKSUPlug" });
+        return res.status(403).json({ message: "Only admins can post as Marketplace" });
       }
       
-      // Get or create EKSUPlug account
-      let eksuplug = await storage.getSystemAccount("eksuplug");
-      if (!eksuplug) {
-        eksuplug = await storage.createSystemAccount({
-          email: "eksuplug@system.local",
-          username: "eksuplug",
+      // Get or create Marketplace account
+      let marketplace = await storage.getSystemAccount("marketplace");
+      if (!marketplace) {
+        marketplace = await storage.createSystemAccount({
+          email: "system@eksucampusmarketplace.com",
+          username: "EksuMarketplaceOfficial",
           firstName: "EKSU",
-          lastName: "Plug",
-          type: "eksuplug",
-          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
+          lastName: "Marketplace",
+          type: "marketplace",
+          bio: "Official EKSU Campus Marketplace. Your trusted platform for campus trading, announcements, and community updates.",
         });
       }
       
@@ -4847,7 +4847,7 @@ Happy trading!`;
       }
       
       const post = await storage.createSocialPostWithOptions({
-        authorId: eksuplug.id,
+        authorId: marketplace.id,
         content,
         images: images || [],
         videos: videos || [],
@@ -4859,42 +4859,42 @@ Happy trading!`;
       
       res.json(post);
     } catch (error) {
-      console.error("Error posting as EKSUPlug:", error);
-      res.status(500).json({ message: "Failed to post as EKSUPlug" });
+      console.error("Error posting as Marketplace:", error);
+      res.status(500).json({ message: "Failed to post as Marketplace" });
     }
   });
   
-  // Auto-follow EKSUPlug on user registration (called internally)
-  app.post("/api/system/eksuplug/auto-follow", isAuthenticated, async (req: any, res) => {
+  // Auto-follow Marketplace on user registration (called internally)
+  app.post("/api/system/marketplace/auto-follow", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       
-      // Get EKSUPlug account
-      let eksuplug = await storage.getSystemAccount("eksuplug");
-      if (!eksuplug) {
-        eksuplug = await storage.createSystemAccount({
-          email: "eksuplug@system.local",
-          username: "eksuplug", 
+      // Get Marketplace account
+      let marketplace = await storage.getSystemAccount("marketplace");
+      if (!marketplace) {
+        marketplace = await storage.createSystemAccount({
+          email: "system@eksucampusmarketplace.com",
+          username: "EksuMarketplaceOfficial", 
           firstName: "EKSU",
-          lastName: "Plug",
-          type: "eksuplug",
-          bio: "Official EKSU Digital Marketplace Bot. Campus news, announcements, and marketplace updates.",
+          lastName: "Marketplace",
+          type: "marketplace",
+          bio: "Official EKSU Campus Marketplace. Your trusted platform for campus trading, announcements, and community updates.",
         });
       }
       
       // Check if already following
-      const isFollowing = await storage.isFollowing(userId, eksuplug.id);
+      const isFollowing = await storage.isFollowing(userId, marketplace.id);
       if (!isFollowing) {
-        await storage.followUser(userId, eksuplug.id);
+        await storage.followUser(userId, marketplace.id);
       }
       
       res.json({ success: true, following: true });
     } catch (error) {
-      console.error("Error auto-following EKSUPlug:", error);
-      res.status(500).json({ message: "Failed to auto-follow EKSUPlug" });
+      console.error("Error auto-following Marketplace:", error);
+      res.status(500).json({ message: "Failed to auto-follow Marketplace" });
     }
   });
 
