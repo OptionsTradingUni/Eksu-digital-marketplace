@@ -14,6 +14,13 @@ Do not make changes to the file `Y`.
 
 ## Recent Changes (November 2025)
 
+- **Explore Page**: New /explore page with all features organized by category (Marketplace, Housing, Education, Social, Services, Games, Support) for better feature discoverability.
+- **Quick Services Section**: Home page now has a Quick Services grid with cards for Hostel Finder, Study Materials, VTU Data, Games, Secret Messages, and Explore All.
+- **Improved Navigation**: 
+  - Header Services submenu now includes Hostel Finder and Study Materials links
+  - BottomNav has a new "More" menu with sheet-based access to all services (replaces single Games button)
+- **Support Ticket Email Notifications**: Admin now receives email alerts when new tickets are created. Both admin and users receive email notifications when replies are posted to tickets.
+- **Squad Payments Database Fix**: Created the missing squad_payments table to resolve "relation does not exist" production error.
 - **Theme System**: Moved theme toggle to header (ThemeToggle component), removed from profile dropdown. Supports 8 themes: Light, Dim, Lights Out, Sunset, Ocean, Forest, Sepia, High Contrast.
 - **Email Verification**: Added 6-digit OTP code input option alongside token-based verification. Includes resend functionality with cooldown.
 - **Official Account Branding**: "Eksu Market Plug" official account uses favicon as profile pic, hides followers/following from non-admins.
