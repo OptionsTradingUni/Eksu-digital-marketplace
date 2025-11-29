@@ -1,0 +1,57 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+Bugs to fix 
+
+When I want to sign up , there’s no password reveal in it, I want you to improve on the sign up UI everything looks somehow long and make it easily scrollable 
+
+2. After I signed up , I entered immediately, I got a verification code and link to click , the only thing I saw on my homepage was resend email , no place to click to enter the code for it to work 
+3. Also when I click verify link it didn’t work it said page not found did you first to add the router 
+4. ⁠also after verification will the error remove and I’ll have complete access to it? 
+
+
+When I click on a product , the side where add to cart isnt supposed to be there or even be like that and it’s too long, it’s not showing km away or exact location except from the location set by the user it’s not available on the card 
+Also I want you to add more features like delivery fee, including from her side to the person location which she would set and set price too when making product 
+
+https://eksu-digital-marketplace.onrender.com/products/68416755-e930-4478-a0a0-46a792691537
+
+In the plug when I click on the + button, it takes me to post looks like Twitter but not exactly the same, I can’t see media adding there also a good media placement too 
+
+https://eksu-digital-marketplace.onrender.com/the-plug
+
+Also stories doesn’t have views 
+
+
+When I click on my profile in the top right corner beside notifications 
+
+I saw logout dark mode etc 
+Please remove that dark mode navigation, add it to the top navigation and after adding it change it to how the sign up page own looks like I don’t use just only dark mode and light mode again 
+
+
+https://eksu-digital-marketplace.onrender.com
+
+Also that same side when I click on account it shows settings notifications etc, the way those things are placed and again not able to open and close same as others too 
+
+Also when I click on social and click on confessions, I saw a confession but I’m unable to see any comments even tho the icon is present because write up isn’t there
+https://eksu-digital-marketplace.onrender.com/confessions
+Also when  I click on secret links 
+Link was created but when 100 people post an anonymous for instance, I’m unable to scroll down perfectly, also I want an auto refresh 
+
+Also when I click on this as someone who doesn’t have an account there 
+
+Want to create your own secret message link?
+
+Create your link on EKSU Marketplace
+
+It takes me to sign up and I want guest or people who don’t have an account to have access to this and share links too
+
+ https://eksu-digital-marketplace.onrender.com/secret/ejgFzwP6zd
+
+After you’re done you can try to solve bugs in other files and pages
