@@ -1,0 +1,268 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: we are going to use MAX_API for inlomax as variables .
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+For creation that 50k,200k etc 
+Let it be range of 1k - 10k 
+
+1k , 5k, 10k or reduce the price but starting from 1k
+
+Let there be templates too and would this work 
+
+INSTRUCTIONS FOR YOUR DEVELOPER
+Based on my research, here's what you should tell your developer:
+
+1. PRICING STRATEGY - COMPARISON TABLE
+Tell your developer:
+
+"Compare Inlomax API prices with Data4metopup prices and set our prices to be cheaper than Data4metopup while making 10-15 naira profit per transaction. Use this pricing formula:"
+Plan	Inlomax API	Data4metopup	Your Price (Suggested)	Your Profit
+MTN 500MB (7 days)	₦380	₦400	₦395	₦15
+MTN 1GB (7 days)	₦460	₦550	₦480	₦20
+MTN 2GB (30 days)	₦1030	₦1100	₦1050	₦20
+MTN 3GB (30 days)	₦1530	₦1600	₦1550	₦20
+MTN 5GB (30 days)	₦1950	₦2500	₦1980	₦30
+Glo 1GB (30 days)	₦410	₦390 (7d)	₦435	₦25
+Glo 3GB (30 days)	₦1230	-	₦1260	₦30
+Airtel 2GB (30 days)	₦1470	₦1500	₦1490	₦20
+Airtel 10GB (30 days)	₦3920	₦4000	₦3950	₦30
+2. FEATURES TO ADD FROM INLOMAX
+Tell your developer to add these services:
+
+CORE VTU SERVICES (From Inlomax):
+1. Data Bundles - All networks (MTN, Airtel, Glo, 9mobile)
+   - Types: SME/SHARE, DIRECT, CG (Corporate Gifting), SOCIAL, AWOOF
+   
+2. Airtime Top-up - All networks with discounts:
+   - MTN: 2.5% API discount
+   - Airtel: 2.5% API discount  
+   - Glo: 4% API discount
+   - 9mobile: 4% API discount
+3. Cable TV Subscriptions:
+   - DStv (Padi, Yanga, Confam, Compact, Premium)
+   - GOtv (Smallie, Jinja, Jolli, Max, Supa)
+   - Startimes (Basic, Smart, Classic, Super)
+4. Electricity Bills:
+   - All DISCOs: Ikeja, Eko, Ibadan, Kaduna, Kano, Jos, Enugu, Abuja, Port Harcourt, Benin, Yola, Aba Power
+5. Exam Pins:
+   - WAEC: ₦3370 API → Sell at ₦3400
+   - NECO: ₦1280 API → Sell at ₦1310
+   - NABTEB: ₦890 API → Sell at ₦920
+3. DISCOUNT/PRICE SLASH FEATURE
+Tell your developer:
+
+"Add a price slash display on all products showing the 'original price' crossed out with the discounted price beside it. Like this:"
+Design:
+┌─────────────────────────────────────┐
+│  MTN 1GB Data (7 Days)              │
+│  ̶₦̶5̶5̶0̶  →  ₦480                     │
+│  You Save: ₦70 (13% OFF)            │
+│  [Buy Now]                          │
+└─────────────────────────────────────┘
+Implementation instructions:
+
+Store both "market_price" (what networks charge) and "our_price" in database
+Display the savings amount and percentage
+Use red color for crossed-out price, green for savings
+4. RESELLER SUB-SITE SYSTEM
+Tell your developer:
+
+"Create a reseller program where verified users can create their own branded sub-sites. Here's the structure:"
+RESELLER TIER SYSTEM:
+┌──────────────────────────────────────────────────────────┐
+│ TIER 1 - STARTER (₦5,000 one-time fee)                   │
+│ - Gets API prices + ₦5 per transaction                   │
+│ - Basic sub-site with our branding                       │
+│ - Can set own prices (min: their cost + ₦10)            │
+│ - Limit: ₦50,000 daily transactions                     │
+├──────────────────────────────────────────────────────────┤
+│ TIER 2 - BUSINESS (₦15,000 one-time fee)                │
+│ - Gets API prices + ₦3 per transaction                   │
+│ - Custom subdomain: [theirname].yoursite.com            │
+│ - Can upload their logo                                  │
+│ - Limit: ₦200,000 daily transactions                    │
+├──────────────────────────────────────────────────────────┤
+│ TIER 3 - ENTERPRISE (₦50,000 one-time fee)              │
+│ - Gets pure API prices                                   │
+│ - Full white-label (no your branding)                    │
+│ - Custom domain support                                  │
+│ - Unlimited transactions                                 │
+│ - Priority support                                       │
+└──────────────────────────────────────────────────────────┘
+Sub-site creation flow:
+
+Reseller applies with business details
+Admin verifies (NIN/BVN check)
+Reseller chooses tier and pays
+System creates subdomain automatically
+Reseller customizes: logo, site name, colors, contact info
+Reseller sets their prices (above their cost)
+Orders flow through your main API
+Reseller sees their own dashboard with their customers
+Database structure needed:
+
+reseller_sites table:
+- id, user_id, subdomain, site_name, logo_url
+- tier (starter/business/enterprise)
+- custom_colors (JSON), contact_email, contact_phone
+- is_verified, is_active, created_at
+reseller_pricing table:
+- id, reseller_id, service_type, service_id
+- cost_price, selling_price, profit_margin
+reseller_transactions table:
+- id, reseller_id, customer_phone, service_type
+- amount, profit, status, created_at
+5. NEW USER WELCOME ONBOARDING
+Tell your developer:
+
+"Add a welcome flow for first-time visitors with 3-4 slides explaining the site, then show the main dashboard."
+WELCOME FLOW DESIGN:
+┌─────────────────────────────────────┐
+│  [Slide 1 of 4]                     │
+│                                     │
+│  🎉 Welcome to [Your Site Name]!   │
+│                                     │
+│  Nigeria's cheapest platform for:   │
+│  • Data bundles (all networks)      │
+│  • Airtime top-up                   │
+│  • Cable TV subscriptions           │
+│  • Electricity bills                │
+│                                     │
+│           [Next →]                  │
+└─────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│  [Slide 2 of 4]                     │
+│                                     │
+│  💰 Save Money Every Time           │
+│                                     │
+│  • Up to 15% cheaper than networks  │
+│  • Instant delivery                 │
+│  • 24/7 automated service           │
+│                                     │
+│       [← Back]  [Next →]            │
+└─────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│  [Slide 3 of 4]                     │
+│                                     │
+│  🤝 Become a Reseller               │
+│                                     │
+│  • Create your own VTU website      │
+│  • Set your prices, keep profits    │
+│  • Start with just ₦5,000           │
+│                                     │
+│       [← Back]  [Next →]            │
+└─────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│  [Slide 4 of 4]                     │
+│                                     │
+│  ✅ Ready to Start?                 │
+│                                     │
+│  [Create Free Account]              │
+│  [Browse as Guest]                  │
+│                                     │
+│       [← Back]  [Done]              │
+└─────────────────────────────────────┘
+Storage: Use localStorage to track hasSeenWelcome: true so it only shows once.
+
+6. INLOMAX API INTEGRATION
+Tell your developer:
+
+"Integrate with Inlomax API using these environment variables and endpoints:"
+ENVIRONMENT VARIABLES:
+INLOMAX_API_KEY=your_api_key_here
+INLOMAX_API_SECRET=your_secret_here
+INLOMAX_BASE_URL=https://inlomax.com/api
+API ENDPOINTS:
+- GET /data-plans - Fetch all data plans
+- POST /purchase-data - Buy data
+- POST /purchase-airtime - Buy airtime
+- POST /cable-subscription - Pay cable TV
+- POST /electricity - Pay electricity
+- GET /transaction-status/:id - Check status
+- GET /wallet-balance - Check balance
+7. DATA COMPARISON/ROI CALCULATOR
+Tell your developer:
+
+"Add a comparison tool so users can see how much they save compared to buying directly from networks:"
+SAVINGS CALCULATOR:
+┌─────────────────────────────────────────────────┐
+│  📊 See Your Savings                            │
+│                                                 │
+│  Network Direct Price:  ₦500                   │
+│  Our Price:             ₦400                   │
+│  ─────────────────────────────────             │
+│  You Save:              ₦100 (20%)             │
+│                                                 │
+│  If you buy 10 times monthly:                   │
+│  Monthly Savings: ₦1,000                        │
+│  Yearly Savings:  ₦12,000                       │
+└─────────────────────────────────────────────────┘
+8. SEARCH FEATURE
+Tell your developer:
+
+"Add a powerful search that filters by network, data size, validity, and price range:"
+SEARCH FEATURES:
+- Quick search bar at top
+- Filter by: Network (MTN, Glo, Airtel, 9mobile)
+- Filter by: Data size (500MB, 1GB, 2GB, 5GB, 10GB+)
+- Filter by: Validity (Daily, Weekly, Monthly)
+- Filter by: Price range (slider)
+- Filter by: Type (SME, Direct, CG, Social)
+- Sort by: Price (low to high), Data size, Popularity
+9. ADDITIONAL COMPETITIVE FEATURES
+Tell your developer to also add:
+
+1. REFERRAL SYSTEM:
+   - Refer a friend → Both get ₦50 bonus
+   - Referral link tracking
+   - Leaderboard for top referrers
+2. CASHBACK/REWARDS:
+   - Every ₦1,000 spent = 10 points
+   - 1000 points = ₦100 wallet credit
+3. BENEFICIARY SAVING:
+   - Save phone numbers for quick recharge
+   - Name beneficiaries (Mom, Dad, etc.)
+4. SCHEDULED/AUTO-RECHARGE:
+   - Set recurring data purchases
+   - "Recharge every Monday at 8am"
+5. BULK PURCHASE:
+   - Upload CSV of phone numbers
+   - Send data/airtime to multiple numbers at once
+6. TRANSACTION HISTORY:
+   - Detailed history with filters
+   - Download as PDF/Excel
+7. LIVE CHAT SUPPORT:
+   - WhatsApp integration
+   - In-app chat
+8. NOTIFICATIONS:
+   - SMS/Email transaction confirmations
+   - Low wallet balance alerts
+   - Price drop alerts
+SUMMARY - COPY THIS TO YOUR DEVELOPER
+Project: VTU Platform with Inlomax Integration
+
+Core Requirements:
+
+Switch API provider to Inlomax (get API key from inlomax.com)
+Price products cheaper than data4metopup.com with 10-15 naira profit margin
+Show price slash (crossed-out original price + discounted price + savings)
+Add all services: Data, Airtime, Cable TV, Electricity, Exam Pins
+Create reseller sub-site system with 3 tiers and subdomain support
+Add welcome onboarding slides for new users (store in localStorage)
+Add comparison tool showing savings vs network prices
+Implement powerful search with filters for network, size, validity, price
+Add referral system, cashback rewards, scheduled purchases, bulk buying
+Technical Notes:
+
+Use Inlomax API environment variables for integration
+Create reseller_sites, reseller_pricing, reseller_transactions tables
+Implement subdomain routing for reseller sites
+Use webhooks for transaction status updates
