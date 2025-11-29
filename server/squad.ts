@@ -14,6 +14,15 @@
 
 import crypto from 'crypto';
 
+// Debug: Log Squad configuration status at module load
+const debugSquadConfig = () => {
+  const hasSecretKey = !!process.env.SQUAD_SECRET_KEY;
+  const hasPublicKey = !!process.env.SQUAD_PUBLIC_KEY;
+  const secretKeyPrefix = process.env.SQUAD_SECRET_KEY?.substring(0, 15) || 'NOT_SET';
+  console.log(`[Squad] Configuration loaded: hasSecretKey=${hasSecretKey}, hasPublicKey=${hasPublicKey}, keyPrefix=${secretKeyPrefix}...`);
+};
+debugSquadConfig();
+
 // Squad API Configuration
 const SQUAD_CONFIG = {
   // Production URL (api-d.squadco.com) vs Sandbox (sandbox-api-d.squadco.com)
@@ -49,6 +58,7 @@ export class SquadApiError extends Error {
   public readonly statusCode: number;
   public readonly rawError: any;
   public readonly userMessage: string;
+  public readonly isRetryable: boolean;
 
   constructor(
     message: string,
@@ -63,6 +73,17 @@ export class SquadApiError extends Error {
     this.statusCode = statusCode;
     this.rawError = rawError;
     this.userMessage = userMessage || this.getDefaultUserMessage(type);
+    this.isRetryable = this.checkIfRetryable(type);
+  }
+
+  private checkIfRetryable(type: SquadErrorType): boolean {
+    // Retryable errors are network issues or temporary server problems
+    return [
+      SquadErrorType.NETWORK_ERROR,
+      SquadErrorType.TIMEOUT,
+      SquadErrorType.SERVER_ERROR,
+      SquadErrorType.RATE_LIMITED,
+    ].includes(type);
   }
 
   private getDefaultUserMessage(type: SquadErrorType): string {
@@ -73,6 +94,8 @@ export class SquadApiError extends Error {
         return 'Payment request timed out. Please try again.';
       case SquadErrorType.AUTHENTICATION_ERROR:
         return 'Payment service configuration error. Please contact support.';
+      case SquadErrorType.INVALID_CREDENTIALS:
+        return 'Payment gateway not properly configured. The merchant account may need activation. Please contact support.';
       case SquadErrorType.VALIDATION_ERROR:
         return 'Invalid payment details. Please check and try again.';
       case SquadErrorType.INSUFFICIENT_FUNDS:
@@ -260,10 +283,20 @@ function categorizeError(status: number, data: any): SquadErrorType {
   
   // Authentication errors
   if (status === 401) return SquadErrorType.INVALID_CREDENTIALS;
-  if (status === 403) return SquadErrorType.AUTHENTICATION_ERROR;
+  if (status === 403) {
+    // Check for specific merchant eligibility errors
+    if (message.includes('not eligible') || message.includes('merchant')) {
+      return SquadErrorType.INVALID_CREDENTIALS;
+    }
+    return SquadErrorType.AUTHENTICATION_ERROR;
+  }
   
   // Invalid request errors (malformed requests, missing fields)
   if (status === 400) {
+    // Check for merchant eligibility errors that come as 400
+    if (message.includes('not eligible') || message.includes('merchant')) {
+      return SquadErrorType.INVALID_CREDENTIALS;
+    }
     if (message.includes('invalid') || message.includes('missing') || message.includes('required')) {
       return SquadErrorType.INVALID_REQUEST;
     }

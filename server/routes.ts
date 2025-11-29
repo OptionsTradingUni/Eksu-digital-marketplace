@@ -1144,9 +1144,46 @@ Happy trading!`;
 
   // ==================== SQUAD PAYMENT ROUTES ====================
 
-  // Check if Squad is configured
+  // Check if Squad is configured - includes test card info for sandbox mode
   app.get('/api/squad/status', (req, res) => {
-    res.json({ configured: isSquadConfigured() });
+    const status = getSquadConfigStatus();
+    
+    // Squad sandbox test cards
+    const testCards = status.mode === 'sandbox' ? {
+      success: {
+        cardNumber: '5200000000000007',
+        expiryDate: '12/25',
+        cvv: '123',
+        pin: '1234',
+        otp: '123456',
+        description: 'Successful transaction'
+      },
+      declined: {
+        cardNumber: '5200000000000015',
+        expiryDate: '12/25',
+        cvv: '123',
+        pin: '1234',
+        otp: '123456',
+        description: 'Declined transaction'
+      },
+      insufficientFunds: {
+        cardNumber: '5200000000000023',
+        expiryDate: '12/25',
+        cvv: '123',
+        pin: '1234',
+        otp: '123456',
+        description: 'Insufficient funds'
+      }
+    } : null;
+    
+    res.json({ 
+      configured: status.configured,
+      mode: status.mode,
+      testCards,
+      message: status.mode === 'sandbox' 
+        ? 'Sandbox mode: Use test cards above for testing. For bank transfer, payments complete instantly.'
+        : status.configured ? 'Live mode: Real transactions enabled' : 'Payment not configured'
+    });
   });
 
   // Admin: Get detailed Squad payment configuration status

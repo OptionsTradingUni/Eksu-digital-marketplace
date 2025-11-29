@@ -9,11 +9,32 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle, XCircle, Wallet as WalletIcon, Loader2, AlertCircle } from "lucide-react";
+import { Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle, XCircle, Wallet as WalletIcon, Loader2, AlertCircle, CreditCard, ChevronDown, Copy, Check } from "lucide-react";
 import { format } from "date-fns";
 import type { Wallet, Transaction } from "@shared/schema";
+
+interface TestCard {
+  cardNumber: string;
+  expiryDate: string;
+  cvv: string;
+  pin: string;
+  otp: string;
+  description: string;
+}
+
+interface SquadStatus {
+  configured: boolean;
+  mode: 'sandbox' | 'live' | 'unknown';
+  testCards?: {
+    success: TestCard;
+    declined: TestCard;
+    insufficientFunds: TestCard;
+  } | null;
+  message: string;
+}
 
 interface Bank {
   name: string;
@@ -47,6 +68,24 @@ export default function WalletPage() {
   const { data: banks, isLoading: banksLoading } = useQuery<Bank[]>({
     queryKey: ["/api/squad/banks"],
   });
+
+  // Query Squad status to get test cards for sandbox mode
+  const { data: squadStatus } = useQuery<SquadStatus>({
+    queryKey: ["/api/squad/status"],
+  });
+
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [testCardOpen, setTestCardOpen] = useState(false);
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      toast({ title: "Failed to copy", variant: "destructive" });
+    }
+  };
 
   const verifyAccountMutation = useMutation({
     mutationFn: async ({ accountNumber, bankCode }: { accountNumber: string; bankCode: string }) => {
@@ -335,6 +374,123 @@ export default function WalletPage() {
               >
                 {depositMutation.isPending ? "Processing..." : "Deposit Now"}
               </Button>
+
+              {/* Test Card Information for Sandbox Mode */}
+              {squadStatus?.mode === 'sandbox' && squadStatus.testCards && (
+                <div className="mt-6">
+                  <Collapsible open={testCardOpen} onOpenChange={setTestCardOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between" data-testid="button-test-cards-toggle">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4" />
+                          <span>Sandbox Mode - Test Cards Available</span>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${testCardOpen ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-4 space-y-4">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          <AlertCircle className="h-4 w-4 inline mr-1" />
+                          This is sandbox mode. Use these test cards to simulate payments.
+                        </p>
+                      </div>
+                      
+                      {/* Success Test Card */}
+                      <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <CardTitle className="text-sm">Successful Transaction</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Card Number</Label>
+                              <div className="flex items-center gap-1">
+                                <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.success.cardNumber}</code>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(squadStatus.testCards!.success.cardNumber, 'card-success')}
+                                  data-testid="button-copy-card-success"
+                                >
+                                  {copiedField === 'card-success' ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Expiry</Label>
+                              <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.success.expiryDate}</code>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">CVV</Label>
+                              <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.success.cvv}</code>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">PIN</Label>
+                              <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.success.pin}</code>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-xs text-muted-foreground">OTP (for verification)</Label>
+                              <div className="flex items-center gap-1">
+                                <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.success.otp}</code>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(squadStatus.testCards!.success.otp, 'otp-success')}
+                                  data-testid="button-copy-otp-success"
+                                >
+                                  {copiedField === 'otp-success' ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Declined Test Card */}
+                      <Card className="border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-red-500" />
+                            <CardTitle className="text-sm">Declined Transaction</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Card Number</Label>
+                              <div className="flex items-center gap-1">
+                                <code className="bg-background px-2 py-0.5 rounded text-xs">{squadStatus.testCards.declined.cardNumber}</code>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(squadStatus.testCards!.declined.cardNumber, 'card-declined')}
+                                  data-testid="button-copy-card-declined"
+                                >
+                                  {copiedField === 'card-declined' ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Use same expiry/CVV/PIN/OTP</Label>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <p className="text-xs text-muted-foreground">
+                        For bank transfers in sandbox mode, payments are processed instantly without real money transfer.
+                      </p>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
