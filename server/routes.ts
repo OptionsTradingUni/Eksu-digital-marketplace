@@ -60,7 +60,7 @@ import {
   type Order,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
-import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
+import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, getTestCardInfo, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
 import { 
   purchaseData, purchaseAirtime, isInlomaxConfigured, isValidNigerianPhone, 
@@ -428,6 +428,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? "Cloudinary is configured for persistent image storage" 
         : "Using disk storage (images may not persist after restart)"
     });
+  });
+
+  // Comprehensive API status endpoint for all services
+  app.get("/api/status", (req, res) => {
+    const squadStatus = getSquadConfigStatus();
+    const inlomaxConfigured = isInlomaxConfigured();
+    const cloudinaryReady = isCloudinaryConfigured();
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      services: {
+        squad: {
+          configured: squadStatus.configured,
+          mode: squadStatus.mode, // 'sandbox', 'live', or 'unknown'
+          features: {
+            payments: squadStatus.configured,
+            transfers: squadStatus.configured ? 'requires_activation' : false,
+            bankLookup: squadStatus.configured
+          },
+          note: squadStatus.mode === 'sandbox' ? 'Using sandbox/test environment' : undefined
+        },
+        vtu: {
+          configured: inlomaxConfigured,
+          provider: 'inlomax',
+          features: {
+            data: inlomaxConfigured,
+            airtime: inlomaxConfigured,
+            cableTV: inlomaxConfigured,
+            electricity: inlomaxConfigured,
+            examPins: inlomaxConfigured
+          },
+          note: inlomaxConfigured ? undefined : 'API key not configured'
+        },
+        storage: {
+          configured: cloudinaryReady,
+          provider: cloudinaryReady ? 'cloudinary' : 'disk',
+          persistent: cloudinaryReady
+        },
+        email: {
+          configured: !!process.env.RESEND_API_KEY,
+          provider: 'resend'
+        },
+        database: {
+          configured: !!process.env.DATABASE_URL,
+          provider: 'postgresql'
+        }
+      },
+      wallet: {
+        minWithdrawal: 500,
+        commissionRate: getCommissionRate(),
+        securityDeposit: getSecurityDepositAmount()
+      }
+    });
+  });
+
+  // Health check endpoint (simple)
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString() 
+    });
+  });
+
+  // Squad test cards endpoint (for sandbox testing)
+  app.get("/api/squad/test-cards", (req, res) => {
+    const testInfo = getTestCardInfo();
+    
+    if (!testInfo.isSandbox) {
+      return res.json({
+        isSandbox: false,
+        message: "Test cards are only available in sandbox mode. Current mode is production.",
+        testCards: [],
+        instructions: []
+      });
+    }
+    
+    res.json(testInfo);
   });
 
   // ==================== NEW AUTH ROUTES (Passport.js Local) ====================
@@ -1623,16 +1701,47 @@ Happy trading!`;
           reference,
           status: transferResult.status,
         });
-      } catch (transferError) {
-        // Refund wallet if transfer fails
+      } catch (transferError: any) {
+        // Check for merchant eligibility errors and handle gracefully
+        const errorMessage = transferError?.message?.toLowerCase() || '';
+        const isSquadError = transferError?.name === 'SquadApiError';
+        
+        const isMerchantEligibilityError = isSquadError && (
+          errorMessage.includes('not eligible') || 
+          errorMessage.includes('merchant') ||
+          transferError?.type === 'INVALID_CREDENTIALS'
+        );
+        
+        if (isMerchantEligibilityError) {
+          console.log('[Withdrawal] Merchant eligibility issue detected, marking for manual processing');
+          
+          // Keep the wallet deducted - this is a REAL withdrawal request
+          // Update the transfer to require manual processing (NOT failed)
+          await storage.updateSquadTransferStatus(reference, 'manual_review', 'Merchant account requires transfer activation - manual payout required');
+          
+          // Return success - the withdrawal IS accepted, just needs manual processing
+          return res.json({ 
+            message: "Withdrawal request accepted. Due to a temporary system issue, your withdrawal will be processed manually within 24 hours. You will receive a notification when complete.",
+            reference,
+            status: 'manual_review',
+            amount: withdrawAmount,
+            bankDetails: { bankName, accountNumber, accountName },
+            manualProcessing: true
+          });
+        }
+        
+        // For other errors, refund and fail
         await storage.updateWalletBalance(userId, withdrawAmount.toString(), 'add');
         await storage.updateSquadTransferStatus(reference, 'failed', String(transferError));
         
         throw transferError;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing Squad withdrawal:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to process withdrawal" });
+      
+      // Provide user-friendly error messages
+      const userMessage = error?.userMessage || error?.message || "Failed to process withdrawal";
+      res.status(500).json({ message: userMessage });
     }
   });
 

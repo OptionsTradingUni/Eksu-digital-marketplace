@@ -606,6 +606,62 @@ export function getSquadConfigStatus(): {
 }
 
 /**
+ * Get Squad test card information for sandbox testing
+ * DISCLAIMER: These are typical Nigerian payment gateway test patterns.
+ * For official Squad test cards, consult: https://docs.squadco.com
+ */
+export function getTestCardInfo(): {
+  isSandbox: boolean;
+  disclaimer: string;
+  testCards: Array<{
+    type: string;
+    number: string;
+    cvv: string;
+    expiry: string;
+    pin?: string;
+    otp?: string;
+    description: string;
+  }>;
+  instructions: string[];
+  officialDocs: string;
+} {
+  const status = getSquadConfigStatus();
+  
+  return {
+    isSandbox: status.mode === 'sandbox',
+    disclaimer: 'These test cards are based on common Nigerian payment gateway patterns. For official Squad test credentials, please consult Squad documentation or your sandbox dashboard.',
+    officialDocs: 'https://docs.squadco.com',
+    testCards: [
+      {
+        type: 'mastercard_success',
+        number: '5078 5078 5078 5078 12',
+        cvv: '081',
+        expiry: '03/30',
+        pin: '1234',
+        otp: '12345',
+        description: 'Typical success pattern (verify with Squad docs)'
+      },
+      {
+        type: 'visa_success',
+        number: '4084 0840 8408 4081',
+        cvv: '408',
+        expiry: '03/30',
+        pin: '1234',
+        otp: '12345',
+        description: 'Typical Visa pattern (verify with Squad docs)'
+      }
+    ],
+    instructions: [
+      'Use sandbox/test keys from Squad dashboard (sandbox.squadco.com)',
+      'Test cards only work in sandbox mode',
+      'Check your Squad sandbox dashboard for official test credentials',
+      'For production, use real card details',
+      'Contact Squad support (help@squadco.com) for merchant transfer activation'
+    ]
+  };
+}
+
+/**
  * Calculate Squad payment fee estimate
  * Squad charges approximately 1% capped at ₦2,000
  */
@@ -628,6 +684,7 @@ export const squad = {
   verifyWebhookSignature,
   isConfigured: isSquadConfigured,
   getConfigStatus: getSquadConfigStatus,
+  getTestCardInfo,
   generatePaymentReference,
   generateTransferReference,
   calculateFee: calculateSquadFee,
