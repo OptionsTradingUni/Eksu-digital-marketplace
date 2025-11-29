@@ -1,0 +1,525 @@
+COMPLETE CODEBASE RESTRUCTURING - MAXIMUM MODULARITY
+GOAL
+Break EVERY large file into the smallest logical pieces possible. Each file should do ONE thing. Create as many folders as needed. NO functionality changes - just reorganize. Fix all imports so app works perfectly.
+
+1. ROUTES - Split server/routes.ts (13,451 lines) into server/routes/:
+
+   server/routes/
+   ├── index.ts                    (combines all, exports router)
+   ├── auth/
+   │   ├── index.ts
+   │   ├── login.route.ts
+   │   ├── register.route.ts
+   │   ├── logout.route.ts
+   │   ├── session.route.ts
+   │   ├── email-verification.route.ts
+   │   └── README.md
+   ├── products/
+   │   ├── index.ts
+   │   ├── create.route.ts
+   │   ├── read.route.ts
+   │   ├── update.route.ts
+   │   ├── delete.route.ts
+   │   ├── search.route.ts
+   │   ├── categories.route.ts
+   │   ├── reviews.route.ts
+   │   └── README.md
+   ├── vtu/
+   │   ├── index.ts
+   │   ├── plans.route.ts
+   │   ├── purchase-data.route.ts
+   │   ├── purchase-airtime.route.ts
+   │   ├── transactions.route.ts
+   │   ├── schedules.route.ts
+   │   ├── beneficiaries.route.ts
+   │   ├── gift-data.route.ts
+   │   ├── bulk-purchase.route.ts
+   │   └── README.md
+   ├── reseller/
+   │   ├── index.ts
+   │   ├── setup.route.ts
+   │   ├── pricing.route.ts
+   │   ├── customers.route.ts
+   │   ├── transactions.route.ts
+   │   ├── stats.route.ts
+   │   ├── api-keys.route.ts
+   │   └── README.md
+   ├── wallet/
+   │   ├── index.ts
+   │   ├── balance.route.ts
+   │   ├── deposit.route.ts
+   │   ├── withdraw.route.ts
+   │   ├── transfer.route.ts
+   │   ├── transactions.route.ts
+   │   ├── escrow.route.ts
+   │   └── README.md
+   ├── messages/
+   │   ├── index.ts
+   │   ├── conversations.route.ts
+   │   ├── send.route.ts
+   │   ├── read.route.ts
+   │   ├── unread-count.route.ts
+   │   └── README.md
+   ├── social/
+   │   ├── index.ts
+   │   ├── posts.route.ts
+   │   ├── comments.route.ts
+   │   ├── likes.route.ts
+   │   ├── confessions.route.ts
+   │   ├── stories.route.ts
+   │   ├── communities.route.ts
+   │   ├── bookmarks.route.ts
+   │   └── README.md
+   ├── admin/
+   │   ├── index.ts
+   │   ├── dashboard.route.ts
+   │   ├── users.route.ts
+   │   ├── products.route.ts
+   │   ├── reports.route.ts
+   │   ├── announcements.route.ts
+   │   ├── settings.route.ts
+   │   └── README.md
+   ├── misc/
+   │   ├── index.ts
+   │   ├── notifications.route.ts
+   │   ├── referrals.route.ts
+   │   ├── games.route.ts
+   │   ├── support.route.ts
+   │   ├── hostels.route.ts
+   │   ├── study-materials.route.ts
+   │   ├── secret-messages.route.ts
+   │   └── README.md
+   └── README.md
+
+
+2. STORAGE - Split server/storage.ts (7,048 lines) into server/storage/:
+
+   server/storage/
+   ├── index.ts                    (exports IStorage + DatabaseStorage)
+   ├── interface.ts                (IStorage interface only)
+   ├── auth/
+   │   ├── index.ts
+   │   ├── users.storage.ts
+   │   ├── sessions.storage.ts
+   │   └── README.md
+   ├── products/
+   │   ├── index.ts
+   │   ├── products.storage.ts
+   │   ├── categories.storage.ts
+   │   ├── reviews.storage.ts
+   │   ├── wishlist.storage.ts
+   │   └── README.md
+   ├── vtu/
+   │   ├── index.ts
+   │   ├── transactions.storage.ts
+   │   ├── plans.storage.ts
+   │   ├── schedules.storage.ts
+   │   ├── beneficiaries.storage.ts
+   │   ├── gift-data.storage.ts
+   │   └── README.md
+   ├── reseller/
+   │   ├── index.ts
+   │   ├── sites.storage.ts
+   │   ├── pricing.storage.ts
+   │   ├── customers.storage.ts
+   │   ├── transactions.storage.ts
+   │   └── README.md
+   ├── wallet/
+   │   ├── index.ts
+   │   ├── wallets.storage.ts
+   │   ├── transactions.storage.ts
+   │   ├── escrow.storage.ts
+   │   └── README.md
+   ├── messages/
+   │   ├── index.ts
+   │   ├── conversations.storage.ts
+   │   ├── messages.storage.ts
+   │   └── README.md
+   ├── social/
+   │   ├── index.ts
+   │   ├── posts.storage.ts
+   │   ├── comments.storage.ts
+   │   ├── confessions.storage.ts
+   │   ├── stories.storage.ts
+   │   ├── communities.storage.ts
+   │   └── README.md
+   ├── admin/
+   │   ├── index.ts
+   │   ├── reports.storage.ts
+   │   ├── announcements.storage.ts
+   │   └── README.md
+   └── README.md
+
+
+3. SERVICES - Create server/services/:
+
+   server/services/
+   ├── index.ts
+   ├── vtu/
+   │   ├── index.ts
+   │   ├── purchase.service.ts
+   │   ├── validation.service.ts
+   │   └── README.md
+   ├── payment/
+   │   ├── index.ts
+   │   ├── squad.service.ts
+   │   ├── webhook.service.ts
+   │   └── README.md
+   ├── email/
+   │   ├── index.ts
+   │   ├── send.service.ts
+   │   ├── templates.service.ts
+   │   └── README.md
+   ├── notification/
+   │   ├── index.ts
+   │   ├── push.service.ts
+   │   ├── inapp.service.ts
+   │   └── README.md
+   └── README.md
+
+
+4. INTEGRATIONS - Create server/integrations/:
+
+   server/integrations/
+   ├── index.ts
+   ├── inlomax/
+   │   ├── index.ts
+   │   ├── api.ts
+   │   ├── types.ts
+   │   └── README.md
+   ├── squad/
+   │   ├── index.ts
+   │   ├── api.ts
+   │   ├── types.ts
+   │   └── README.md
+   ├── cloudinary/
+   │   ├── index.ts
+   │   ├── upload.ts
+   │   └── README.md
+   └── README.md
+
+
+5. CONFIG - Create server/config/:
+
+   server/config/
+   ├── index.ts
+   ├── database.ts
+   ├── auth.ts
+   ├── session.ts
+   └── README.md
+
+6. SCHEMAS - Split shared/schema.ts (3,502 lines) into shared/schemas/:
+
+   shared/schemas/
+   ├── index.ts                    (barrel export everything)
+   ├── auth/
+   │   ├── index.ts
+   │   ├── users.schema.ts
+   │   ├── sessions.schema.ts
+   │   ├── email-verification.schema.ts
+   │   └── README.md
+   ├── products/
+   │   ├── index.ts
+   │   ├── products.schema.ts
+   │   ├── categories.schema.ts
+   │   ├── reviews.schema.ts
+   │   └── README.md
+   ├── vtu/
+   │   ├── index.ts
+   │   ├── transactions.schema.ts
+   │   ├── plans.schema.ts
+   │   ├── schedules.schema.ts
+   │   ├── beneficiaries.schema.ts
+   │   ├── gift-data.schema.ts
+   │   └── README.md
+   ├── reseller/
+   │   ├── index.ts
+   │   ├── sites.schema.ts
+   │   ├── pricing.schema.ts
+   │   ├── customers.schema.ts
+   │   ├── transactions.schema.ts
+   │   └── README.md
+   ├── wallet/
+   │   ├── index.ts
+   │   ├── wallets.schema.ts
+   │   ├── transactions.schema.ts
+   │   ├── escrow.schema.ts
+   │   └── README.md
+   ├── messages/
+   │   ├── index.ts
+   │   ├── conversations.schema.ts
+   │   ├── messages.schema.ts
+   │   └── README.md
+   ├── social/
+   │   ├── index.ts
+   │   ├── posts.schema.ts
+   │   ├── comments.schema.ts
+   │   ├── confessions.schema.ts
+   │   ├── stories.schema.ts
+   │   ├── communities.schema.ts
+   │   └── README.md
+   └── README.md
+
+7. UPDATE shared/schema.ts to just re-export:
+   export * from './schemas';
+
+8. VTU PAGE - Split vtu.tsx (2,677 lines) into client/src/pages/vtu/:
+
+   client/src/pages/vtu/
+   ├── index.tsx                   (main page wrapper)
+   ├── components/
+   │   ├── DataPurchaseForm.tsx
+   │   ├── AirtimePurchaseForm.tsx
+   │   ├── NetworkSelector.tsx
+   │   ├── PlanSelector.tsx
+   │   ├── PhoneInput.tsx
+   │   ├── ScheduleForm.tsx
+   │   ├── ScheduleList.tsx
+   │   ├── GiftDataForm.tsx
+   │   ├── GiftDataList.tsx
+   │   ├── BulkPurchaseForm.tsx
+   │   ├── BeneficiaryList.tsx
+   │   ├── BeneficiaryForm.tsx
+   │   ├── TransactionList.tsx
+   │   ├── TransactionFilters.tsx
+   │   ├── RewardsCard.tsx
+   │   └── README.md
+   ├── hooks/
+   │   ├── useVtuPlans.ts
+   │   ├── useVtuPurchase.ts
+   │   ├── useVtuSchedules.ts
+   │   ├── useVtuBeneficiaries.ts
+   │   ├── useVtuTransactions.ts
+   │   └── README.md
+   ├── tabs/
+   │   ├── DataTab.tsx
+   │   ├── AirtimeTab.tsx
+   │   ├── ScheduledTab.tsx
+   │   ├── GiftTab.tsx
+   │   ├── BulkTab.tsx
+   │   ├── BeneficiariesTab.tsx
+   │   ├── HistoryTab.tsx
+   │   └── README.md
+   └── README.md
+
+
+9. MESSAGES PAGE - Split messages.tsx (2,268 lines) into client/src/pages/messages/:
+
+   client/src/pages/messages/
+   ├── index.tsx
+   ├── components/
+   │   ├── ConversationList.tsx
+   │   ├── ConversationItem.tsx
+   │   ├── ChatHeader.tsx
+   │   ├── ChatWindow.tsx
+   │   ├── MessageBubble.tsx
+   │   ├── MessageInput.tsx
+   │   ├── ImagePreview.tsx
+   │   ├── TypingIndicator.tsx
+   │   ├── EmptyState.tsx
+   │   └── README.md
+   ├── hooks/
+   │   ├── useConversations.ts
+   │   ├── useMessages.ts
+   │   ├── useWebSocket.ts
+   │   └── README.md
+   └── README.md
+
+
+10. PROFILE PAGE - Split profile.tsx (1,860 lines) into client/src/pages/profile/:
+
+    client/src/pages/profile/
+    ├── index.tsx
+    ├── components/
+    │   ├── ProfileHeader.tsx
+    │   ├── ProfileStats.tsx
+    │   ├── ProfileAvatar.tsx
+    │   ├── EditProfileForm.tsx
+    │   ├── ListingsGrid.tsx
+    │   ├── ListingCard.tsx
+    │   ├── ReviewsList.tsx
+    │   ├── ReviewItem.tsx
+    │   ├── FollowButton.tsx
+    │   └── README.md
+    ├── tabs/
+    │   ├── ListingsTab.tsx
+    │   ├── ReviewsTab.tsx
+    │   ├── AboutTab.tsx
+    │   └── README.md
+    └── README.md
+
+
+11. ADMIN PAGE - Split admin.tsx (1,440 lines) into client/src/pages/admin/:
+
+    client/src/pages/admin/
+    ├── index.tsx
+    ├── components/
+    │   ├── StatCard.tsx
+    │   ├── RevenueChart.tsx
+    │   ├── UserTable.tsx
+    │   ├── ProductTable.tsx
+    │   ├── ReportCard.tsx
+    │   ├── AnnouncementForm.tsx
+    │   ├── AnnouncementList.tsx
+    │   └── README.md
+    ├── tabs/
+    │   ├── DashboardTab.tsx
+    │   ├── UsersTab.tsx
+    │   ├── ProductsTab.tsx
+    │   ├── ReportsTab.tsx
+    │   ├── AnnouncementsTab.tsx
+    │   ├── SettingsTab.tsx
+    │   └── README.md
+    └── README.md
+
+
+12. Repeat for ALL pages over 500 lines:
+    - games.tsx → client/src/pages/games/
+    - the-plug.tsx → client/src/pages/the-plug/
+    - reseller.tsx → client/src/pages/reseller/
+    - communities.tsx → client/src/pages/communities/
+    - hostels.tsx → client/src/pages/hostels/
+    - settings.tsx → client/src/pages/settings/
+    - support.tsx → client/src/pages/support/
+    - study-materials.tsx → client/src/pages/study-materials/
+    - stories.tsx → client/src/pages/stories/
+    - confessions.tsx → client/src/pages/confessions/
+
+13. REORGANIZE client/src/components/:
+
+    client/src/components/
+    ├── layout/
+    │   ├── index.ts
+    │   ├── Header/
+    │   │   ├── index.tsx
+    │   │   ├── Logo.tsx
+    │   │   ├── SearchBar.tsx
+    │   │   ├── NavMenu.tsx
+    │   │   ├── UserMenu.tsx
+    │   │   └── README.md
+    │   ├── BottomNav/
+    │   │   ├── index.tsx
+    │   │   ├── NavItem.tsx
+    │   │   ├── MoreMenu.tsx
+    │   │   └── README.md
+    │   ├── BackToTop.tsx
+    │   ├── OfflineIndicator.tsx
+    │   └── README.md
+    ├── features/
+    │   ├── index.ts
+    │   ├── ChatBot/
+    │   │   ├── index.tsx
+    │   │   ├── ChatWindow.tsx
+    │   │   ├── ChatInput.tsx
+    │   │   ├── ChatMessage.tsx
+    │   │   └── README.md
+    │   ├── Cart/
+    │   │   ├── index.tsx
+    │   │   ├── CartDrawer.tsx
+    │   │   ├── CartItem.tsx
+    │   │   └── README.md
+    │   ├── ProductCard.tsx
+    │   ├── SponsoredAdCard.tsx
+    │   ├── NotificationBell.tsx
+    │   ├── RewardsCenter.tsx
+    │   ├── LocationBadge.tsx
+    │   ├── VerificationBadge.tsx
+    │   └── README.md
+    ├── modals/
+    │   ├── index.ts
+    │   ├── Auth/
+    │   │   ├── index.tsx
+    │   │   ├── LoginForm.tsx
+    │   │   ├── RegisterForm.tsx
+    │   │   ├── ForgotPasswordForm.tsx
+    │   │   ├── OtpVerification.tsx
+    │   │   └── README.md
+    │   ├── SafetyShieldModal.tsx
+    │   ├── WelcomeOnboarding.tsx
+    │   └── README.md
+    ├── forms/
+    │   ├── index.ts
+    │   ├── PricingCalculator.tsx
+    │   ├── ApiTerminal.tsx
+    │   └── README.md
+    ├── shared/
+    │   ├── index.ts
+    │   ├── EmailVerificationBanner.tsx
+    │   ├── ErrorBoundary.tsx
+    │   ├── PullToRefresh.tsx
+    │   ├── PWAInstallPrompt.tsx
+    │   ├── ThemeToggle.tsx
+    │   └── README.md
+    ├── games/              (keep as-is, already organized)
+    ├── ui/                 (keep as-is, shadcn components)
+    └── README.md
+
+14. After ALL file moves, update EVERY import path:
+
+    Use find-and-replace across entire codebase:
+    
+    SERVER:
+    - "./routes" → "./routes" (index.ts handles)
+    - "./storage" → "./storage" (index.ts handles)
+    - "./inlomax" → "./integrations/inlomax"
+    - "./squad" → "./integrations/squad"
+    - "./auth" → "./config/auth"
+    - "./db" → "./config/database"
+    
+    CLIENT:
+    - "@/components/Header" → "@/components/layout/Header"
+    - "@/components/BottomNav" → "@/components/layout/BottomNav"
+    - "@/components/AuthModal" → "@/components/modals/Auth"
+    - "@/components/ChatBot" → "@/components/features/ChatBot"
+    - "@/components/ProductCard" → "@/components/features/ProductCard"
+    - "@/pages/vtu" → "@/pages/vtu" (index.tsx)
+    - "@/pages/messages" → "@/pages/messages"
+    - etc.
+
+    SHARED:
+    - "@shared/schema" → "@shared/schema" (re-export maintains compatibility)
+
+15. CREATE README.md in EVERY folder with format:
+
+    # README – [Folder Name]
+
+    ## What this folder does (1 sentence)
+
+    ## Files in here
+    - file1.ts → does X
+    - file2.ts → does Y
+
+    ## Known bugs / things to fix
+    - [ ] (leave empty if none)
+
+
+16. CREATE PROJECT_OVERVIEW.md at root:
+    - Project name and description
+    - Full folder structure tree
+    - Tech stack list
+    - How to run locally
+    - Environment variables
+    - API endpoints summary
+    - Database tables overview
+
+17. DELETE after splitting:
+    - Original server/routes.ts
+    - Original server/storage.ts
+    - Original shared/schema.ts
+    - Any unused files found
+    - Dead imports
+
+18. TEST everything:
+    - npm run dev
+    - Check console for errors
+    - Test: login, home, vtu purchase, messages, admin
+    - Verify all API routes work
+    - Fix any broken imports
+
+- NO functionality changes - ONLY restructuring
+- Each file = ONE responsibility (100-400 lines max)
+- Use index.ts barrel exports in every folder
+- Keep backward compatibility via re-exports
+- Test after EACH major phase
+- Fix ALL imports before testing
+- Create README.md in EVERY folder
