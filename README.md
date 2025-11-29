@@ -2,6 +2,9 @@
 
 A comprehensive peer-to-peer marketplace built specifically for EKSU students to buy and sell items, find hostels, connect with services, and more.
 
+![Files](https://img.shields.io/badge/dynamic/json?color=green&label=Files&query=%24.total_files&url=https%3A%2F%2Fapi.countapi.xyz%2Fhit%2Feksuproject-files%2Fcount)
+![Lines of Code](https://img.shields.io/badge/dynamic/json?color=blue&label=LOC&query=%24.total_loc&url=https%3A%2F%2Fapi.countapi.xyz%2Fhit%2Feksuproject-loc%2Fcount)
+
 ## Features
 
 - **Student Verification**: NIN-based identity verification with selfie matching
