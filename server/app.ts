@@ -9,7 +9,6 @@ import express, {
 
 import { registerRoutes } from "./routes";
 import { initializeDatabaseSequences } from "./db";
-import { isSMEDataConfigured } from "./smedata";
 import { sendErrorReportToAdmin } from "./email-service";
 
 export function log(message: string, source = "express") {

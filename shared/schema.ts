@@ -1153,7 +1153,7 @@ export const createScheduledPostSchema = insertScheduledPostSchema.extend({
 export const createBoostSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
   type: z.enum(['boost', 'featured']),
-  duration: z.coerce.number().min(1).max(168), // Max 1 week
+  duration: z.coerce.number().min(1).max(720), // Max 30 days (720 hours)
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount format. Use numbers only (e.g., 500.00)"),
 });
 

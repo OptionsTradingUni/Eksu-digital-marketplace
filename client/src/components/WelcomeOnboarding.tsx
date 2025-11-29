@@ -29,50 +29,50 @@ interface Slide {
 const slides: Slide[] = [
   {
     title: "Welcome to EKSU Marketplace!",
-    description: "Nigeria's cheapest platform for all your digital services",
+    description: "Your complete campus platform for everything you need",
     features: [
-      "Data bundles (all networks)",
-      "Airtime top-up",
-      "Cable TV subscriptions",
-      "Electricity bills"
+      "Buy & sell products on campus",
+      "Find affordable hostels",
+      "Access study materials",
+      "Cheap data & airtime"
     ],
-    icon: <Smartphone className="h-16 w-16" />,
+    icon: <Store className="h-16 w-16" />,
     bgGradient: "from-primary/20 to-primary/5"
   },
   {
-    title: "Save Money Every Time",
-    description: "Get the best rates on all VTU services",
+    title: "Campus Marketplace",
+    description: "Buy and sell items with fellow students",
     features: [
-      "Up to 15% cheaper than networks",
-      "Instant delivery",
-      "24/7 automated service",
-      "No hidden charges"
+      "List items for free",
+      "Secure escrow payments",
+      "Campus-wide delivery",
+      "Verified student sellers"
     ],
-    icon: <TrendingDown className="h-16 w-16" />,
+    icon: <Wallet className="h-16 w-16" />,
     bgGradient: "from-green-500/20 to-green-500/5"
   },
   {
-    title: "Become a Reseller",
-    description: "Start your own VTU business with us",
+    title: "Student Services",
+    description: "Everything a student needs in one place",
     features: [
-      "Create your own VTU website",
-      "Set your prices, keep profits",
-      "Start with just 5,000 naira",
-      "Earn from every transaction"
+      "Hostel finder with reviews",
+      "Past questions & notes",
+      "Secret messages & fun",
+      "Campus games & rewards"
     ],
-    icon: <Store className="h-16 w-16" />,
+    icon: <Users className="h-16 w-16" />,
     bgGradient: "from-blue-500/20 to-blue-500/5"
   },
   {
-    title: "Ready to Start?",
-    description: "Join thousands of satisfied users",
+    title: "Cheapest VTU Services",
+    description: "Save money on all digital services",
     features: [
-      "Free account registration",
-      "Instant wallet funding",
-      "Referral bonuses available",
-      "24/7 customer support"
+      "Data bundles up to 15% off",
+      "Airtime & bill payments",
+      "Instant delivery 24/7",
+      "Become a reseller"
     ],
-    icon: <Users className="h-16 w-16" />,
+    icon: <Smartphone className="h-16 w-16" />,
     bgGradient: "from-purple-500/20 to-purple-500/5"
   }
 ];

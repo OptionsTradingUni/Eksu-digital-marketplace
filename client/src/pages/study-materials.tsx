@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -229,6 +229,20 @@ function UploadMaterialDialog({
 }) {
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
+  
+  const previewUrl = useMemo(() => {
+    if (!file) return null;
+    return URL.createObjectURL(file);
+  }, [file]);
+  
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -328,18 +342,38 @@ function UploadMaterialDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="file">File (PDF, DOC, etc.)</Label>
+            <Label htmlFor="file">File (Documents, Images, Videos)</Label>
             <Input
               id="file"
               type="file"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi,.mkv,.webm"
               onChange={(e) => setFile(e.target.files?.[0] || null)}
               data-testid="input-file"
             />
             {file && (
-              <p className="text-xs text-muted-foreground">
-                Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+                {file.type.startsWith('image/') && previewUrl && (
+                  <div className="relative w-full h-32 rounded-md overflow-hidden bg-muted">
+                    <img 
+                      src={previewUrl} 
+                      alt="Preview" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+                {file.type.startsWith('video/') && previewUrl && (
+                  <div className="relative w-full rounded-md overflow-hidden bg-muted">
+                    <video 
+                      src={previewUrl} 
+                      controls 
+                      className="w-full max-h-40"
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

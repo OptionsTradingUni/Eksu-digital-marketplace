@@ -158,11 +158,20 @@ export default function WalletPage() {
       const response = await apiRequest("POST", "/api/squad/withdraw", data);
       return response.json();
     },
-    onSuccess: () => {
-      toast({
-        title: "Withdrawal requested",
-        description: "Your withdrawal is being processed.",
-      });
+    onSuccess: (data) => {
+      // Handle manual_review status (merchant eligibility issues handled gracefully)
+      if (data.status === 'manual_review' || data.manualProcessing) {
+        toast({
+          title: "Withdrawal Accepted",
+          description: data.message || "Your withdrawal will be processed manually within 24 hours. You will be notified when complete.",
+          duration: 10000, // Show for 10 seconds
+        });
+      } else {
+        toast({
+          title: "Withdrawal requested",
+          description: data.message || "Your withdrawal is being processed.",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
       setWithdrawAmount("");
@@ -261,6 +270,8 @@ export default function WalletPage() {
         return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
       case "pending":
         return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+      case "manual_review":
+        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"><Clock className="h-3 w-3 mr-1" />Processing</Badge>;
       case "failed":
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
       default:

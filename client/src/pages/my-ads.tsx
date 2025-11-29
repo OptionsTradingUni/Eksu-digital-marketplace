@@ -133,17 +133,20 @@ export default function MyAdsPage() {
   });
 
   const boostMutation = useMutation({
-    mutationFn: async ({ productId, boostType }: { productId: string; boostType: string }) => {
-      const response = await apiRequest("POST", `/api/boosts`, { productId, boostType });
+    mutationFn: async ({ productId, type, duration, amount }: { productId: string; type: string; duration: number; amount: string }) => {
+      const response = await apiRequest("POST", `/api/boosts`, { productId, type, duration, amount });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/seller/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       setShowBoostDialog(false);
       setSelectedProduct(null);
       toast({
-        title: "Boost requested",
-        description: "Your boost request has been submitted for approval.",
+        title: "Boost activated",
+        description: data.newBalance 
+          ? `Your listing is now boosted! New wallet balance: ₦${parseFloat(data.newBalance).toLocaleString()}`
+          : "Your listing is now boosted and will appear at the top of search results.",
       });
     },
     onError: (error: any) => {
@@ -530,7 +533,7 @@ export default function MyAdsPage() {
           <div className="space-y-4 py-4">
             <div 
               className="border rounded-md p-4 cursor-pointer hover-elevate"
-              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, boostType: "basic" })}
+              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, type: "boost", duration: 24, amount: "500" })}
               data-testid="boost-option-basic"
             >
               <div className="flex items-center justify-between gap-4">
@@ -551,7 +554,7 @@ export default function MyAdsPage() {
             
             <div 
               className="border rounded-md p-4 cursor-pointer hover-elevate"
-              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, boostType: "premium" })}
+              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, type: "featured", duration: 168, amount: "2000" })}
               data-testid="boost-option-premium"
             >
               <div className="flex items-center justify-between gap-4">
@@ -572,7 +575,7 @@ export default function MyAdsPage() {
             
             <div 
               className="border rounded-md p-4 cursor-pointer hover-elevate border-orange-500"
-              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, boostType: "super" })}
+              onClick={() => selectedProduct && boostMutation.mutate({ productId: selectedProduct.id, type: "featured", duration: 720, amount: "5000" })}
               data-testid="boost-option-super"
             >
               <div className="flex items-center justify-between gap-4">
