@@ -14,6 +14,14 @@ Do not make changes to the file `Y`.
 
 ## Recent Changes (November 2025)
 
+- **Payment & VTU System Fixes (Nov 29)**:
+  - Fixed Squad sandbox configuration with proper environment variable loading
+  - Improved withdrawal endpoint: merchant eligibility errors now gracefully fall back to manual processing (keeps wallet deducted, returns success with manual_review status)
+  - Secured API status endpoint: removed key prefix exposure, improved feature flag accuracy
+  - Enhanced test cards endpoint with disclaimers and official documentation links
+  - Transfers feature correctly shows "requires_activation" status until Squad merchant is profiled
+  - All LSP/TypeScript errors resolved in server/routes.ts and related files
+  
 - **VTU Rewards System**: Added comprehensive rewards/cashback points system with:
   - 10 points earned per N1,000 spent on data and airtime purchases
   - 4-tier system (Bronze, Silver 1.25x, Gold 1.5x, Platinum 2x multipliers)
