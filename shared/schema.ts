@@ -2154,6 +2154,80 @@ export type InsertGiftData = z.infer<typeof insertGiftDataSchema>;
 export type CreateGiftDataInput = z.infer<typeof createGiftDataApiSchema>;
 
 // ===========================================
+// REWARDS/CASHBACK POINTS SYSTEM
+// ===========================================
+
+// Reward transaction type enum
+export const rewardTransactionTypeEnum = pgEnum("reward_transaction_type", [
+  "earned",      // Points earned from purchases
+  "redeemed",    // Points used for discounts
+  "bonus",       // Bonus points (promotions, referrals)
+  "expired",     // Points that expired
+  "adjustment",  // Manual admin adjustment
+]);
+
+// User reward points balance
+export const rewardPoints = pgTable("reward_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  totalPoints: integer("total_points").default(0).notNull(),
+  lifetimeEarned: integer("lifetime_earned").default(0).notNull(),
+  lifetimeRedeemed: integer("lifetime_redeemed").default(0).notNull(),
+  tier: varchar("tier", { length: 20 }).default("bronze").notNull(), // bronze, silver, gold, platinum
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("reward_points_user_idx").on(table.userId),
+  index("reward_points_tier_idx").on(table.tier),
+]);
+
+// Reward point transactions history
+export const rewardTransactions = pgTable("reward_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: rewardTransactionTypeEnum("type").notNull(),
+  points: integer("points").notNull(), // positive for earned, negative for redeemed
+  description: text("description").notNull(),
+  referenceId: varchar("reference_id"), // Transaction ID, order ID, etc.
+  referenceType: varchar("reference_type", { length: 50 }), // "vtu_purchase", "wallet_funding", "redemption"
+  expiresAt: timestamp("expires_at"), // Points expiration (90 days default)
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("reward_transactions_user_idx").on(table.userId),
+  index("reward_transactions_type_idx").on(table.type),
+  index("reward_transactions_created_idx").on(table.createdAt),
+]);
+
+// Insert schemas
+export const insertRewardPointsSchema = createInsertSchema(rewardPoints).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRewardTransactionSchema = createInsertSchema(rewardTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Redemption options for points
+export const rewardRedemptionOptions = [
+  { id: "wallet_100", name: "₦100 Wallet Credit", points: 100, value: 100 },
+  { id: "wallet_200", name: "₦200 Wallet Credit", points: 180, value: 200 },
+  { id: "wallet_500", name: "₦500 Wallet Credit", points: 400, value: 500 },
+  { id: "wallet_1000", name: "₦1,000 Wallet Credit", points: 750, value: 1000 },
+  { id: "wallet_2000", name: "₦2,000 Wallet Credit", points: 1400, value: 2000 },
+  { id: "wallet_5000", name: "₦5,000 Wallet Credit", points: 3000, value: 5000 },
+] as const;
+
+// Type exports
+export type RewardPoints = typeof rewardPoints.$inferSelect;
+export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
+export type RewardTransaction = typeof rewardTransactions.$inferSelect;
+export type InsertRewardTransaction = z.infer<typeof insertRewardTransactionSchema>;
+export type RedemptionOption = typeof rewardRedemptionOptions[number];
+
+// ===========================================
 // USER SETTINGS SYSTEM
 // ===========================================
 
@@ -3366,50 +3440,6 @@ export const purchaseExamPinSchema = z.object({
 export type ExamPinPurchase = typeof examPinPurchases.$inferSelect;
 export type InsertExamPinPurchase = z.infer<typeof insertExamPinPurchaseSchema>;
 export type PurchaseExamPinInput = z.infer<typeof purchaseExamPinSchema>;
-
-// ===========================================
-// CASHBACK / REWARDS POINTS SYSTEM
-// ===========================================
-
-export const rewardPoints = pgTable("reward_points", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
-  totalPoints: integer("total_points").default(0),
-  availablePoints: integer("available_points").default(0),
-  redeemedPoints: integer("redeemed_points").default(0),
-  lifetimePoints: integer("lifetime_points").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("reward_points_user_idx").on(table.userId),
-]);
-
-export const rewardPointsTransactions = pgTable("reward_points_transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: varchar("type", { length: 20 }).notNull(), // 'earn', 'redeem', 'expire'
-  points: integer("points").notNull(),
-  description: text("description"),
-  relatedTransactionId: varchar("related_transaction_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("reward_points_tx_user_idx").on(table.userId),
-  index("reward_points_tx_type_idx").on(table.type),
-]);
-
-export const insertRewardPointsSchema = createInsertSchema(rewardPoints).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const redeemPointsSchema = z.object({
-  points: z.number().min(1000, "Minimum redemption is 1000 points"),
-});
-
-export type RewardPoints = typeof rewardPoints.$inferSelect;
-export type RewardPointsTransaction = typeof rewardPointsTransactions.$inferSelect;
-export type RedeemPointsInput = z.infer<typeof redeemPointsSchema>;
 
 // ===========================================
 // BULK VTU PURCHASES

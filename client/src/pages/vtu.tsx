@@ -1108,33 +1108,60 @@ export default function VtuPage() {
         <p className="text-muted-foreground">Purchase data bundles and airtime for any network</p>
       </div>
 
-      <Card className="mb-8 bg-gradient-to-br from-primary/20 to-primary/5">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="rounded-full bg-primary/10 p-3">
-                <Wallet className="h-6 w-6 text-primary" />
+      <div className="grid gap-4 md:grid-cols-2 mb-8">
+        <Card className="bg-gradient-to-br from-primary/20 to-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="rounded-full bg-primary/10 p-3">
+                  <Wallet className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Wallet Balance</p>
+                  {walletLoading ? (
+                    <Skeleton className="h-8 w-24" />
+                  ) : (
+                    <h2 className="text-2xl font-bold text-primary" data-testid="text-wallet-balance">
+                      ₦{walletBalance.toLocaleString()}
+                    </h2>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Wallet Balance</p>
-                {walletLoading ? (
-                  <Skeleton className="h-8 w-24" />
-                ) : (
-                  <h2 className="text-2xl font-bold text-primary" data-testid="text-wallet-balance">
-                    ₦{walletBalance.toLocaleString()}
-                  </h2>
-                )}
-              </div>
+              <Link href="/wallet">
+                <Button variant="outline" data-testid="link-fund-wallet">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Fund Wallet
+                </Button>
+              </Link>
             </div>
-            <Link href="/wallet">
-              <Button variant="outline" data-testid="link-fund-wallet">
-                <Plus className="h-4 w-4 mr-2" />
-                Fund Wallet
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Link href="/rewards" className="block">
+          <Card className="h-full bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border-amber-200/50 dark:border-amber-800/50 hover-elevate cursor-pointer transition-all" data-testid="card-rewards-link">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-full bg-amber-500/20 p-3">
+                    <Star className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Reward Points</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-bold text-amber-700 dark:text-amber-400" data-testid="text-rewards-preview">
+                        Earn 10 pts/₦1000
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  View
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
 
       <Tabs value={serviceType} onValueChange={(v) => setServiceType(v as ServiceType)} className="mb-8">
         <TabsList className="grid w-full grid-cols-4 mb-6">

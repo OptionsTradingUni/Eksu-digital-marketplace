@@ -241,6 +241,10 @@ import {
   type InsertResellerPricing,
   type ResellerTransaction,
   type ResellerCustomer,
+  rewardPoints,
+  rewardTransactions,
+  type RewardPoints,
+  type RewardTransaction,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
@@ -669,6 +673,13 @@ export interface IStorage {
   getGiftByCode(code: string): Promise<GiftData | undefined>;
   createGiftData(data: InsertGiftData): Promise<GiftData>;
   claimGiftData(giftId: string, claimerId: string): Promise<GiftData>;
+  
+  // Reward Points operations
+  getOrCreateRewardPoints(userId: string): Promise<RewardPoints>;
+  addRewardPoints(userId: string, points: number, description: string, referenceId?: string, referenceType?: string): Promise<RewardTransaction>;
+  redeemRewardPoints(userId: string, points: number, description: string): Promise<RewardTransaction>;
+  getRewardTransactions(userId: string, limit?: number): Promise<RewardTransaction[]>;
+  updateRewardTier(userId: string): Promise<RewardPoints>;
   
   // Bill Payment operations
   createBillPayment(data: InsertBillPayment): Promise<BillPayment>;
@@ -4763,6 +4774,130 @@ export class DatabaseStorage implements IStorage {
       .where(eq(giftData.id, giftId))
       .returning();
     return updated;
+  }
+
+  // Reward Points operations
+  async getOrCreateRewardPoints(userId: string): Promise<RewardPoints> {
+    const [existing] = await db
+      .select()
+      .from(rewardPoints)
+      .where(eq(rewardPoints.userId, userId));
+    
+    if (existing) return existing;
+    
+    const [created] = await db
+      .insert(rewardPoints)
+      .values({
+        userId,
+        totalPoints: 0,
+        lifetimeEarned: 0,
+        lifetimeRedeemed: 0,
+        tier: "bronze",
+      })
+      .returning();
+    return created;
+  }
+
+  async addRewardPoints(
+    userId: string, 
+    points: number, 
+    description: string, 
+    referenceId?: string, 
+    referenceType?: string
+  ): Promise<RewardTransaction> {
+    const userRewards = await this.getOrCreateRewardPoints(userId);
+    
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 90);
+    
+    const [transaction] = await db
+      .insert(rewardTransactions)
+      .values({
+        userId,
+        type: "earned",
+        points,
+        description,
+        referenceId,
+        referenceType,
+        expiresAt,
+      })
+      .returning();
+    
+    await db
+      .update(rewardPoints)
+      .set({
+        totalPoints: userRewards.totalPoints + points,
+        lifetimeEarned: userRewards.lifetimeEarned + points,
+        updatedAt: new Date(),
+      })
+      .where(eq(rewardPoints.userId, userId));
+    
+    await this.updateRewardTier(userId);
+    
+    return transaction;
+  }
+
+  async redeemRewardPoints(userId: string, points: number, description: string): Promise<RewardTransaction> {
+    const userRewards = await this.getOrCreateRewardPoints(userId);
+    
+    if (userRewards.totalPoints < points) {
+      throw new Error("Insufficient reward points");
+    }
+    
+    const [transaction] = await db
+      .insert(rewardTransactions)
+      .values({
+        userId,
+        type: "redeemed",
+        points: -points,
+        description,
+        referenceType: "redemption",
+      })
+      .returning();
+    
+    await db
+      .update(rewardPoints)
+      .set({
+        totalPoints: userRewards.totalPoints - points,
+        lifetimeRedeemed: userRewards.lifetimeRedeemed + points,
+        updatedAt: new Date(),
+      })
+      .where(eq(rewardPoints.userId, userId));
+    
+    return transaction;
+  }
+
+  async getRewardTransactions(userId: string, limit: number = 50): Promise<RewardTransaction[]> {
+    return await db
+      .select()
+      .from(rewardTransactions)
+      .where(eq(rewardTransactions.userId, userId))
+      .orderBy(desc(rewardTransactions.createdAt))
+      .limit(limit);
+  }
+
+  async updateRewardTier(userId: string): Promise<RewardPoints> {
+    const userRewards = await this.getOrCreateRewardPoints(userId);
+    
+    let tier = "bronze";
+    if (userRewards.lifetimeEarned >= 50000) {
+      tier = "platinum";
+    } else if (userRewards.lifetimeEarned >= 20000) {
+      tier = "gold";
+    } else if (userRewards.lifetimeEarned >= 5000) {
+      tier = "silver";
+    }
+    
+    if (tier !== userRewards.tier) {
+      const [updated] = await db
+        .update(rewardPoints)
+        .set({ tier, updatedAt: new Date() })
+        .where(eq(rewardPoints.userId, userId))
+        .returning();
+      return updated;
+    }
+    
+    return userRewards;
   }
 
   // Bill Payment operations

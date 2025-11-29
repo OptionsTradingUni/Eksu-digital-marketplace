@@ -14,6 +14,15 @@ Do not make changes to the file `Y`.
 
 ## Recent Changes (November 2025)
 
+- **VTU Rewards System**: Added comprehensive rewards/cashback points system with:
+  - 10 points earned per N1,000 spent on data and airtime purchases
+  - 4-tier system (Bronze, Silver 1.25x, Gold 1.5x, Platinum 2x multipliers)
+  - Redemption options for wallet credit (100-5000 points for N100-N5000)
+  - Rewards center UI at /rewards with tier display, point history, and redemption
+  - Link to rewards from VTU page header
+- **VTU Bulk Purchases**: Added bulk VTU purchase feature with CSV upload support for multiple recipients at once.
+- **VTU Transaction Export**: Added PDF and Excel export functionality for VTU transaction history with date filtering.
+- **VTU Reseller System**: Complete 3-tier reseller program with custom pricing, subdomain sites, and transaction tracking.
 - **Explore Page**: New /explore page with all features organized by category (Marketplace, Housing, Education, Social, Services, Games, Support) for better feature discoverability.
 - **Quick Services Section**: Home page now has a Quick Services grid with cards for Hostel Finder, Study Materials, VTU Data, Games, Secret Messages, and Explore All.
 - **Improved Navigation**: 
@@ -55,7 +64,16 @@ The marketplace employs a modern full-stack architecture focused on performance,
 - **Security:** Role-based access control, user verification, reporting, and HTTPS.
 - **Location Services:** Geolocation for campus detection and location-aware feeds.
 - **KYC Verification:** Multi-step wizard with ID and liveness detection.
-- **VTU Data Sales:** Integrated SMEDATA.NG API for data and airtime resale with wallet integration and refund logic.
+- **VTU Platform (Inlomax API):** Comprehensive VTU service with:
+  - Data bundles and airtime for MTN, GLO, Airtel, 9mobile with competitive pricing
+  - 3-tier reseller system (Starter ₦5k, Business ₦15k, Enterprise ₦50k) with custom pricing
+  - Scheduled purchases (daily/weekly/monthly) with auto-execution
+  - Bulk VTU purchases with CSV upload support for multiple recipients
+  - Gift data functionality for sending data to friends
+  - Transaction export (PDF/Excel) with date range filtering
+  - Rewards/cashback points system (10 pts per ₦1,000 spent, tier-based multipliers)
+  - Savings calculator showing ROI and discounts vs market prices
+  - Beneficiary management for quick recharge
 - **PWA Support:** Service worker for offline caching and install prompt.
 - **Support Ticket System:** Threaded conversations with status tracking.
 - **Social Features:** "The Plug" feed for posts (X-style), confessions page with voting, and a "Secret Messages Hub" for anonymous communication.
@@ -77,6 +95,6 @@ The marketplace employs a modern full-stack architecture focused on performance,
 - **Drizzle ORM:** Database interaction layer.
 - **Socket.io-like WebSocket:** Real-time communication.
 - **Multer:** For handling multi-part form data, primarily image uploads.
-- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data and airtime sales.
+- **Inlomax API:** For Virtual Top-Up (VTU) data, airtime, cable TV, electricity bills, and exam pins sales.
 - **Resend Email API:** Primary email service (with Brevo, Gmail, Mailgun fallbacks).
 - **Render:** Recommended deployment platform.

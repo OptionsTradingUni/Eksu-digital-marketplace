@@ -51,6 +51,7 @@ const HostelsPage = lazy(() => import("@/pages/hostels"));
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 const ExplorePage = lazy(() => import("@/pages/explore"));
 const ResellerPage = lazy(() => import("@/pages/reseller"));
+const RewardsPage = lazy(() => import("@/pages/rewards"));
 
 function PageLoadingSpinner() {
   return (
@@ -259,6 +260,11 @@ function Router() {
             <Route path="/reseller" component={() => (
               <ErrorBoundary>
                 <ResellerPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/rewards" component={() => (
+              <ErrorBoundary>
+                <RewardsPage />
               </ErrorBoundary>
             )} />
             <Route path="/settings" component={() => (

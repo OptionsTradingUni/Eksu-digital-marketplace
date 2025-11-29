@@ -6110,6 +6110,20 @@ Happy trading!`;
         }
       }
 
+      // Award reward points for successful bulk purchases (10 points per 1000 naira)
+      if (amountDeducted > 0) {
+        const pointsEarned = Math.floor(amountDeducted / 1000) * 10;
+        if (pointsEarned > 0) {
+          await storage.addRewardPoints(
+            userId,
+            pointsEarned,
+            `Earned from bulk VTU purchase of ₦${amountDeducted.toLocaleString()}`,
+            undefined,
+            "vtu_bulk_purchase"
+          );
+        }
+      }
+
       res.json({
         success: true,
         message: `Bulk purchase completed: ${totalSuccess} successful, ${totalFailed} failed`,
@@ -6124,6 +6138,148 @@ Happy trading!`;
     } catch (error) {
       console.error("Error processing bulk VTU purchase:", error);
       res.status(500).json({ message: "Failed to process bulk purchase" });
+    }
+  });
+
+  // ===========================================
+  // REWARD POINTS API ROUTES
+  // ===========================================
+
+  // Get user's reward points balance and tier
+  app.get("/api/rewards", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const rewards = await storage.getOrCreateRewardPoints(userId);
+      const recentTransactions = await storage.getRewardTransactions(userId, 10);
+
+      // Tier benefits
+      const tierBenefits: Record<string, { multiplier: number; description: string }> = {
+        bronze: { multiplier: 1, description: "10 points per ₦1,000 spent" },
+        silver: { multiplier: 1.25, description: "12.5 points per ₦1,000 spent" },
+        gold: { multiplier: 1.5, description: "15 points per ₦1,000 spent" },
+        platinum: { multiplier: 2, description: "20 points per ₦1,000 spent" },
+      };
+
+      // Progress to next tier
+      const tierThresholds: Record<string, number> = {
+        bronze: 0,
+        silver: 5000,
+        gold: 20000,
+        platinum: 50000,
+      };
+
+      const nextTier = rewards.tier === "platinum" ? null : 
+        rewards.tier === "gold" ? "platinum" : 
+        rewards.tier === "silver" ? "gold" : "silver";
+
+      const progressToNextTier = nextTier ? {
+        currentPoints: rewards.lifetimeEarned,
+        requiredPoints: tierThresholds[nextTier],
+        progress: Math.min(100, (rewards.lifetimeEarned / tierThresholds[nextTier]) * 100),
+        pointsNeeded: Math.max(0, tierThresholds[nextTier] - rewards.lifetimeEarned),
+      } : null;
+
+      res.json({
+        ...rewards,
+        tierBenefits: tierBenefits[rewards.tier],
+        progressToNextTier,
+        recentTransactions,
+        redemptionOptions: [
+          { id: "wallet_100", name: "₦100 Wallet Credit", points: 100, value: 100 },
+          { id: "wallet_200", name: "₦200 Wallet Credit", points: 180, value: 200 },
+          { id: "wallet_500", name: "₦500 Wallet Credit", points: 400, value: 500 },
+          { id: "wallet_1000", name: "₦1,000 Wallet Credit", points: 750, value: 1000 },
+          { id: "wallet_2000", name: "₦2,000 Wallet Credit", points: 1400, value: 2000 },
+          { id: "wallet_5000", name: "₦5,000 Wallet Credit", points: 3000, value: 5000 },
+        ],
+      });
+    } catch (error) {
+      console.error("Error fetching rewards:", error);
+      res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
+  // Get full reward transaction history
+  app.get("/api/rewards/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const transactions = await storage.getRewardTransactions(userId, limit);
+
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching reward transactions:", error);
+      res.status(500).json({ message: "Failed to fetch reward transactions" });
+    }
+  });
+
+  // Redeem reward points for wallet credit
+  app.post("/api/rewards/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { optionId } = req.body;
+
+      const redemptionOptions: Record<string, { points: number; value: number; name: string }> = {
+        wallet_100: { points: 100, value: 100, name: "₦100 Wallet Credit" },
+        wallet_200: { points: 180, value: 200, name: "₦200 Wallet Credit" },
+        wallet_500: { points: 400, value: 500, name: "₦500 Wallet Credit" },
+        wallet_1000: { points: 750, value: 1000, name: "₦1,000 Wallet Credit" },
+        wallet_2000: { points: 1400, value: 2000, name: "₦2,000 Wallet Credit" },
+        wallet_5000: { points: 3000, value: 5000, name: "₦5,000 Wallet Credit" },
+      };
+
+      const option = redemptionOptions[optionId];
+      if (!option) {
+        return res.status(400).json({ message: "Invalid redemption option" });
+      }
+
+      const rewards = await storage.getOrCreateRewardPoints(userId);
+      if (rewards.totalPoints < option.points) {
+        return res.status(400).json({ 
+          message: "Insufficient reward points",
+          required: option.points,
+          available: rewards.totalPoints,
+        });
+      }
+
+      // Redeem points
+      await storage.redeemRewardPoints(userId, option.points, `Redeemed for ${option.name}`);
+
+      // Add wallet credit
+      await storage.updateWalletBalance(userId, option.value.toString(), "add");
+      const wallet = await storage.getOrCreateWallet(userId);
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: "credit",
+        amount: option.value.toString(),
+        status: "completed",
+        description: `Reward points redemption: ${option.name}`,
+        relatedUserId: userId,
+      });
+
+      const updatedRewards = await storage.getOrCreateRewardPoints(userId);
+
+      res.json({
+        success: true,
+        message: `Successfully redeemed ${option.points} points for ${option.name}`,
+        walletCredited: option.value,
+        newPointsBalance: updatedRewards.totalPoints,
+      });
+    } catch (error: any) {
+      console.error("Error redeeming rewards:", error);
+      res.status(500).json({ message: error.message || "Failed to redeem rewards" });
     }
   });
 
@@ -6418,9 +6574,36 @@ Happy trading!`;
             description: `Data Purchase: ${plan.name} (${plan.dataAmount}) for ${phoneNumber} - Success`,
           });
 
+          // Award reward points (10 points per ₦1,000 spent)
+          let pointsEarned = 0;
+          try {
+            const rewards = await storage.getOrCreateRewardPoints(userId);
+            const tierMultiplier: Record<string, number> = {
+              bronze: 1,
+              silver: 1.25,
+              gold: 1.5,
+              platinum: 2,
+            };
+            const multiplier = tierMultiplier[rewards.tier] || 1;
+            pointsEarned = Math.floor((planPrice / 1000) * 10 * multiplier);
+            
+            if (pointsEarned > 0) {
+              await storage.addRewardPoints(
+                userId,
+                pointsEarned,
+                `Earned from ${plan.dataAmount} data purchase (₦${planPrice.toLocaleString()})`,
+                walletTransaction.id,
+                "vtu_data_purchase"
+              );
+            }
+          } catch (rewardError) {
+            console.error("Error adding reward points:", rewardError);
+          }
+
           return res.json({
             success: true,
             message: `${plan.dataAmount} data purchased successfully for ${phoneNumber}`,
+            pointsEarned,
             transaction: {
               id: walletTransaction.id,
               network: plan.network,
@@ -6582,9 +6765,36 @@ Happy trading!`;
             description: `Airtime Purchase: ₦${amount} for ${phoneNumber} (${networkInfo?.displayName || networkToUse.toUpperCase()}) - Success`,
           });
 
+          // Award reward points (10 points per ₦1,000 spent)
+          let pointsEarned = 0;
+          try {
+            const rewards = await storage.getOrCreateRewardPoints(userId);
+            const tierMultiplier: Record<string, number> = {
+              bronze: 1,
+              silver: 1.25,
+              gold: 1.5,
+              platinum: 2,
+            };
+            const multiplier = tierMultiplier[rewards.tier] || 1;
+            pointsEarned = Math.floor((amount / 1000) * 10 * multiplier);
+            
+            if (pointsEarned > 0) {
+              await storage.addRewardPoints(
+                userId,
+                pointsEarned,
+                `Earned from ₦${amount.toLocaleString()} airtime purchase`,
+                walletTransaction.id,
+                "vtu_airtime_purchase"
+              );
+            }
+          } catch (rewardError) {
+            console.error("Error adding reward points:", rewardError);
+          }
+
           return res.json({
             success: true,
             message: `₦${amount} airtime purchased successfully for ${phoneNumber}`,
+            pointsEarned,
             transaction: {
               id: walletTransaction.id,
               network: networkToUse,
