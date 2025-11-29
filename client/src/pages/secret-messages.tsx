@@ -33,7 +33,8 @@ import {
   Inbox,
   ExternalLink,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
@@ -321,17 +322,30 @@ export default function SecretMessagesPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'link' | 'message'; id: string } | null>(null);
 
-  const { data: links, isLoading: linksLoading } = useQuery<SecretMessageLink[]>({
+  const { data: links, isLoading: linksLoading, refetch: refetchLinks } = useQuery<SecretMessageLink[]>({
     queryKey: ["/api/secret-links/mine"],
+    refetchInterval: 30000,
   });
 
-  const { data: messages, isLoading: messagesLoading } = useQuery<SecretMessageWithLink[]>({
+  const { data: messages, isLoading: messagesLoading, refetch: refetchMessages } = useQuery<SecretMessageWithLink[]>({
     queryKey: ["/api/secret-messages"],
+    refetchInterval: 15000,
   });
 
-  const { data: unreadCount } = useQuery<{ count: number }>({
+  const { data: unreadCount, refetch: refetchUnreadCount } = useQuery<{ count: number }>({
     queryKey: ["/api/secret-messages/unread-count"],
+    refetchInterval: 15000,
   });
+
+  const handleManualRefresh = () => {
+    refetchLinks();
+    refetchMessages();
+    refetchUnreadCount();
+    toast({
+      title: "Refreshed",
+      description: "Messages updated",
+    });
+  };
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -394,13 +408,22 @@ export default function SecretMessagesPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Sparkles className="h-6 w-6 text-purple-400" />
               Secret Messages
             </h1>
             <p className="text-sm text-muted-foreground">Create links to receive anonymous messages</p>
           </div>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={handleManualRefresh}
+            data-testid="button-refresh-messages"
+            className="text-purple-400 hover:text-purple-300"
+          >
+            <RefreshCw className="h-5 w-5" />
+          </Button>
         </div>
 
         <div className="space-y-6">

@@ -48,6 +48,7 @@ const SendSecretPage = lazy(() => import("@/pages/send-secret"));
 const SecretHubPage = lazy(() => import("@/pages/secret-hub"));
 const StudyMaterialsPage = lazy(() => import("@/pages/study-materials"));
 const HostelsPage = lazy(() => import("@/pages/hostels"));
+const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 
 function PageLoadingSpinner() {
   return (
@@ -64,11 +65,13 @@ function Router() {
   const { isAuthenticated, isLoading, isError, isEmailVerified, isAdmin } = useAuth();
   const [location] = useLocation();
 
-  // Check if current path is a public secret message route
+  // Check if current path is a public route (secret messages or email verification)
   const isPublicSecretRoute = location === '/secret' || location.startsWith('/secret/');
+  const isVerifyEmailRoute = location === '/verify-email' || location.startsWith('/verify-email');
+  const isPublicRoute = isPublicSecretRoute || isVerifyEmailRoute;
 
   // Show loading spinner while checking authentication (but not for public routes)
-  if (isLoading && !isPublicSecretRoute) {
+  if (isLoading && !isPublicRoute) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="text-center">
@@ -76,6 +79,17 @@ function Router() {
           <p className="mt-4 text-muted-foreground">Loading...</p>
         </div>
       </div>
+    );
+  }
+
+  // Handle email verification route - accessible without authentication
+  if (isVerifyEmailRoute) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoadingSpinner />}>
+          <VerifyEmailPage />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
