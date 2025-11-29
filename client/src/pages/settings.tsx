@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import type { UserSettings } from "@shared/schema";
 import { 
   Settings, 
@@ -47,10 +48,160 @@ import {
   ExternalLink,
   Ban,
   VolumeX,
-  Users
+  Users,
+  Lock,
+  KeyRound
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
+import { SetupPinDialog, ResetPinDialog } from "@/components/PinVerificationDialog";
+
+interface PinStatus {
+  pinSet: boolean;
+  isLocked: boolean;
+  lockRemainingMinutes: number;
+  attemptsRemaining: number;
+}
+
+function TransactionPinSection() {
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [changeDialogOpen, setChangeDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const { data: pinStatus, isLoading, refetch } = useQuery<PinStatus>({
+    queryKey: ["/api/auth/pin/status"],
+  });
+
+  const handleSuccess = () => {
+    refetch();
+    setSetupDialogOpen(false);
+    setChangeDialogOpen(false);
+    setResetDialogOpen(false);
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-64" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5" />
+            Transaction PIN
+          </CardTitle>
+          <CardDescription>
+            Secure your wallet operations with a 4-6 digit PIN
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-muted rounded-md">
+                <KeyRound className="h-4 w-4" />
+              </div>
+              <div>
+                <Label>PIN Status</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  {pinStatus?.pinSet ? (
+                    <Badge variant="outline" className="border-green-500 text-green-600">
+                      <Check className="h-3 w-3 mr-1" />
+                      Enabled
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-yellow-500 text-yellow-600">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Not Set
+                    </Badge>
+                  )}
+                  {pinStatus?.isLocked && (
+                    <Badge variant="destructive">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Locked ({pinStatus.lockRemainingMinutes}m)
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            {!pinStatus?.pinSet ? (
+              <Button
+                className="w-full"
+                onClick={() => setSetupDialogOpen(true)}
+                data-testid="button-setup-pin"
+              >
+                <Lock className="h-4 w-4 mr-2" />
+                Set Up Transaction PIN
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setChangeDialogOpen(true)}
+                  disabled={pinStatus.isLocked}
+                  data-testid="button-change-pin"
+                >
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Change PIN
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setResetDialogOpen(true)}
+                  data-testid="button-reset-pin"
+                >
+                  Forgot PIN? Reset via Email
+                </Button>
+              </>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Your transaction PIN is required for withdrawals and other sensitive operations.
+            After 5 failed attempts, your PIN will be locked for 30 minutes.
+          </p>
+        </CardContent>
+      </Card>
+
+      <SetupPinDialog
+        open={setupDialogOpen}
+        onOpenChange={setSetupDialogOpen}
+        onSuccess={handleSuccess}
+        mode="setup"
+      />
+
+      <SetupPinDialog
+        open={changeDialogOpen}
+        onOpenChange={setChangeDialogOpen}
+        onSuccess={handleSuccess}
+        mode="change"
+      />
+
+      <ResetPinDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        onSuccess={handleSuccess}
+      />
+    </>
+  );
+}
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading, isVerified } = useAuth();
@@ -763,6 +914,8 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          <TransactionPinSection />
         </TabsContent>
 
         <TabsContent value="account" className="space-y-6">

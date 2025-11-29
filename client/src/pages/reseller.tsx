@@ -33,10 +33,18 @@ import {
   Store, TrendingUp, Users, DollarSign, Settings, History, 
   CheckCircle, Crown, Rocket, Building2, ExternalLink, Copy,
   Loader2, AlertCircle, Phone, Mail, Globe, Key, Terminal, 
-  Shield, Eye, EyeOff, Code, Zap, RefreshCw
+  Shield, Eye, EyeOff, Code, Zap, RefreshCw, Wallet, Building, 
+  CreditCard, ArrowDownToLine, Clock
 } from "lucide-react";
 import { format } from "date-fns";
-import type { ResellerSite, ResellerTransaction, ResellerCustomer, Wallet, User } from "@shared/schema";
+import type { ResellerSite, ResellerTransaction, ResellerCustomer, Wallet, User, ResellerWithdrawal } from "@shared/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiTerminal } from "@/components/api-terminal";
 
 type ResellerTier = "starter" | "business" | "enterprise";
@@ -125,7 +133,44 @@ const updateSettingsFormSchema = z.object({
   secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hex color").optional(),
 });
 
-function TierCard({ tier, isSelected, onSelect, disabled }: { 
+const withdrawalFormSchema = z.object({
+  amount: z.coerce.number().min(1000, "Minimum withdrawal is ₦1,000"),
+  bankName: z.string().min(2, "Bank name is required"),
+  accountNumber: z.string().min(10, "Account number must be 10 digits").max(10, "Account number must be 10 digits"),
+  accountName: z.string().min(2, "Account name is required"),
+});
+
+const NIGERIAN_BANKS = [
+  "Access Bank",
+  "First Bank",
+  "Guaranty Trust Bank (GTBank)",
+  "United Bank for Africa (UBA)",
+  "Zenith Bank",
+  "Ecobank",
+  "Fidelity Bank",
+  "First City Monument Bank (FCMB)",
+  "Polaris Bank",
+  "Stanbic IBTC Bank",
+  "Sterling Bank",
+  "Union Bank",
+  "Wema Bank",
+  "Keystone Bank",
+  "Unity Bank",
+  "Jaiz Bank",
+  "Providus Bank",
+  "SunTrust Bank",
+  "Titan Trust Bank",
+  "Globus Bank",
+  "Parallex Bank",
+  "Kuda Bank",
+  "Opay",
+  "PalmPay",
+  "Moniepoint",
+  "Carbon",
+  "Eyowo",
+];
+
+export function TierCard({ tier, isSelected, onSelect, disabled }: { 
   tier: TierInfo; 
   isSelected: boolean; 
   onSelect: () => void;
@@ -191,7 +236,7 @@ function TierCard({ tier, isSelected, onSelect, disabled }: {
   );
 }
 
-function TierSelectionView({ wallet }: { wallet: Wallet | undefined }) {
+export function TierSelectionView({ wallet }: { wallet: Wallet | undefined }) {
   const [selectedTier, setSelectedTier] = useState<ResellerTier>("business");
   const [step, setStep] = useState<"select" | "setup">("select");
   const { toast } = useToast();
@@ -467,7 +512,7 @@ function TierSelectionView({ wallet }: { wallet: Wallet | undefined }) {
   );
 }
 
-function StatsCard({ title, value, icon: Icon, subtext }: { 
+export function StatsCard({ title, value, icon: Icon, subtext }: { 
   title: string; 
   value: string; 
   icon: any; 
@@ -491,7 +536,7 @@ function StatsCard({ title, value, icon: Icon, subtext }: {
   );
 }
 
-function ResellerDashboard({ site }: { site: ResellerSite }) {
+export function ResellerDashboard({ site }: { site: ResellerSite }) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
   const [showApiTerminal, setShowApiTerminal] = useState(false);
@@ -518,6 +563,49 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
 
   const { data: customers, isLoading: customersLoading } = useQuery<ResellerCustomer[]>({
     queryKey: ["/api/reseller/customers"],
+  });
+
+  // Withdrawal queries and mutations
+  const { data: withdrawalData, isLoading: withdrawalsLoading } = useQuery<{
+    withdrawals: ResellerWithdrawal[];
+    summary: {
+      totalEarnings: number;
+      withdrawnAmount: number;
+      availableBalance: number;
+      pendingWithdrawals: number;
+    };
+  }>({
+    queryKey: ["/api/reseller/withdrawals"],
+  });
+
+  const withdrawalForm = useForm<z.infer<typeof withdrawalFormSchema>>({
+    resolver: zodResolver(withdrawalFormSchema),
+    defaultValues: {
+      amount: 0,
+      bankName: "",
+      accountNumber: "",
+      accountName: "",
+    },
+  });
+
+  const createWithdrawalMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof withdrawalFormSchema>) => {
+      const response = await apiRequest("POST", "/api/reseller/withdraw", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Success", description: data.message || "Withdrawal request submitted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/reseller/withdrawals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reseller/stats"] });
+      withdrawalForm.reset();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to submit withdrawal request",
+        variant: "destructive"
+      });
+    },
   });
 
   const generateApiMutation = useMutation({
@@ -646,6 +734,10 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
           <TabsTrigger value="customers" data-testid="tab-customers">
             <Users className="h-4 w-4 mr-1" />
             Customers
+          </TabsTrigger>
+          <TabsTrigger value="withdrawals" data-testid="tab-withdrawals">
+            <Wallet className="h-4 w-4 mr-1" />
+            Earnings
           </TabsTrigger>
           <TabsTrigger value="api" data-testid="tab-api">
             <Key className="h-4 w-4 mr-1" />
@@ -859,6 +951,240 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="withdrawals">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {withdrawalsLoading ? (
+                Array(4).fill(0).map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-4 w-20 mb-2" />
+                      <Skeleton className="h-8 w-32" />
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <>
+                  <StatsCard 
+                    title="Total Earnings" 
+                    value={`₦${(withdrawalData?.summary?.totalEarnings || 0).toLocaleString()}`}
+                    icon={TrendingUp}
+                  />
+                  <StatsCard 
+                    title="Available Balance" 
+                    value={`₦${(withdrawalData?.summary?.availableBalance || 0).toLocaleString()}`}
+                    icon={Wallet}
+                  />
+                  <StatsCard 
+                    title="Withdrawn" 
+                    value={`₦${(withdrawalData?.summary?.withdrawnAmount || 0).toLocaleString()}`}
+                    icon={ArrowDownToLine}
+                  />
+                  <StatsCard 
+                    title="Pending Withdrawals" 
+                    value={`₦${(withdrawalData?.summary?.pendingWithdrawals || 0).toLocaleString()}`}
+                    icon={Clock}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ArrowDownToLine className="h-5 w-5" />
+                    Request Withdrawal
+                  </CardTitle>
+                  <CardDescription>
+                    Withdraw your earnings to your bank account
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...withdrawalForm}>
+                    <form onSubmit={withdrawalForm.handleSubmit((data) => createWithdrawalMutation.mutate(data))} className="space-y-4">
+                      <FormField
+                        control={withdrawalForm.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Amount (₦)</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                placeholder="Enter amount" 
+                                {...field} 
+                                data-testid="input-withdrawal-amount"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                            <p className="text-xs text-muted-foreground">
+                              Minimum: ₦1,000 | Available: ₦{(withdrawalData?.summary?.availableBalance || 0).toLocaleString()}
+                            </p>
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={withdrawalForm.control}
+                        name="bankName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Bank Name</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-bank-name">
+                                  <SelectValue placeholder="Select your bank" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {NIGERIAN_BANKS.map((bank) => (
+                                  <SelectItem key={bank} value={bank}>
+                                    {bank}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={withdrawalForm.control}
+                        name="accountNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Account Number</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="10-digit account number" 
+                                maxLength={10}
+                                {...field} 
+                                data-testid="input-account-number"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={withdrawalForm.control}
+                        name="accountName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Account Name</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="Name on your bank account" 
+                                {...field} 
+                                data-testid="input-account-name"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="p-3 rounded-md bg-muted/50 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Withdrawals over ₦50,000 require admin approval
+                        </p>
+                      </div>
+
+                      <Button 
+                        type="submit" 
+                        className="w-full" 
+                        disabled={createWithdrawalMutation.isPending || (withdrawalData?.summary?.availableBalance || 0) < 1000}
+                        data-testid="button-submit-withdrawal"
+                      >
+                        {createWithdrawalMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        Request Withdrawal
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Withdrawal History
+                  </CardTitle>
+                  <CardDescription>
+                    Track your withdrawal requests
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {withdrawalsLoading ? (
+                    <div className="space-y-2">
+                      {Array(3).fill(0).map((_, i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
+                      ))}
+                    </div>
+                  ) : withdrawalData?.withdrawals && withdrawalData.withdrawals.length > 0 ? (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {withdrawalData.withdrawals.map((withdrawal) => (
+                        <div 
+                          key={withdrawal.id} 
+                          className="p-3 rounded-md border bg-card"
+                          data-testid={`card-withdrawal-${withdrawal.id}`}
+                        >
+                          <div className="flex items-center justify-between gap-4 mb-2">
+                            <span className="font-medium">
+                              ₦{parseFloat(withdrawal.amount).toLocaleString()}
+                            </span>
+                            <Badge 
+                              variant={
+                                withdrawal.status === "completed" ? "default" : 
+                                withdrawal.status === "processing" ? "secondary" :
+                                withdrawal.status === "rejected" || withdrawal.status === "failed" ? "destructive" :
+                                "outline"
+                              }
+                            >
+                              {withdrawal.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Building className="h-3 w-3" />
+                              {withdrawal.bankName}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-3 w-3" />
+                              {withdrawal.accountNumber} - {withdrawal.accountName}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3 w-3" />
+                              {withdrawal.createdAt ? format(new Date(withdrawal.createdAt), "MMM d, yyyy HH:mm") : "N/A"}
+                            </div>
+                            {withdrawal.adminNote && (
+                              <div className="mt-2 p-2 rounded bg-muted text-xs">
+                                <span className="font-medium">Note:</span> {withdrawal.adminNote}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No withdrawals yet</p>
+                      <p className="text-sm">Your withdrawal history will appear here</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="api">

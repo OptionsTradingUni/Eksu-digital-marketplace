@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -14,16 +14,21 @@ import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { 
   Wallet, Smartphone, Signal, CheckCircle, XCircle, Clock, Loader2, Plus, AlertCircle, 
   Search, Phone, Zap, Star, Trash2, Filter, Gift, Calendar, 
   Play, Pause, Send, Copy, TrendingDown, SlidersHorizontal, X, Users, 
-  Download, FileSpreadsheet, FileText
+  Download, FileSpreadsheet, FileText, Receipt, Award, History, Store, 
+  UserPlus, Tv, Lightbulb, GraduationCap
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
-import { Link } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { format } from "date-fns";
+import { RewardsCenter } from "@/components/RewardsCenter";
+import { TierSelectionView, ResellerDashboard } from "./reseller";
+import type { ResellerSite, Wallet as WalletSchema } from "@shared/schema";
 import type { 
   Wallet as WalletType, 
   VtuTransaction, 
@@ -33,7 +38,8 @@ import type {
 } from "@shared/schema";
 
 type NetworkType = "mtn" | "glo" | "airtel" | "9mobile";
-type ServiceType = "data" | "airtime" | "cable" | "electricity" | "exam" | "schedule" | "gift" | "bulk";
+type ServiceType = "data" | "airtime" | "bills" | "schedule" | "gift" | "bulk" | "beneficiaries" | "reseller" | "rewards" | "history";
+type BillType = "cable" | "electricity" | "exam";
 type ScheduleFrequency = "daily" | "weekly" | "monthly";
 
 interface BulkPurchaseItem {
@@ -341,9 +347,40 @@ export default function VtuPage() {
   const [bulkAirtimeAmount, setBulkAirtimeAmount] = useState("");
   const [bulkResults, setBulkResults] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [billType, setBillType] = useState<BillType>("cable");
+
+  // URL param handling for tab navigation
+  const searchString = useSearch();
+  const [, setLocation] = useLocation();
+  
+  // Parse URL params to get the tab
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const tabParam = params.get("tab");
+    if (tabParam && ["data", "airtime", "bills", "schedule", "gift", "bulk", "beneficiaries", "reseller", "rewards", "history"].includes(tabParam)) {
+      setServiceType(tabParam as ServiceType);
+    }
+  }, [searchString]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: ServiceType) => {
+    setServiceType(tab);
+    if (tab === "data") {
+      // Default tab, remove param
+      setLocation("/vtu");
+    } else {
+      setLocation(`/vtu?tab=${tab}`);
+    }
+  };
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletType>({
     queryKey: ["/api/wallet"],
+  });
+  
+  // Query for reseller site
+  const { data: resellerSite, isLoading: resellerLoading } = useQuery<ResellerSite | null>({
+    queryKey: ["/api/reseller"],
+    enabled: serviceType === "reseller",
   });
 
   const { data: plansData, isLoading: plansLoading } = useQuery<PlansApiResponse>({
@@ -1137,7 +1174,10 @@ export default function VtuPage() {
           </CardContent>
         </Card>
 
-        <Link href="/rewards" className="block">
+        <div 
+          onClick={() => handleTabChange("rewards")} 
+          className="block cursor-pointer"
+        >
           <Card className="h-full bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border-amber-200/50 dark:border-amber-800/50 hover-elevate cursor-pointer transition-all" data-testid="card-rewards-link">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between gap-4">
@@ -1160,32 +1200,69 @@ export default function VtuPage() {
               </div>
             </CardContent>
           </Card>
-        </Link>
+        </div>
       </div>
 
-      <Tabs value={serviceType} onValueChange={(v) => setServiceType(v as ServiceType)} className="mb-8">
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="data" data-testid="tab-service-data" className="flex items-center gap-2">
-            <Signal className="h-4 w-4" />
-            <span className="hidden sm:inline">Buy</span> Data
-          </TabsTrigger>
-          <TabsTrigger value="airtime" data-testid="tab-service-airtime" className="flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            <span className="hidden sm:inline">Buy</span> Airtime
-          </TabsTrigger>
-          <TabsTrigger value="schedule" data-testid="tab-service-schedule" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Schedule
-          </TabsTrigger>
-          <TabsTrigger value="gift" data-testid="tab-service-gift" className="flex items-center gap-2">
-            <Gift className="h-4 w-4" />
-            Gift
-          </TabsTrigger>
-          <TabsTrigger value="bulk" data-testid="tab-service-bulk" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Bulk
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={serviceType} onValueChange={(v) => handleTabChange(v as ServiceType)} className="mb-8">
+        {/* Primary Services Row */}
+        <div className="mb-2">
+          <p className="text-xs text-muted-foreground mb-2">Services</p>
+          <ScrollArea className="w-full">
+            <TabsList className="inline-flex w-auto min-w-full gap-1 p-1">
+              <TabsTrigger value="data" data-testid="tab-service-data" className="flex items-center gap-2 px-4">
+                <Signal className="h-4 w-4" />
+                <span>Data</span>
+              </TabsTrigger>
+              <TabsTrigger value="airtime" data-testid="tab-service-airtime" className="flex items-center gap-2 px-4">
+                <Phone className="h-4 w-4" />
+                <span>Airtime</span>
+              </TabsTrigger>
+              <TabsTrigger value="bills" data-testid="tab-service-bills" className="flex items-center gap-2 px-4">
+                <Receipt className="h-4 w-4" />
+                <span>Bills</span>
+              </TabsTrigger>
+              <TabsTrigger value="schedule" data-testid="tab-service-schedule" className="flex items-center gap-2 px-4">
+                <Calendar className="h-4 w-4" />
+                <span>Schedule</span>
+              </TabsTrigger>
+              <TabsTrigger value="gift" data-testid="tab-service-gift" className="flex items-center gap-2 px-4">
+                <Gift className="h-4 w-4" />
+                <span>Gift</span>
+              </TabsTrigger>
+              <TabsTrigger value="bulk" data-testid="tab-service-bulk" className="flex items-center gap-2 px-4">
+                <Users className="h-4 w-4" />
+                <span>Bulk</span>
+              </TabsTrigger>
+              <TabsTrigger value="beneficiaries" data-testid="tab-service-beneficiaries" className="flex items-center gap-2 px-4">
+                <UserPlus className="h-4 w-4" />
+                <span>Contacts</span>
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
+
+        {/* Business Row */}
+        <div className="mb-6">
+          <p className="text-xs text-muted-foreground mb-2">Business & Activity</p>
+          <ScrollArea className="w-full">
+            <TabsList className="inline-flex w-auto min-w-full gap-1 p-1">
+              <TabsTrigger value="reseller" data-testid="tab-service-reseller" className="flex items-center gap-2 px-4">
+                <Store className="h-4 w-4" />
+                <span>Reseller</span>
+              </TabsTrigger>
+              <TabsTrigger value="rewards" data-testid="tab-service-rewards" className="flex items-center gap-2 px-4">
+                <Award className="h-4 w-4" />
+                <span>Rewards</span>
+              </TabsTrigger>
+              <TabsTrigger value="history" data-testid="tab-service-history" className="flex items-center gap-2 px-4">
+                <History className="h-4 w-4" />
+                <span>History</span>
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
 
         <TabsContent value="data">
           <Card className="mb-8">
@@ -2283,6 +2360,229 @@ export default function VtuPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bills Tab - Cable, Electricity, Exam Pins */}
+        <TabsContent value="bills">
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Bill Payments
+              </CardTitle>
+              <CardDescription>Pay for cable TV, electricity, and exam pins</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={billType} onValueChange={(v) => setBillType(v as BillType)}>
+                <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsTrigger value="cable" data-testid="tab-bill-cable" className="flex items-center gap-2">
+                    <Tv className="h-4 w-4" />
+                    Cable TV
+                  </TabsTrigger>
+                  <TabsTrigger value="electricity" data-testid="tab-bill-electricity" className="flex items-center gap-2">
+                    <Lightbulb className="h-4 w-4" />
+                    Electricity
+                  </TabsTrigger>
+                  <TabsTrigger value="exam" data-testid="tab-bill-exam" className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    Exam Pins
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="cable">
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Tv className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p className="font-medium">Cable TV Subscriptions</p>
+                    <p className="text-sm mt-2">DStv, GOtv, Startimes coming soon</p>
+                    <Badge variant="secondary" className="mt-4">Coming Soon</Badge>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="electricity">
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p className="font-medium">Electricity Bills</p>
+                    <p className="text-sm mt-2">EKEDC, IKEDC, AEDC, and more coming soon</p>
+                    <Badge variant="secondary" className="mt-4">Coming Soon</Badge>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="exam">
+                  <div className="text-center py-12 text-muted-foreground">
+                    <GraduationCap className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p className="font-medium">Exam Result Pins</p>
+                    <p className="text-sm mt-2">WAEC, NECO, NABTEB coming soon</p>
+                    <Badge variant="secondary" className="mt-4">Coming Soon</Badge>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Beneficiaries Tab */}
+        <TabsContent value="beneficiaries">
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Saved Contacts
+              </CardTitle>
+              <CardDescription>Manage your saved phone numbers for quick transactions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {beneficiaries && beneficiaries.length > 0 ? (
+                <div className="space-y-4">
+                  {beneficiaries.map((b) => (
+                    <div
+                      key={b.id}
+                      className="p-4 rounded-md bg-muted/30 flex items-center justify-between gap-4"
+                      data-testid={`beneficiary-item-${b.id}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === b.network)?.bgColor || "bg-muted"}`}>
+                          <Phone className={`h-4 w-4 ${NETWORKS.find(n => n.id === b.network)?.textColor || "text-muted-foreground"}`} />
+                        </div>
+                        <div>
+                          <div className="font-medium">{b.name}</div>
+                          <div className="text-sm text-muted-foreground font-mono">{b.phoneNumber}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${NETWORKS.find(n => n.id === b.network)?.bgColor} ${NETWORKS.find(n => n.id === b.network)?.textColor} border-0`}>
+                          {NETWORKS.find(n => n.id === b.network)?.displayName}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteBeneficiaryMutation.mutate(b.id)}
+                          data-testid={`button-delete-beneficiary-${b.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <UserPlus className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>No saved contacts yet.</p>
+                  <p className="text-sm mt-2">Save phone numbers during transactions for quick access.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Reseller Tab */}
+        <TabsContent value="reseller">
+          {resellerLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : resellerSite ? (
+            <ResellerDashboard site={resellerSite} />
+          ) : (
+            <TierSelectionView wallet={wallet} />
+          )}
+        </TabsContent>
+
+        {/* Rewards Tab */}
+        <TabsContent value="rewards">
+          <RewardsCenter />
+        </TabsContent>
+
+        {/* History Tab */}
+        <TabsContent value="history">
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Transaction History
+                  </CardTitle>
+                  <CardDescription>View all your VTU transactions</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={txStatusFilter} onValueChange={setTxStatusFilter}>
+                    <SelectTrigger className="w-[130px]" data-testid="select-history-status">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="success">Success</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={txNetworkFilter} onValueChange={setTxNetworkFilter}>
+                    <SelectTrigger className="w-[130px]" data-testid="select-history-network">
+                      <SelectValue placeholder="Network" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Networks</SelectItem>
+                      {NETWORKS.map((n) => (
+                        <SelectItem key={n.id} value={n.id}>{n.displayName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {transactionsLoading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-20" />
+                  ))}
+                </div>
+              ) : transactions && transactions.length > 0 ? (
+                <div className="space-y-4">
+                  {transactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="p-4 rounded-md bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      data-testid={`history-tx-${tx.id}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === tx.network)?.bgColor || "bg-muted"}`}>
+                          {tx.serviceType === "data" ? (
+                            <Signal className={`h-4 w-4 ${NETWORKS.find(n => n.id === tx.network)?.textColor || "text-muted-foreground"}`} />
+                          ) : (
+                            <Phone className={`h-4 w-4 ${NETWORKS.find(n => n.id === tx.network)?.textColor || "text-muted-foreground"}`} />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium flex flex-wrap items-center gap-2">
+                            {tx.serviceType === "data" ? tx.planName : "Airtime"}
+                            <Badge className={`${NETWORKS.find(n => n.id === tx.network)?.bgColor} ${NETWORKS.find(n => n.id === tx.network)?.textColor} border-0 text-xs`}>
+                              {NETWORKS.find(n => n.id === tx.network)?.displayName}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground font-mono">{tx.phoneNumber}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {tx.createdAt && format(new Date(tx.createdAt), "MMM d, yyyy h:mm a")}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 sm:text-right">
+                        <div className="font-bold">₦{parseFloat(tx.amount || "0").toLocaleString()}</div>
+                        {getStatusBadge(tx.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <History className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>No transactions yet.</p>
+                  <p className="text-sm mt-2">Your transaction history will appear here.</p>
                 </div>
               )}
             </CardContent>

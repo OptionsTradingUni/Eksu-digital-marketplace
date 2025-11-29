@@ -57,6 +57,8 @@ import {
   validateCustomerSchema,
   createResellerSiteSchema,
   updateResellerSiteSchema,
+  createResellerWithdrawalSchema,
+  updateResellerWithdrawalSchema,
   type Order,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
@@ -1065,6 +1067,304 @@ Happy trading!`;
     }
   });
 
+  // ==================== TRANSACTION PIN ROUTES ====================
+
+  // Set up initial transaction PIN
+  app.post("/api/auth/pin/setup", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { pin, confirmPin } = req.body;
+
+      // Validate PIN format
+      if (!pin || typeof pin !== "string" || !/^\d{4,6}$/.test(pin)) {
+        return res.status(400).json({ message: "PIN must be 4-6 digits" });
+      }
+
+      if (pin !== confirmPin) {
+        return res.status(400).json({ message: "PINs do not match" });
+      }
+
+      // Check if PIN is already set
+      const pinData = await storage.getTransactionPin(userId);
+      if (pinData?.transactionPinSet) {
+        return res.status(400).json({ message: "Transaction PIN is already set. Use change PIN instead." });
+      }
+
+      // Hash and store the PIN
+      const hashedPin = await bcrypt.hash(pin, 10);
+      await storage.setTransactionPin(userId, hashedPin);
+
+      res.json({ message: "Transaction PIN set successfully", success: true });
+    } catch (error) {
+      console.error("Error setting up PIN:", error);
+      res.status(500).json({ message: "Failed to set up transaction PIN" });
+    }
+  });
+
+  // Change existing transaction PIN
+  app.post("/api/auth/pin/change", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { currentPin, newPin, confirmNewPin } = req.body;
+
+      // Validate PIN formats
+      if (!currentPin || typeof currentPin !== "string" || !/^\d{4,6}$/.test(currentPin)) {
+        return res.status(400).json({ message: "Current PIN must be 4-6 digits" });
+      }
+
+      if (!newPin || typeof newPin !== "string" || !/^\d{4,6}$/.test(newPin)) {
+        return res.status(400).json({ message: "New PIN must be 4-6 digits" });
+      }
+
+      if (newPin !== confirmNewPin) {
+        return res.status(400).json({ message: "New PINs do not match" });
+      }
+
+      // Check if user is locked out
+      const isLocked = await storage.isUserPinLocked(userId);
+      if (isLocked) {
+        return res.status(429).json({ 
+          message: "PIN is temporarily locked due to too many failed attempts. Please try again later.",
+          locked: true
+        });
+      }
+
+      // Verify current PIN
+      const pinData = await storage.getTransactionPin(userId);
+      if (!pinData?.transactionPin || !pinData.transactionPinSet) {
+        return res.status(400).json({ message: "No transaction PIN set. Use setup PIN instead." });
+      }
+
+      const isValid = await bcrypt.compare(currentPin, pinData.transactionPin);
+      if (!isValid) {
+        const attempts = await storage.incrementPinAttempts(userId);
+        const remainingAttempts = 5 - attempts;
+        
+        if (remainingAttempts <= 0) {
+          // Lock the PIN for 30 minutes
+          const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+          await storage.lockPin(userId, lockUntil);
+          return res.status(429).json({ 
+            message: "Too many failed attempts. PIN is locked for 30 minutes.",
+            locked: true
+          });
+        }
+        
+        return res.status(401).json({ 
+          message: `Incorrect PIN. ${remainingAttempts} attempts remaining.`,
+          remainingAttempts
+        });
+      }
+
+      // Reset attempts on success
+      await storage.resetPinAttempts(userId);
+
+      // Hash and store the new PIN
+      const hashedPin = await bcrypt.hash(newPin, 10);
+      await storage.setTransactionPin(userId, hashedPin);
+
+      res.json({ message: "Transaction PIN changed successfully", success: true });
+    } catch (error) {
+      console.error("Error changing PIN:", error);
+      res.status(500).json({ message: "Failed to change transaction PIN" });
+    }
+  });
+
+  // Verify transaction PIN
+  app.post("/api/auth/pin/verify", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { pin } = req.body;
+
+      // Validate PIN format
+      if (!pin || typeof pin !== "string" || !/^\d{4,6}$/.test(pin)) {
+        return res.status(400).json({ message: "PIN must be 4-6 digits" });
+      }
+
+      // Check if user is locked out
+      const isLocked = await storage.isUserPinLocked(userId);
+      if (isLocked) {
+        const pinData = await storage.getTransactionPin(userId);
+        const lockUntil = pinData?.pinLockUntil;
+        const remainingMinutes = lockUntil ? Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 60000) : 30;
+        
+        return res.status(429).json({ 
+          message: `PIN is temporarily locked. Try again in ${remainingMinutes} minutes.`,
+          locked: true,
+          remainingMinutes
+        });
+      }
+
+      // Verify PIN
+      const pinData = await storage.getTransactionPin(userId);
+      if (!pinData?.transactionPin || !pinData.transactionPinSet) {
+        return res.status(400).json({ message: "No transaction PIN set", pinRequired: false });
+      }
+
+      const isValid = await bcrypt.compare(pin, pinData.transactionPin);
+      if (!isValid) {
+        const attempts = await storage.incrementPinAttempts(userId);
+        const remainingAttempts = 5 - attempts;
+        
+        if (remainingAttempts <= 0) {
+          // Lock the PIN for 30 minutes
+          const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+          await storage.lockPin(userId, lockUntil);
+          return res.status(429).json({ 
+            message: "Too many failed attempts. PIN is locked for 30 minutes.",
+            locked: true,
+            remainingMinutes: 30
+          });
+        }
+        
+        return res.status(401).json({ 
+          message: `Incorrect PIN. ${remainingAttempts} attempts remaining.`,
+          verified: false,
+          remainingAttempts
+        });
+      }
+
+      // Reset attempts on success
+      await storage.resetPinAttempts(userId);
+
+      res.json({ verified: true, message: "PIN verified successfully" });
+    } catch (error) {
+      console.error("Error verifying PIN:", error);
+      res.status(500).json({ message: "Failed to verify PIN" });
+    }
+  });
+
+  // Get PIN status
+  app.get("/api/auth/pin/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const pinData = await storage.getTransactionPin(userId);
+      const isLocked = await storage.isUserPinLocked(userId);
+
+      let lockRemainingMinutes = 0;
+      if (isLocked && pinData?.pinLockUntil) {
+        lockRemainingMinutes = Math.ceil((new Date(pinData.pinLockUntil).getTime() - Date.now()) / 60000);
+      }
+
+      res.json({
+        pinSet: pinData?.transactionPinSet || false,
+        isLocked,
+        lockRemainingMinutes: isLocked ? lockRemainingMinutes : 0,
+        attemptsRemaining: pinData?.pinAttempts ? 5 - pinData.pinAttempts : 5,
+      });
+    } catch (error) {
+      console.error("Error getting PIN status:", error);
+      res.status(500).json({ message: "Failed to get PIN status" });
+    }
+  });
+
+  // Request PIN reset via email
+  app.post("/api/auth/pin/reset-request", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Generate 6-digit reset code
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store the code with expiration (15 minutes)
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await storage.createPasswordResetToken(userId, `PIN_RESET_${resetCode}`, expiresAt);
+
+      // Send email with reset code
+      await sendEmail({
+        to: user.email,
+        subject: "EKSUPlug - PIN Reset Code",
+        text: `Your PIN reset code is: ${resetCode}\n\nThis code expires in 15 minutes.\n\nIf you didn't request this, please ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">PIN Reset Code</h2>
+            <p>Your PIN reset code is:</p>
+            <div style="background: #f5f5f5; padding: 15px; text-align: center; font-size: 32px; letter-spacing: 8px; font-family: monospace; margin: 20px 0;">
+              ${resetCode}
+            </div>
+            <p>This code expires in <strong>15 minutes</strong>.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't request this PIN reset, please ignore this email.</p>
+          </div>
+        `,
+      });
+
+      res.json({ message: "PIN reset code sent to your email", success: true });
+    } catch (error) {
+      console.error("Error requesting PIN reset:", error);
+      res.status(500).json({ message: "Failed to send PIN reset code" });
+    }
+  });
+
+  // Confirm PIN reset with code
+  app.post("/api/auth/pin/reset-confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { code, newPin, confirmNewPin } = req.body;
+
+      // Validate inputs
+      if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
+        return res.status(400).json({ message: "Invalid reset code format" });
+      }
+
+      if (!newPin || typeof newPin !== "string" || !/^\d{4,6}$/.test(newPin)) {
+        return res.status(400).json({ message: "New PIN must be 4-6 digits" });
+      }
+
+      if (newPin !== confirmNewPin) {
+        return res.status(400).json({ message: "New PINs do not match" });
+      }
+
+      // Verify the reset code
+      const tokenKey = `PIN_RESET_${code}`;
+      const resetToken = await storage.getPasswordResetToken(tokenKey);
+      
+      if (!resetToken || resetToken.userId !== userId) {
+        return res.status(400).json({ message: "Invalid or expired reset code" });
+      }
+
+      // Mark token as used
+      await storage.markPasswordResetTokenUsed(tokenKey);
+
+      // Reset PIN attempts and set new PIN
+      await storage.resetPinAttempts(userId);
+      const hashedPin = await bcrypt.hash(newPin, 10);
+      await storage.setTransactionPin(userId, hashedPin);
+
+      res.json({ message: "Transaction PIN reset successfully", success: true });
+    } catch (error) {
+      console.error("Error resetting PIN:", error);
+      res.status(500).json({ message: "Failed to reset transaction PIN" });
+    }
+  });
+
   // ==================== EXISTING AUTH ROUTES ====================
   
   // Auth routes
@@ -1188,7 +1488,7 @@ Happy trading!`;
   app.post('/api/wallet/withdraw', isAuthenticated, requireEmailVerified, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { amount, bankName, accountNumber, accountName } = req.body;
+      const { amount, bankName, accountNumber, accountName, pin } = req.body;
 
       if (!amount || parseFloat(amount) < 500) {
         return res.status(400).json({ message: "Minimum withdrawal is 500 NGN" });
@@ -1196,6 +1496,55 @@ Happy trading!`;
 
       if (!bankName || !accountNumber || !accountName) {
         return res.status(400).json({ message: "Bank details are required" });
+      }
+
+      // Check if user has PIN set and verify it
+      const pinData = await storage.getTransactionPin(userId);
+      if (pinData?.transactionPinSet) {
+        // PIN is required
+        if (!pin) {
+          return res.status(400).json({ 
+            message: "Transaction PIN is required for withdrawals",
+            pinRequired: true
+          });
+        }
+
+        // Check if user is locked out
+        const isLocked = await storage.isUserPinLocked(userId);
+        if (isLocked) {
+          const lockUntil = pinData?.pinLockUntil;
+          const remainingMinutes = lockUntil ? Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 60000) : 30;
+          return res.status(429).json({ 
+            message: `PIN is temporarily locked. Try again in ${remainingMinutes} minutes.`,
+            locked: true,
+            remainingMinutes
+          });
+        }
+
+        // Verify PIN
+        const isValid = await bcrypt.compare(pin, pinData.transactionPin!);
+        if (!isValid) {
+          const attempts = await storage.incrementPinAttempts(userId);
+          const remainingAttempts = 5 - attempts;
+          
+          if (remainingAttempts <= 0) {
+            const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+            await storage.lockPin(userId, lockUntil);
+            return res.status(429).json({ 
+              message: "Too many failed attempts. PIN is locked for 30 minutes.",
+              locked: true,
+              remainingMinutes: 30
+            });
+          }
+          
+          return res.status(401).json({ 
+            message: `Incorrect PIN. ${remainingAttempts} attempts remaining.`,
+            remainingAttempts
+          });
+        }
+
+        // Reset attempts on success
+        await storage.resetPinAttempts(userId);
       }
 
       const wallet = await storage.getOrCreateWallet(userId);
@@ -13444,6 +13793,680 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error) {
       console.error("Error revoking API keys:", error);
       res.status(500).json({ message: "Failed to revoke API keys" });
+    }
+  });
+
+  // =====================================================
+  // RESELLER WITHDRAWAL/PAYOUT ROUTES
+  // =====================================================
+
+  // Create withdrawal request
+  app.post("/api/reseller/withdraw", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      if (site.status !== "active") {
+        return res.status(403).json({ message: "Reseller site is not active" });
+      }
+
+      // Validate request body
+      const validation = createResellerWithdrawalSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validation.error.errors 
+        });
+      }
+
+      const { amount, bankName, accountNumber, accountName } = validation.data;
+      const pin = req.body.pin;
+
+      // Check if user has PIN set and verify it
+      const pinData = await storage.getTransactionPin(userId);
+      if (pinData?.transactionPinSet) {
+        // PIN is required
+        if (!pin) {
+          return res.status(400).json({ 
+            message: "Transaction PIN is required for withdrawals",
+            pinRequired: true
+          });
+        }
+
+        // Check if user is locked out
+        const isLocked = await storage.isUserPinLocked(userId);
+        if (isLocked) {
+          const lockUntil = pinData?.pinLockUntil;
+          const remainingMinutes = lockUntil ? Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 60000) : 30;
+          return res.status(429).json({ 
+            message: `PIN is temporarily locked. Try again in ${remainingMinutes} minutes.`,
+            locked: true,
+            remainingMinutes
+          });
+        }
+
+        // Verify PIN
+        const isValid = await bcrypt.compare(pin, pinData.transactionPin!);
+        if (!isValid) {
+          const attempts = await storage.incrementPinAttempts(userId);
+          const remainingAttempts = 5 - attempts;
+          
+          if (remainingAttempts <= 0) {
+            const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+            await storage.lockPin(userId, lockUntil);
+            return res.status(429).json({ 
+              message: "Too many failed attempts. PIN is locked for 30 minutes.",
+              locked: true,
+              remainingMinutes: 30
+            });
+          }
+          
+          return res.status(401).json({ 
+            message: `Incorrect PIN. ${remainingAttempts} attempts remaining.`,
+            remainingAttempts
+          });
+        }
+
+        // Reset attempts on success
+        await storage.resetPinAttempts(userId);
+      }
+
+      // Calculate available balance
+      const totalProfit = parseFloat(site.totalProfit || "0");
+      const withdrawnAmount = parseFloat(await storage.getResellerWithdrawnAmount(site.id));
+      const availableBalance = totalProfit - withdrawnAmount;
+
+      if (amount > availableBalance) {
+        return res.status(400).json({ 
+          message: `Insufficient balance. Available: ₦${availableBalance.toLocaleString()}` 
+        });
+      }
+
+      // Determine initial status based on amount
+      // Amounts > ₦50,000 require admin approval
+      const initialStatus = amount > 50000 ? "pending" : "processing";
+
+      const withdrawal = await storage.createResellerWithdrawal({
+        resellerId: site.id,
+        amount: amount.toFixed(2),
+        bankName,
+        accountNumber,
+        accountName,
+        status: initialStatus,
+      });
+
+      res.json({
+        message: initialStatus === "pending" 
+          ? "Withdrawal request submitted. Amounts over ₦50,000 require admin approval."
+          : "Withdrawal request submitted and is being processed.",
+        withdrawal,
+        availableBalance: availableBalance - amount,
+      });
+    } catch (error) {
+      console.error("Error creating withdrawal request:", error);
+      res.status(500).json({ message: "Failed to create withdrawal request" });
+    }
+  });
+
+  // Get reseller's withdrawal history
+  app.get("/api/reseller/withdrawals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const withdrawals = await storage.getResellerWithdrawals(site.id);
+      
+      // Calculate balance summary
+      const totalProfit = parseFloat(site.totalProfit || "0");
+      const withdrawnAmount = parseFloat(await storage.getResellerWithdrawnAmount(site.id));
+      const availableBalance = totalProfit - withdrawnAmount;
+
+      res.json({
+        withdrawals,
+        summary: {
+          totalEarnings: totalProfit,
+          withdrawnAmount,
+          availableBalance,
+          pendingWithdrawals: withdrawals
+            .filter(w => w.status === "pending" || w.status === "processing")
+            .reduce((sum, w) => sum + parseFloat(w.amount), 0),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawals" });
+    }
+  });
+
+  // Admin: Get all withdrawal requests
+  app.get("/api/admin/reseller-withdrawals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const withdrawals = await storage.getAllResellerWithdrawals();
+      res.json(withdrawals);
+    } catch (error) {
+      console.error("Error fetching all withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawals" });
+    }
+  });
+
+  // Admin: Update withdrawal status (approve/reject)
+  app.patch("/api/admin/reseller-withdrawals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { id } = req.params;
+      
+      // Validate request body
+      const validation = updateResellerWithdrawalSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Validation failed", 
+          errors: validation.error.errors 
+        });
+      }
+
+      const { status, adminNote } = validation.data;
+
+      const withdrawal = await storage.getResellerWithdrawalById(id);
+      if (!withdrawal) {
+        return res.status(404).json({ message: "Withdrawal not found" });
+      }
+
+      // Don't allow changes to already completed/failed/rejected withdrawals
+      if (["completed", "failed", "rejected"].includes(withdrawal.status || "")) {
+        return res.status(400).json({ 
+          message: `Cannot update withdrawal with status: ${withdrawal.status}` 
+        });
+      }
+
+      const updatedWithdrawal = await storage.updateResellerWithdrawalStatus(
+        id, 
+        status, 
+        adminNote, 
+        userId
+      );
+
+      res.json({
+        message: `Withdrawal ${status === "completed" ? "approved" : status === "rejected" ? "rejected" : "updated"} successfully`,
+        withdrawal: updatedWithdrawal,
+      });
+    } catch (error) {
+      console.error("Error updating withdrawal:", error);
+      res.status(500).json({ message: "Failed to update withdrawal" });
+    }
+  });
+
+  // =====================================================
+  // PUBLIC STORE ROUTES - No authentication required
+  // These endpoints power the public reseller storefront
+  // =====================================================
+
+  // Get reseller site config by subdomain (public)
+  app.get("/api/store/:subdomain", async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+      
+      if (!subdomain || subdomain.length < 3) {
+        return res.status(400).json({ message: "Invalid subdomain" });
+      }
+
+      const site = await storage.getResellerSiteBySubdomain(subdomain.toLowerCase());
+      
+      if (!site) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      if (site.status !== "active") {
+        return res.status(403).json({ message: "Store is not active" });
+      }
+
+      // Return only public fields, hide sensitive data
+      res.json({
+        id: site.id,
+        siteName: site.siteName,
+        siteDescription: site.siteDescription,
+        logoUrl: site.logoUrl,
+        faviconUrl: site.faviconUrl,
+        primaryColor: site.primaryColor,
+        secondaryColor: site.secondaryColor,
+        contactEmail: site.contactEmail,
+        contactPhone: site.contactPhone,
+        whatsappNumber: site.whatsappNumber,
+        tier: site.tier,
+        subdomain: site.subdomain,
+      });
+    } catch (error) {
+      console.error("Error fetching store config:", error);
+      res.status(500).json({ message: "Failed to fetch store configuration" });
+    }
+  });
+
+  // Get VTU plans with reseller pricing (public)
+  app.get("/api/store/:subdomain/plans", async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+      
+      if (!subdomain || subdomain.length < 3) {
+        return res.status(400).json({ message: "Invalid subdomain" });
+      }
+
+      const site = await storage.getResellerSiteBySubdomain(subdomain.toLowerCase());
+      
+      if (!site) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      if (site.status !== "active") {
+        return res.status(403).json({ message: "Store is not active" });
+      }
+
+      // Get tier-based profit margin
+      const tierMargins: Record<string, number> = {
+        starter: 0.05,    // 5%
+        business: 0.07,   // 7%
+        enterprise: 0.10, // 10%
+      };
+      const profitMargin = tierMargins[site.tier] || 0.05;
+
+      // Get custom pricing if any
+      const customPricing = await storage.getResellerPricing(site.id);
+      const customPriceMap = new Map(
+        customPricing.map(p => [`${p.serviceType}:${p.serviceId}`, p])
+      );
+
+      // Get base data plans
+      const basePlans = getAllDataPlans();
+      
+      // Apply reseller pricing
+      const plans = basePlans.map(plan => {
+        const customPrice = customPriceMap.get(`data:${plan.id}`);
+        
+        if (customPrice && customPrice.isActive) {
+          return {
+            ...plan,
+            sellingPrice: parseFloat(customPrice.sellingPrice),
+            resellerMargin: parseFloat(customPrice.profitMargin),
+          };
+        }
+        
+        // Apply tier-based margin on top of base price
+        const resellerMarkup = Math.ceil(plan.apiPrice * profitMargin);
+        const resellerSellingPrice = plan.sellingPrice + resellerMarkup;
+        
+        return {
+          ...plan,
+          sellingPrice: resellerSellingPrice,
+          resellerMargin: resellerMarkup,
+        };
+      });
+
+      // Get network info for airtime pricing
+      const networks = NETWORK_INFO;
+
+      res.json({
+        plans,
+        networks,
+        discount: getDiscountInfo(),
+        profitMargin: Math.round(profitMargin * 100),
+      });
+    } catch (error) {
+      console.error("Error fetching store plans:", error);
+      res.status(500).json({ message: "Failed to fetch plans" });
+    }
+  });
+
+  // Process guest VTU purchase (public)
+  app.post("/api/store/:subdomain/purchase", async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+      const { serviceType, planId, phoneNumber, email, amount } = req.body;
+      
+      if (!subdomain || subdomain.length < 3) {
+        return res.status(400).json({ message: "Invalid subdomain" });
+      }
+
+      const site = await storage.getResellerSiteBySubdomain(subdomain.toLowerCase());
+      
+      if (!site) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      if (site.status !== "active") {
+        return res.status(403).json({ message: "Store is not active" });
+      }
+
+      // Validate input
+      if (!serviceType || !phoneNumber) {
+        return res.status(400).json({ message: "Service type and phone number are required" });
+      }
+
+      if (!isValidNigerianPhone(phoneNumber)) {
+        return res.status(400).json({ message: "Invalid Nigerian phone number" });
+      }
+
+      if (serviceType !== "data" && serviceType !== "airtime") {
+        return res.status(400).json({ message: "Invalid service type. Must be 'data' or 'airtime'" });
+      }
+
+      // Calculate pricing
+      let purchaseAmount: number;
+      let costPrice: number;
+      let planDetails: DataPlan | null = null;
+
+      const tierMargins: Record<string, number> = {
+        starter: 0.05,
+        business: 0.07,
+        enterprise: 0.10,
+      };
+      const profitMargin = tierMargins[site.tier] || 0.05;
+
+      if (serviceType === "data") {
+        if (!planId) {
+          return res.status(400).json({ message: "Plan ID is required for data purchase" });
+        }
+        
+        const plan = getDataPlanById(planId);
+        if (!plan) {
+          return res.status(400).json({ message: "Invalid data plan" });
+        }
+
+        planDetails = plan;
+        costPrice = plan.apiPrice;
+        
+        // Check for custom pricing
+        const customPricing = await storage.getResellerPricing(site.id);
+        const customPrice = customPricing.find(p => p.serviceType === "data" && p.serviceId === planId);
+        
+        if (customPrice && customPrice.isActive) {
+          purchaseAmount = parseFloat(customPrice.sellingPrice);
+        } else {
+          const resellerMarkup = Math.ceil(plan.apiPrice * profitMargin);
+          purchaseAmount = plan.sellingPrice + resellerMarkup;
+        }
+      } else {
+        // Airtime
+        if (!amount || amount < 50 || amount > 50000) {
+          return res.status(400).json({ message: "Airtime amount must be between ₦50 and ₦50,000" });
+        }
+        
+        costPrice = amount * 0.98; // 2% discount
+        const resellerMarkup = Math.ceil(amount * profitMargin);
+        purchaseAmount = amount + resellerMarkup;
+      }
+
+      // Calculate reseller profit
+      const resellerProfit = purchaseAmount - (costPrice + Math.ceil(costPrice * 0.02)); // Platform takes ~2%
+      const platformFee = Math.ceil(costPrice * 0.02);
+
+      // Check daily transaction limit
+      const dailyLimit = parseFloat(site.dailyTransactionLimit || "50000");
+      if (purchaseAmount > dailyLimit) {
+        return res.status(400).json({ 
+          message: `Transaction exceeds daily limit of ₦${dailyLimit.toLocaleString()}` 
+        });
+      }
+
+      // Check if Squad is configured
+      if (!isSquadConfigured()) {
+        return res.status(503).json({ 
+          message: "Payment service is temporarily unavailable" 
+        });
+      }
+
+      // Generate payment reference
+      const paymentReference = generatePaymentReference();
+
+      // Create pending transaction
+      const transaction = await storage.createResellerTransaction({
+        resellerId: site.id,
+        customerPhone: phoneNumber,
+        customerEmail: email || null,
+        serviceType,
+        serviceId: planId || `airtime_${amount}`,
+        amount: purchaseAmount.toString(),
+        costPrice: costPrice.toString(),
+        resellerProfit: resellerProfit.toString(),
+        platformFee: platformFee.toString(),
+        status: "pending",
+        reference: paymentReference,
+      });
+
+      // Track or update customer
+      await storage.getOrCreateResellerCustomer(site.id, phoneNumber, email || undefined);
+
+      // Get callback URL
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.get("host");
+      const callbackUrl = `${protocol}://${host}/api/store/${subdomain}/payment-callback?ref=${paymentReference}`;
+
+      // Initialize Squad payment
+      const paymentResult = await squad.initializePayment({
+        amount: purchaseAmount,
+        email: email || `${phoneNumber}@guest.eksuplug.com`,
+        customerName: phoneNumber,
+        transactionRef: paymentReference,
+        callbackUrl,
+        paymentChannels: ["card", "bank", "ussd", "transfer"],
+        metadata: {
+          storeSubdomain: subdomain,
+          resellerId: site.id,
+          transactionId: transaction.id,
+          serviceType,
+          planId: planId || null,
+          phoneNumber,
+          amount: purchaseAmount,
+        },
+      });
+
+      res.json({
+        success: true,
+        checkoutUrl: paymentResult.checkoutUrl,
+        transactionReference: paymentResult.transactionRef,
+        amount: purchaseAmount,
+        serviceSummary: serviceType === "data" && planDetails
+          ? `${planDetails.name} - ${planDetails.dataAmount}`
+          : `₦${amount} Airtime`,
+      });
+    } catch (error: any) {
+      console.error("Error processing store purchase:", error);
+      res.status(500).json({ 
+        message: error.userMessage || "Failed to process purchase" 
+      });
+    }
+  });
+
+  // Handle Squad payment callback for store purchases (public)
+  app.get("/api/store/:subdomain/payment-callback", async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+      const { ref, reference, transaction_ref } = req.query;
+      const transactionRef = (ref || reference || transaction_ref) as string;
+
+      if (!transactionRef) {
+        return res.redirect(`/store/${subdomain}?status=error&message=Invalid+reference`);
+      }
+
+      // Verify payment with Squad
+      const verificationResult = await squad.verifyTransaction(transactionRef);
+
+      if (verificationResult.transactionStatus !== "success") {
+        return res.redirect(
+          `/store/${subdomain}?status=failed&message=Payment+not+completed`
+        );
+      }
+
+      // Get transaction from database
+      const transactions = await storage.getResellerTransactions(
+        verificationResult.email?.includes("@guest.eksuplug.com") 
+          ? undefined 
+          : verificationResult.email
+      );
+      const transaction = transactions.find(t => t.reference === transactionRef);
+
+      if (!transaction) {
+        console.error("Store transaction not found for ref:", transactionRef);
+        return res.redirect(`/store/${subdomain}?status=error&message=Transaction+not+found`);
+      }
+
+      // Check if already processed
+      if (transaction.status === "completed") {
+        return res.redirect(
+          `/store/${subdomain}?status=success&message=Already+processed&ref=${transactionRef}`
+        );
+      }
+
+      // Get transaction metadata
+      const metadata = verificationResult.metadata || {};
+      const { serviceType, planId, phoneNumber, amount } = metadata as any;
+
+      // Execute VTU purchase
+      let purchaseResult;
+      try {
+        if (serviceType === "data" && planId) {
+          const plan = getDataPlanById(planId);
+          if (plan) {
+            purchaseResult = await purchaseData(plan.network, phoneNumber, plan.planCode);
+          }
+        } else if (serviceType === "airtime" && phoneNumber) {
+          const network = detectNetwork(phoneNumber) || "mtn";
+          const airtimeAmount = parseFloat(transaction.amount) / 1.05; // Approximate original amount
+          purchaseResult = await purchaseAirtime(network, phoneNumber, airtimeAmount);
+        }
+      } catch (purchaseError: any) {
+        console.error("VTU purchase error:", purchaseError);
+        await storage.updateResellerTransaction(transaction.id, {
+          status: "failed",
+          apiResponse: { error: purchaseError.message },
+        });
+        return res.redirect(
+          `/store/${subdomain}?status=failed&message=Service+delivery+failed`
+        );
+      }
+
+      if (purchaseResult?.success) {
+        // Update transaction as completed
+        await storage.updateResellerTransaction(transaction.id, {
+          status: "completed",
+          apiResponse: purchaseResult,
+        });
+
+        return res.redirect(
+          `/store/${subdomain}?status=success&ref=${transactionRef}&message=Purchase+successful`
+        );
+      } else {
+        await storage.updateResellerTransaction(transaction.id, {
+          status: "failed",
+          apiResponse: purchaseResult,
+        });
+        return res.redirect(
+          `/store/${subdomain}?status=failed&message=Service+delivery+failed`
+        );
+      }
+    } catch (error) {
+      console.error("Error processing store payment callback:", error);
+      const { subdomain } = req.params;
+      res.redirect(`/store/${subdomain}?status=error&message=Processing+error`);
+    }
+  });
+
+  // Webhook for Squad payment notifications for store (public)
+  app.post("/api/store/:subdomain/webhook", async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+      const signature = req.headers["x-squad-encrypted-body"] as string;
+      const payload = req.body;
+
+      // Get reseller site for webhook verification
+      const site = await storage.getResellerSiteBySubdomain(subdomain.toLowerCase());
+      
+      if (!site) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      // Verify webhook signature if secret is set
+      if (site.apiWebhookSecret && signature) {
+        const isValid = squad.verifyWebhookSignature(
+          JSON.stringify(payload), 
+          signature, 
+          site.apiWebhookSecret
+        );
+        if (!isValid) {
+          return res.status(401).json({ message: "Invalid webhook signature" });
+        }
+      }
+
+      // Process webhook
+      const { event, data } = payload;
+
+      if (event === "charge_successful" || event === "charge.success") {
+        const transactionRef = data?.transaction_ref || data?.reference;
+        
+        if (transactionRef) {
+          // Find and update transaction
+          const transactions = await storage.getResellerTransactions(site.id);
+          const transaction = transactions.find(t => t.reference === transactionRef);
+
+          if (transaction && transaction.status === "pending") {
+            // Execute VTU purchase
+            const metadata = data?.metadata || {};
+            const { serviceType, planId, phoneNumber } = metadata;
+
+            let purchaseResult;
+            if (serviceType === "data" && planId) {
+              const plan = getDataPlanById(planId);
+              if (plan) {
+                purchaseResult = await purchaseData(plan.network, phoneNumber, plan.planCode);
+              }
+            } else if (serviceType === "airtime") {
+              const network = detectNetwork(phoneNumber) || "mtn";
+              const airtimeAmount = parseFloat(transaction.amount) / 1.05;
+              purchaseResult = await purchaseAirtime(network, phoneNumber, airtimeAmount);
+            }
+
+            await storage.updateResellerTransaction(transaction.id, {
+              status: purchaseResult?.success ? "completed" : "failed",
+              apiResponse: purchaseResult,
+            });
+          }
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Error processing store webhook:", error);
+      res.status(500).json({ message: "Webhook processing failed" });
     }
   });
 

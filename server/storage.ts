@@ -235,12 +235,14 @@ import {
   resellerPricing,
   resellerTransactions,
   resellerCustomers,
+  resellerWithdrawals,
   type ResellerSite,
   type InsertResellerSite,
   type ResellerPricing,
   type InsertResellerPricing,
   type ResellerTransaction,
   type ResellerCustomer,
+  type ResellerWithdrawal,
   rewardPoints,
   rewardTransactions,
   type RewardPoints,
@@ -669,6 +671,8 @@ export interface IStorage {
   createScheduledPurchase(data: InsertScheduledVtuPurchase): Promise<ScheduledVtuPurchase>;
   updateScheduledPurchase(id: string, data: Partial<ScheduledVtuPurchase>): Promise<ScheduledVtuPurchase>;
   deleteScheduledPurchase(id: string): Promise<void>;
+  getActiveScheduledPurchases(): Promise<(ScheduledVtuPurchase & { user: User })[]>;
+  pauseScheduledPurchase(id: string, reason?: string): Promise<ScheduledVtuPurchase>;
   
   // Gift Data operations
   getGiftsByUser(userId: string): Promise<GiftData[]>;
@@ -851,6 +855,22 @@ export interface IStorage {
   getResellerPricing(resellerId: string): Promise<ResellerPricing[]>;
   setResellerPricing(data: { resellerId: string; serviceType: string; serviceId: string; costPrice: string; sellingPrice: string; profitMargin: string }): Promise<ResellerPricing>;
   deleteResellerPricing(id: string): Promise<void>;
+
+  // Reseller withdrawal operations
+  createResellerWithdrawal(data: { resellerId: string; amount: string; bankName: string; accountNumber: string; accountName: string; status?: "pending" | "processing" }): Promise<ResellerWithdrawal>;
+  getResellerWithdrawals(resellerId: string): Promise<ResellerWithdrawal[]>;
+  getAllResellerWithdrawals(): Promise<(ResellerWithdrawal & { reseller: ResellerSite })[]>;
+  getResellerWithdrawalById(id: string): Promise<ResellerWithdrawal | undefined>;
+  updateResellerWithdrawalStatus(id: string, status: "pending" | "processing" | "completed" | "failed" | "rejected", adminNote?: string, processedBy?: string): Promise<ResellerWithdrawal>;
+  getResellerWithdrawnAmount(resellerId: string): Promise<string>;
+
+  // Transaction PIN operations
+  setTransactionPin(userId: string, hashedPin: string): Promise<User>;
+  getTransactionPin(userId: string): Promise<{ transactionPin: string | null; transactionPinSet: boolean | null; pinAttempts: number | null; pinLockUntil: Date | null } | undefined>;
+  incrementPinAttempts(userId: string): Promise<number>;
+  resetPinAttempts(userId: string): Promise<void>;
+  lockPin(userId: string, lockUntil: Date): Promise<void>;
+  isUserPinLocked(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4757,6 +4777,37 @@ export class DatabaseStorage implements IStorage {
     await db.delete(scheduledVtuPurchases).where(eq(scheduledVtuPurchases.id, id));
   }
 
+  async getActiveScheduledPurchases(): Promise<(ScheduledVtuPurchase & { user: User })[]> {
+    const now = new Date();
+    const results = await db
+      .select()
+      .from(scheduledVtuPurchases)
+      .innerJoin(users, eq(scheduledVtuPurchases.userId, users.id))
+      .where(
+        and(
+          eq(scheduledVtuPurchases.status, 'active'),
+          sql`${scheduledVtuPurchases.nextRunAt} <= ${now}`
+        )
+      );
+    
+    return results.map(r => ({
+      ...r.scheduled_vtu_purchases,
+      user: r.users,
+    }));
+  }
+
+  async pauseScheduledPurchase(id: string, reason?: string): Promise<ScheduledVtuPurchase> {
+    const [updated] = await db
+      .update(scheduledVtuPurchases)
+      .set({ 
+        status: 'paused',
+        updatedAt: new Date(),
+      })
+      .where(eq(scheduledVtuPurchases.id, id))
+      .returning();
+    return updated;
+  }
+
   // Gift Data operations
   async getGiftsByUser(userId: string): Promise<GiftData[]> {
     return await db
@@ -7042,6 +7093,181 @@ export class DatabaseStorage implements IStorage {
     await db.update(resellerPricing)
       .set({ isActive: false })
       .where(eq(resellerPricing.id, id));
+  }
+
+  // ========================================
+  // Reseller Withdrawal Operations
+  // ========================================
+
+  async createResellerWithdrawal(data: {
+    resellerId: string;
+    amount: string;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    status?: "pending" | "processing";
+  }): Promise<ResellerWithdrawal> {
+    const reference = `WD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const [withdrawal] = await db.insert(resellerWithdrawals).values({
+      resellerId: data.resellerId,
+      amount: data.amount,
+      bankName: data.bankName,
+      accountNumber: data.accountNumber,
+      accountName: data.accountName,
+      status: data.status || "pending",
+      reference,
+    }).returning();
+    return withdrawal;
+  }
+
+  async getResellerWithdrawals(resellerId: string): Promise<ResellerWithdrawal[]> {
+    return await db.select()
+      .from(resellerWithdrawals)
+      .where(eq(resellerWithdrawals.resellerId, resellerId))
+      .orderBy(desc(resellerWithdrawals.createdAt));
+  }
+
+  async getAllResellerWithdrawals(): Promise<(ResellerWithdrawal & { reseller: ResellerSite })[]> {
+    const result = await db.select()
+      .from(resellerWithdrawals)
+      .innerJoin(resellerSites, eq(resellerWithdrawals.resellerId, resellerSites.id))
+      .orderBy(desc(resellerWithdrawals.createdAt));
+    
+    return result.map(row => ({
+      ...row.reseller_withdrawals,
+      reseller: row.reseller_sites,
+    }));
+  }
+
+  async getResellerWithdrawalById(id: string): Promise<ResellerWithdrawal | undefined> {
+    const [withdrawal] = await db.select()
+      .from(resellerWithdrawals)
+      .where(eq(resellerWithdrawals.id, id));
+    return withdrawal;
+  }
+
+  async updateResellerWithdrawalStatus(
+    id: string, 
+    status: "pending" | "processing" | "completed" | "failed" | "rejected",
+    adminNote?: string, 
+    processedBy?: string
+  ): Promise<ResellerWithdrawal> {
+    const updateData: Partial<ResellerWithdrawal> = { status };
+    
+    if (adminNote !== undefined) {
+      updateData.adminNote = adminNote;
+    }
+    
+    if (processedBy) {
+      updateData.processedBy = processedBy;
+    }
+    
+    if (status === "completed" || status === "failed" || status === "rejected") {
+      updateData.processedAt = new Date();
+    }
+    
+    const [withdrawal] = await db.update(resellerWithdrawals)
+      .set(updateData)
+      .where(eq(resellerWithdrawals.id, id))
+      .returning();
+    return withdrawal;
+  }
+
+  async getResellerWithdrawnAmount(resellerId: string): Promise<string> {
+    const [result] = await db.select({
+      totalWithdrawn: sql<string>`COALESCE(SUM(${resellerWithdrawals.amount}), 0)::text`
+    })
+      .from(resellerWithdrawals)
+      .where(and(
+        eq(resellerWithdrawals.resellerId, resellerId),
+        or(
+          eq(resellerWithdrawals.status, "completed"),
+          eq(resellerWithdrawals.status, "processing")
+        )
+      ));
+    return result?.totalWithdrawn || "0.00";
+  }
+
+  // Transaction PIN operations
+  async setTransactionPin(userId: string, hashedPin: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        transactionPin: hashedPin,
+        transactionPinSet: true,
+        pinAttempts: 0,
+        pinLockUntil: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    if (!user) {
+      throw new Error(`User ${userId} not found`);
+    }
+    
+    return user;
+  }
+
+  async getTransactionPin(userId: string): Promise<{ transactionPin: string | null; transactionPinSet: boolean | null; pinAttempts: number | null; pinLockUntil: Date | null } | undefined> {
+    const [result] = await db
+      .select({
+        transactionPin: users.transactionPin,
+        transactionPinSet: users.transactionPinSet,
+        pinAttempts: users.pinAttempts,
+        pinLockUntil: users.pinLockUntil,
+      })
+      .from(users)
+      .where(eq(users.id, userId));
+    
+    return result;
+  }
+
+  async incrementPinAttempts(userId: string): Promise<number> {
+    const [result] = await db
+      .update(users)
+      .set({
+        pinAttempts: sql`COALESCE(${users.pinAttempts}, 0) + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning({ pinAttempts: users.pinAttempts });
+    
+    return result?.pinAttempts ?? 0;
+  }
+
+  async resetPinAttempts(userId: string): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        pinAttempts: 0,
+        pinLockUntil: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async lockPin(userId: string, lockUntil: Date): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        pinLockUntil: lockUntil,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async isUserPinLocked(userId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ pinLockUntil: users.pinLockUntil })
+      .from(users)
+      .where(eq(users.id, userId));
+    
+    if (!result?.pinLockUntil) {
+      return false;
+    }
+    
+    return new Date() < result.pinLockUntil;
   }
 }
 

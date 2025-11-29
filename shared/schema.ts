@@ -85,6 +85,11 @@ export const users = pgTable("users", {
   isBanned: boolean("is_banned").default(false),
   emailVerified: boolean("email_verified").default(false),
   banReason: text("ban_reason"),
+  // Transaction PIN for wallet security
+  transactionPin: varchar("transaction_pin", { length: 100 }), // Hashed with bcrypt
+  transactionPinSet: boolean("transaction_pin_set").default(false),
+  pinAttempts: integer("pin_attempts").default(0),
+  pinLockUntil: timestamp("pin_lock_until"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1784,6 +1789,68 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+// Transaction PIN schemas
+export const setupPinSchema = z.object({
+  pin: z.string()
+    .min(4, "PIN must be at least 4 digits")
+    .max(6, "PIN must be at most 6 digits")
+    .regex(/^\d+$/, "PIN must contain only numbers"),
+  confirmPin: z.string()
+    .min(4, "Confirm PIN must be at least 4 digits")
+    .max(6, "Confirm PIN must be at most 6 digits")
+    .regex(/^\d+$/, "Confirm PIN must contain only numbers"),
+}).refine((data) => data.pin === data.confirmPin, {
+  message: "PINs do not match",
+  path: ["confirmPin"],
+});
+
+export const changePinSchema = z.object({
+  currentPin: z.string()
+    .min(4, "Current PIN must be at least 4 digits")
+    .max(6, "Current PIN must be at most 6 digits")
+    .regex(/^\d+$/, "Current PIN must contain only numbers"),
+  newPin: z.string()
+    .min(4, "New PIN must be at least 4 digits")
+    .max(6, "New PIN must be at most 6 digits")
+    .regex(/^\d+$/, "New PIN must contain only numbers"),
+  confirmNewPin: z.string()
+    .min(4, "Confirm PIN must be at least 4 digits")
+    .max(6, "Confirm PIN must be at most 6 digits")
+    .regex(/^\d+$/, "Confirm PIN must contain only numbers"),
+}).refine((data) => data.newPin === data.confirmNewPin, {
+  message: "New PINs do not match",
+  path: ["confirmNewPin"],
+});
+
+export const verifyPinSchema = z.object({
+  pin: z.string()
+    .min(4, "PIN must be at least 4 digits")
+    .max(6, "PIN must be at most 6 digits")
+    .regex(/^\d+$/, "PIN must contain only numbers"),
+});
+
+export const resetPinRequestSchema = z.object({});
+
+export const resetPinConfirmSchema = z.object({
+  code: z.string().length(6, "Reset code must be 6 digits"),
+  newPin: z.string()
+    .min(4, "New PIN must be at least 4 digits")
+    .max(6, "New PIN must be at most 6 digits")
+    .regex(/^\d+$/, "New PIN must contain only numbers"),
+  confirmNewPin: z.string()
+    .min(4, "Confirm PIN must be at least 4 digits")
+    .max(6, "Confirm PIN must be at most 6 digits")
+    .regex(/^\d+$/, "Confirm PIN must contain only numbers"),
+}).refine((data) => data.newPin === data.confirmNewPin, {
+  message: "New PINs do not match",
+  path: ["confirmNewPin"],
+});
+
+export type SetupPinInput = z.infer<typeof setupPinSchema>;
+export type ChangePinInput = z.infer<typeof changePinSchema>;
+export type VerifyPinInput = z.infer<typeof verifyPinSchema>;
+export type ResetPinConfirmInput = z.infer<typeof resetPinConfirmSchema>;
+
 // TypeScript types for auth
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -1979,12 +2046,15 @@ export const vtuTransactions = pgTable("vtu_transactions", {
   smedataResponse: jsonb("smedata_response"), // Full API response for debugging
   errorMessage: text("error_message"),
   walletTransactionId: varchar("wallet_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  scheduleId: varchar("schedule_id"), // Reference to scheduled purchase that triggered this transaction
+  isScheduledPurchase: boolean("is_scheduled_purchase").default(false), // Flag for scheduled purchases
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
 }, (table) => [
   index("vtu_transactions_user_idx").on(table.userId),
   index("vtu_transactions_status_idx").on(table.status),
   index("vtu_transactions_created_idx").on(table.createdAt),
+  index("vtu_transactions_schedule_idx").on(table.scheduleId),
 ]);
 
 // VTU Insert schemas
@@ -3408,6 +3478,63 @@ export type ResellerPricing = typeof resellerPricing.$inferSelect;
 export type InsertResellerPricing = z.infer<typeof insertResellerPricingSchema>;
 export type ResellerTransaction = typeof resellerTransactions.$inferSelect;
 export type ResellerCustomer = typeof resellerCustomers.$inferSelect;
+
+// ===========================================
+// RESELLER WITHDRAWALS/PAYOUTS
+// ===========================================
+
+// Reseller withdrawal status enum
+export const resellerWithdrawalStatusEnum = pgEnum("reseller_withdrawal_status", ["pending", "processing", "completed", "failed", "rejected"]);
+
+// Reseller withdrawals table
+export const resellerWithdrawals = pgTable("reseller_withdrawals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId: varchar("reseller_id").notNull().references(() => resellerSites.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  bankName: varchar("bank_name", { length: 100 }).notNull(),
+  accountNumber: varchar("account_number", { length: 20 }).notNull(),
+  accountName: varchar("account_name", { length: 200 }).notNull(),
+  status: resellerWithdrawalStatusEnum("status").default("pending"),
+  adminNote: text("admin_note"),
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: "set null" }),
+  processedAt: timestamp("processed_at"),
+  reference: varchar("reference", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("reseller_withdrawals_reseller_idx").on(table.resellerId),
+  index("reseller_withdrawals_status_idx").on(table.status),
+  index("reseller_withdrawals_created_idx").on(table.createdAt),
+]);
+
+// Insert schema for reseller withdrawals
+export const insertResellerWithdrawalSchema = createInsertSchema(resellerWithdrawals).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  processedBy: true,
+  adminNote: true,
+  reference: true,
+});
+
+// Create reseller withdrawal request schema (for API validation)
+export const createResellerWithdrawalSchema = z.object({
+  amount: z.number().min(1000, "Minimum withdrawal is ₦1,000"),
+  bankName: z.string().min(2, "Bank name is required").max(100),
+  accountNumber: z.string().min(10, "Account number must be 10 digits").max(20),
+  accountName: z.string().min(2, "Account name is required").max(200),
+});
+
+// Admin update withdrawal status schema
+export const updateResellerWithdrawalSchema = z.object({
+  status: z.enum(["pending", "processing", "completed", "failed", "rejected"]),
+  adminNote: z.string().max(500).optional(),
+});
+
+// Reseller withdrawal types
+export type ResellerWithdrawal = typeof resellerWithdrawals.$inferSelect;
+export type InsertResellerWithdrawal = z.infer<typeof insertResellerWithdrawalSchema>;
+export type CreateResellerWithdrawalInput = z.infer<typeof createResellerWithdrawalSchema>;
+export type UpdateResellerWithdrawalInput = z.infer<typeof updateResellerWithdrawalSchema>;
 
 // ===========================================
 // EXAM PINS PURCHASE SYSTEM

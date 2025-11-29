@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,6 +15,15 @@ import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { BackToTop } from "@/components/BackToTop";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+
+// Redirect component for backwards compatibility
+function RedirectToVtuTab({ tab }: { tab: string }) {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation(`/vtu?tab=${tab}`);
+  }, [setLocation, tab]);
+  return null;
+}
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Landing = lazy(() => import("@/pages/landing"));
@@ -50,8 +59,7 @@ const StudyMaterialsPage = lazy(() => import("@/pages/study-materials"));
 const HostelsPage = lazy(() => import("@/pages/hostels"));
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 const ExplorePage = lazy(() => import("@/pages/explore"));
-const ResellerPage = lazy(() => import("@/pages/reseller"));
-const RewardsPage = lazy(() => import("@/pages/rewards"));
+const StorePage = lazy(() => import("@/pages/store"));
 
 function PageLoadingSpinner() {
   return (
@@ -68,10 +76,11 @@ function Router() {
   const { isAuthenticated, isLoading, isError, isEmailVerified, isAdmin } = useAuth();
   const [location] = useLocation();
 
-  // Check if current path is a public route (secret messages or email verification)
+  // Check if current path is a public route (secret messages, email verification, or store)
   const isPublicSecretRoute = location === '/secret' || location.startsWith('/secret/');
   const isVerifyEmailRoute = location === '/verify-email' || location.startsWith('/verify-email');
-  const isPublicRoute = isPublicSecretRoute || isVerifyEmailRoute;
+  const isPublicStoreRoute = location.startsWith('/store/');
+  const isPublicRoute = isPublicSecretRoute || isVerifyEmailRoute || isPublicStoreRoute;
 
   // Show loading spinner while checking authentication (but not for public routes)
   if (isLoading && !isPublicRoute) {
@@ -91,6 +100,28 @@ function Router() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoadingSpinner />}>
           <VerifyEmailPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  // Handle public store route - accessible without authentication
+  if (isPublicStoreRoute) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoadingSpinner />}>
+          <Switch>
+            <Route path="/store/:subdomain" component={() => (
+              <ErrorBoundary>
+                <StorePage />
+              </ErrorBoundary>
+            )} />
+            <Route component={() => (
+              <ErrorBoundary>
+                <NotFound />
+              </ErrorBoundary>
+            )} />
+          </Switch>
         </Suspense>
       </ErrorBoundary>
     );
@@ -257,16 +288,9 @@ function Router() {
                 <VtuPage />
               </ErrorBoundary>
             )} />
-            <Route path="/reseller" component={() => (
-              <ErrorBoundary>
-                <ResellerPage />
-              </ErrorBoundary>
-            )} />
-            <Route path="/rewards" component={() => (
-              <ErrorBoundary>
-                <RewardsPage />
-              </ErrorBoundary>
-            )} />
+            {/* Redirects for backwards compatibility - reseller and rewards are now tabs in VTU */}
+            <Route path="/reseller" component={() => <RedirectToVtuTab tab="reseller" />} />
+            <Route path="/rewards" component={() => <RedirectToVtuTab tab="rewards" />} />
             <Route path="/settings" component={() => (
               <ErrorBoundary>
                 <SettingsPage />
