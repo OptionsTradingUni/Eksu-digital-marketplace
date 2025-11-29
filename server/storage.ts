@@ -334,7 +334,9 @@ export interface IStorage {
   
   // Transaction operations
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  updateTransaction(id: string, data: { status: string }): Promise<Transaction>;
   getUserTransactions(walletId: string): Promise<Transaction[]>;
+  getUserOrders(userId: string, role: 'buyer' | 'seller'): Promise<Order[]>;
   
   // Welcome bonus operations
   createWelcomeBonus(userId: string, amount: string): Promise<WelcomeBonus>;
@@ -1502,6 +1504,23 @@ export class DatabaseStorage implements IStorage {
       .from(transactions)
       .where(eq(transactions.walletId, walletId))
       .orderBy(desc(transactions.createdAt));
+  }
+
+  async updateTransaction(id: string, data: { status: string }): Promise<Transaction> {
+    const [updated] = await db
+      .update(transactions)
+      .set({ status: data.status })
+      .where(eq(transactions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getUserOrders(userId: string, role: 'buyer' | 'seller'): Promise<Order[]> {
+    if (role === 'buyer') {
+      return this.getBuyerOrders(userId);
+    } else {
+      return this.getSellerOrders(userId);
+    }
   }
 
   // Welcome bonus operations

@@ -247,7 +247,8 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
   "welcome_bonus", "referral_bonus", "login_reward", "deposit", "sale", "purchase", 
   "boost_payment", "featured_payment", "escrow_hold", "escrow_release", "escrow_fee",
   "refund", "withdrawal", "agent_commission", "platform_fee", "security_deposit_lock",
-  "security_deposit_unlock", "negotiation_accepted", "payment_fee"
+  "security_deposit_unlock", "negotiation_accepted", "payment_fee", "credit",
+  "reseller_setup", "api_access_fee", "vtu_purchase", "betting_stake", "betting_win"
 ]);
 
 // Wallet transactions

@@ -57,6 +57,7 @@ import {
   validateCustomerSchema,
   createResellerSiteSchema,
   updateResellerSiteSchema,
+  type Order,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
@@ -1612,15 +1613,15 @@ Happy trading!`;
         // Update transfer status
         await storage.updateSquadTransferStatus(
           reference,
-          transferResult.transactionStatus,
+          transferResult.status,
           undefined,
-          transferResult.transactionStatus === 'success' ? new Date() : undefined
+          transferResult.status === 'success' ? new Date() : undefined
         );
 
         res.json({
           message: "Withdrawal initiated successfully",
           reference,
-          status: transferResult.transactionStatus,
+          status: transferResult.status,
         });
       } catch (transferError) {
         // Refund wallet if transfer fails
@@ -3851,15 +3852,15 @@ Happy trading!`;
                   product = await storage.getProduct(validated.productId);
                   
                   // Check if there's an active order between these users for this product
-                  const senderOrders = await storage.getUserOrders(userId, 'buyer');
-                  const receiverOrders = await storage.getUserOrders(validated.receiverId, 'seller');
+                  const senderOrders = await storage.getBuyerOrders(userId);
+                  const receiverOrders = await storage.getSellerOrders(validated.receiverId);
                   
                   // Find any order where sender is buyer and receiver is seller (or vice versa)
-                  relatedOrder = senderOrders.find(o => 
+                  relatedOrder = senderOrders.find((o: Order) => 
                     o.productId === validated.productId && 
                     o.sellerId === validated.receiverId &&
                     !['completed', 'cancelled', 'refunded'].includes(o.status)
-                  ) || receiverOrders.find(o =>
+                  ) || receiverOrders.find((o: Order) =>
                     o.productId === validated.productId && 
                     o.buyerId === userId &&
                     !['completed', 'cancelled', 'refunded'].includes(o.status)
@@ -4021,14 +4022,14 @@ Happy trading!`;
               if (validated.productId) {
                 product = await storage.getProduct(validated.productId);
                 
-                const senderOrders = await storage.getUserOrders(userId, 'buyer');
-                const receiverOrders = await storage.getUserOrders(validated.receiverId, 'seller');
+                const senderOrders = await storage.getBuyerOrders(userId);
+                const receiverOrders = await storage.getSellerOrders(validated.receiverId);
                 
-                relatedOrder = senderOrders.find(o => 
+                relatedOrder = senderOrders.find((o: Order) => 
                   o.productId === validated.productId && 
                   o.sellerId === validated.receiverId &&
                   !['completed', 'cancelled', 'refunded'].includes(o.status)
-                ) || receiverOrders.find(o =>
+                ) || receiverOrders.find((o: Order) =>
                   o.productId === validated.productId && 
                   o.buyerId === userId &&
                   !['completed', 'cancelled', 'refunded'].includes(o.status)
@@ -6606,10 +6607,7 @@ Happy trading!`;
         
         if (purchaseResult.success) {
           // Update wallet transaction as completed
-          await storage.updateTransaction(walletTransaction.id, {
-            status: "completed",
-            description: `Data Purchase: ${plan.name} (${plan.dataAmount}) for ${phoneNumber} - Success`,
-          });
+          await storage.updateTransaction(walletTransaction.id, { status: "completed" });
 
           // Award reward points (10 points per ₦1,000 spent)
           let pointsEarned = 0;
@@ -6669,10 +6667,7 @@ Happy trading!`;
             await storage.updateWalletBalance(userId, planPrice.toString(), "add");
             
             if (walletTransaction) {
-              await storage.updateTransaction(walletTransaction.id, {
-                status: "failed",
-                description: `Data Purchase Failed: ${plan.dataAmount} for ${phoneNumber} - ${purchaseError.message}`,
-              });
+              await storage.updateTransaction(walletTransaction.id, { status: "failed" });
             }
 
             await storage.createTransaction({
@@ -6680,7 +6675,7 @@ Happy trading!`;
               type: "refund",
               amount: planPrice.toString(),
               status: "completed",
-              description: `Refund: ${plan.dataAmount} data for ${phoneNumber} - ${purchaseError.message}`,
+              description: `Refund: ${plan.dataAmount} data for ${phoneNumber}`,
               relatedUserId: userId,
             });
           } catch (refundError) {
@@ -6797,10 +6792,7 @@ Happy trading!`;
         const purchaseResult = await purchaseAirtime(networkToUse, phoneNumber, amount);
         
         if (purchaseResult.success) {
-          await storage.updateTransaction(walletTransaction.id, {
-            status: "completed",
-            description: `Airtime Purchase: ₦${amount} for ${phoneNumber} (${networkInfo?.displayName || networkToUse.toUpperCase()}) - Success`,
-          });
+          await storage.updateTransaction(walletTransaction.id, { status: "completed" });
 
           // Award reward points (10 points per ₦1,000 spent)
           let pointsEarned = 0;
@@ -6855,10 +6847,7 @@ Happy trading!`;
             await storage.updateWalletBalance(userId, amount.toString(), "add");
             
             if (walletTransaction) {
-              await storage.updateTransaction(walletTransaction.id, {
-                status: "failed",
-                description: `Airtime Purchase Failed: ₦${amount} for ${phoneNumber} - ${purchaseError.message}`,
-              });
+              await storage.updateTransaction(walletTransaction.id, { status: "failed" });
             }
 
             await storage.createTransaction({
@@ -6866,7 +6855,7 @@ Happy trading!`;
               type: "refund",
               amount: amount.toString(),
               status: "completed",
-              description: `Refund: ₦${amount} airtime for ${phoneNumber} - ${purchaseError.message}`,
+              description: `Refund: ₦${amount} airtime for ${phoneNumber}`,
               relatedUserId: userId,
             });
           } catch (refundError) {
@@ -7057,10 +7046,7 @@ Happy trading!`;
         const purchaseResult = await subscribeCableTV(plan.provider, smartCardNumber, plan.planCode);
 
         if (purchaseResult.success) {
-          await storage.updateTransaction(walletTransaction.id, {
-            status: "completed",
-            description: `Cable TV: ${plan.name} for ${smartCardNumber} - Success`,
-          });
+          await storage.updateTransaction(walletTransaction.id, { status: "completed" });
 
           return res.json({
             success: true,
@@ -7089,10 +7075,7 @@ Happy trading!`;
             await storage.updateWalletBalance(userId, planPrice.toString(), "add");
             
             if (walletTransaction) {
-              await storage.updateTransaction(walletTransaction.id, {
-                status: "failed",
-                description: `Cable TV Failed: ${plan.name} for ${smartCardNumber} - ${purchaseError.message}`,
-              });
+              await storage.updateTransaction(walletTransaction.id, { status: "failed" });
             }
 
             await storage.createTransaction({
@@ -7100,7 +7083,7 @@ Happy trading!`;
               type: "refund",
               amount: planPrice.toString(),
               status: "completed",
-              description: `Refund: ${plan.name} for ${smartCardNumber} - ${purchaseError.message}`,
+              description: `Refund: ${plan.name} for ${smartCardNumber}`,
               relatedUserId: userId,
             });
           } catch (refundError) {
@@ -7271,10 +7254,7 @@ Happy trading!`;
         );
 
         if (purchaseResult.success) {
-          await storage.updateTransaction(walletTransaction.id, {
-            status: "completed",
-            description: `Electricity: ₦${paymentAmount} for ${meterNumber} (${disco.toUpperCase()}) - Success`,
-          });
+          await storage.updateTransaction(walletTransaction.id, { status: "completed" });
 
           return res.json({
             success: true,
@@ -7301,10 +7281,7 @@ Happy trading!`;
             await storage.updateWalletBalance(userId, paymentAmount.toString(), "add");
             
             if (walletTransaction) {
-              await storage.updateTransaction(walletTransaction.id, {
-                status: "failed",
-                description: `Electricity Failed: ₦${paymentAmount} for ${meterNumber} - ${purchaseError.message}`,
-              });
+              await storage.updateTransaction(walletTransaction.id, { status: "failed" });
             }
 
             await storage.createTransaction({
@@ -7312,7 +7289,7 @@ Happy trading!`;
               type: "refund",
               amount: paymentAmount.toString(),
               status: "completed",
-              description: `Refund: ₦${paymentAmount} electricity for ${meterNumber} - ${purchaseError.message}`,
+              description: `Refund: ₦${paymentAmount} electricity for ${meterNumber}`,
               relatedUserId: userId,
             });
           } catch (refundError) {
@@ -7422,10 +7399,7 @@ Happy trading!`;
         const purchaseResult = await purchaseExamPin(examType as any, quantity);
 
         if (purchaseResult.success) {
-          await storage.updateTransaction(walletTransaction.id, {
-            status: "completed",
-            description: `Exam Pin: ${examPin.name} x${quantity} - Success`,
-          });
+          await storage.updateTransaction(walletTransaction.id, { status: "completed" });
 
           return res.json({
             success: true,
@@ -7454,10 +7428,7 @@ Happy trading!`;
             await storage.updateWalletBalance(userId, totalPrice.toString(), "add");
             
             if (walletTransaction) {
-              await storage.updateTransaction(walletTransaction.id, {
-                status: "failed",
-                description: `Exam Pin Failed: ${examPin.name} x${quantity} - ${purchaseError.message}`,
-              });
+              await storage.updateTransaction(walletTransaction.id, { status: "failed" });
             }
 
             await storage.createTransaction({
@@ -7465,7 +7436,7 @@ Happy trading!`;
               type: "refund",
               amount: totalPrice.toString(),
               status: "completed",
-              description: `Refund: ${examPin.name} x${quantity} - ${purchaseError.message}`,
+              description: `Refund: ${examPin.name} x${quantity}`,
               relatedUserId: userId,
             });
           } catch (refundError) {
@@ -7831,7 +7802,16 @@ Happy trading!`;
       // Process the data purchase if Inlomax is configured
       if (isInlomaxConfigured()) {
         try {
-          const purchaseResult = await purchaseData(gift.network, gift.recipientPhone, plan.dataAmount);
+          // Map VTU network types to Inlomax network types
+          const networkMapping: Record<string, string> = {
+            'mtn_sme': 'mtn',
+            'glo_cg': 'glo',
+            'airtel_cg': 'airtel',
+            '9mobile': '9mobile'
+          };
+          const mappedNetwork = networkMapping[gift.network] || gift.network;
+          
+          const purchaseResult = await purchaseData(mappedNetwork as any, gift.recipientPhone, plan.dataAmount);
           
           if (purchaseResult.success) {
             // Create VTU transaction record
@@ -7844,8 +7824,7 @@ Happy trading!`;
               costPrice: plan.costPrice,
               profit: (parseFloat(plan.sellingPrice) - parseFloat(plan.costPrice)).toFixed(2),
               status: "success",
-              apiReference: purchaseResult.reference,
-              transactionId: purchaseResult.transactionId,
+              smedataReference: purchaseResult.reference,
             });
 
             // Update gift as claimed with transaction reference
@@ -9743,7 +9722,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       const paymentData = {
         amount: 20000, // ₦200 in kobo
         email: user.email,
-        currency: "NGN",
+        currency: 'NGN' as const,
         initiate_type: "inline",
         transaction_ref: paymentReference,
         callback_url: `${process.env.APP_URL || 'https://eksu-marketplace.replit.app'}/kyc/payment-callback`,
@@ -9857,7 +9836,18 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
       });
 
       // Call SMEDATA.NG API to verify NIN and get photo
-      const ninVerification = await verifyNIN(nin, firstName, lastName, dateOfBirth);
+      // TODO: Implement actual NIN verification API integration
+      // For now, use a stub that simulates the verification process
+      const verifyNINStub = async (nin: string, firstName: string, lastName: string, dateOfBirth: string) => {
+        // This is a placeholder - in production, this would call the actual SMEDATA.NG API
+        console.log(`NIN verification requested for ${firstName} ${lastName} with NIN: ${nin.slice(0, 3)}****${nin.slice(-3)}`);
+        return {
+          success: false,
+          message: "NIN verification service is not yet configured. Please contact support.",
+          data: null
+        };
+      };
+      const ninVerification = await verifyNINStub(nin, firstName, lastName, dateOfBirth);
 
       if (!ninVerification.success || !ninVerification.data) {
         // Log the failure
@@ -9897,7 +9887,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         consentGiven: consent,
         consentTimestamp: new Date(),
         status: "pending_verification",
-        apiResponse: ninVerification.data,
+        smedataResponse: ninVerification.data,
       });
 
       // Log successful NIN verification
@@ -13283,10 +13273,8 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
           return res.status(400).json({ message: "Insufficient balance. API access costs ₦5,000" });
         }
 
-        // Deduct API fee
-        await storage.updateWallet(wallet.id, {
-          balance: (parseFloat(wallet.balance) - 5000).toFixed(2),
-        });
+        // Deduct API fee using updateWalletBalance
+        await storage.updateWalletBalance(userId, "5000", "subtract");
 
         // Create transaction record
         await storage.createTransaction({
