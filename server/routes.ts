@@ -52,11 +52,21 @@ import {
   createStorySchema,
   createSecretMessageLinkSchema,
   sendSecretMessageSchema,
+  purchaseExamPinSchema,
+  payBillSchema,
+  validateCustomerSchema,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, requeryOrder, getAllDataPlans, getDataPlanById, getDataPlansByNetwork, detectNetwork, getDiscountInfo, calculateSavings, NETWORK_INFO, type NetworkType, type DataPlan } from "./smedata";
+import { 
+  purchaseData, purchaseAirtime, isInlomaxConfigured, isValidNigerianPhone, 
+  checkTransactionStatus, getAllDataPlans, getDataPlanById, getDataPlansByNetwork, 
+  detectNetwork, getDiscountInfo, NETWORK_INFO, getAllCablePlans, getCablePlanById,
+  getCablePlansByProvider, validateSmartCard, subscribeCableTV, validateMeterNumber,
+  payElectricityBill, purchaseExamPin, getExamPins, getDiscos, CABLE_PROVIDER_INFO,
+  type NetworkType, type DataPlan, type CablePlan
+} from "./inlomax";
 import { 
   sendEmailVerificationCode, 
   sendErrorReportToAdmin, 
@@ -1142,13 +1152,13 @@ Happy trading!`;
   app.get('/api/admin/payment/config', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
       const squadStatus = getSquadConfigStatus();
-      const smedataConfigured = isSMEDataConfigured();
+      const inlomaxConfigured = isInlomaxConfigured();
 
       res.json({
         squad: squadStatus,
         vtu: {
-          configured: smedataConfigured,
-          provider: "SMEDATA.NG",
+          configured: inlomaxConfigured,
+          provider: "Inlomax",
         },
         message: squadStatus.configured 
           ? `Squad is configured in ${squadStatus.mode} mode`
@@ -5894,24 +5904,42 @@ Happy trading!`;
     }
   });
 
-  // Get all VTU data plans (optionally filter by network)
-  // Uses hardcoded plans from SME Data API documentation with discount applied
+  // Get all VTU data plans (optionally filter by network and/or planType)
+  // Uses Inlomax API pricing with competitive margins and savings info
   app.get("/api/vtu/plans", async (req, res) => {
     try {
-      const { network } = req.query;
+      const { network, planType } = req.query;
       const discountInfo = getDiscountInfo();
       
-      let plans: DataPlan[];
-      if (network && typeof network === "string" && ["mtn_sme", "glo_cg", "airtel_cg"].includes(network)) {
-        plans = getDataPlansByNetwork(network as NetworkType);
-      } else {
-        plans = getAllDataPlans();
+      let plans: DataPlan[] = getAllDataPlans();
+      
+      // Filter by network if provided (supports: mtn, glo, airtel, 9mobile)
+      if (network && typeof network === "string") {
+        const validNetworks = ["mtn", "glo", "airtel", "9mobile"];
+        if (validNetworks.includes(network.toLowerCase())) {
+          plans = plans.filter(p => p.network === network.toLowerCase());
+        }
       }
       
+      // Filter by planType if provided (supports: sme, direct, cg, social, awoof)
+      if (planType && typeof planType === "string") {
+        plans = plans.filter(p => p.planType === planType.toLowerCase());
+      }
+      
+      // Include market price and savings info in response
+      const plansWithSavings = plans.map(plan => ({
+        ...plan,
+        marketPrice: plan.marketPrice,
+        savingsAmount: plan.savingsAmount,
+        savingsPercentage: plan.savingsPercentage,
+        formattedSavings: `${plan.savingsPercentage}% OFF`,
+      }));
+      
       res.json({
-        plans,
+        plans: plansWithSavings,
         discount: discountInfo,
         networks: NETWORK_INFO,
+        totalPlans: plansWithSavings.length,
       });
     } catch (error) {
       console.error("Error fetching VTU plans:", error);
@@ -6030,7 +6058,7 @@ Happy trading!`;
     }
   });
 
-  // Admin endpoint: Requery order status
+  // Admin endpoint: Requery order/transaction status
   app.post("/api/admin/vtu/requery", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -6042,18 +6070,25 @@ Happy trading!`;
         return res.status(403).json({ message: "Only admins can requery orders" });
       }
 
-      const { orderId } = req.body;
-      if (!orderId) {
-        return res.status(400).json({ message: "Order ID is required" });
+      const { transactionId } = req.body;
+      if (!transactionId) {
+        return res.status(400).json({ message: "Transaction ID is required" });
       }
 
-      const result = await requeryOrder(orderId);
+      if (!isInlomaxConfigured()) {
+        return res.status(503).json({ 
+          success: false,
+          message: "VTU service is not configured",
+        });
+      }
+
+      const result = await checkTransactionStatus(transactionId);
       res.json(result);
     } catch (error: any) {
-      console.error("[VTU Admin] Error requerying order:", error);
+      console.error("[VTU Admin] Error requerying transaction:", error);
       res.status(500).json({ 
         success: false,
-        message: "Failed to requery order",
+        message: "Failed to requery transaction",
       });
     }
   });
@@ -6078,7 +6113,7 @@ Happy trading!`;
     }
   });
 
-  // Purchase VTU data using SME Data API
+  // Purchase VTU data using Inlomax API
   app.post("/api/vtu/purchase", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -6102,16 +6137,18 @@ Happy trading!`;
         return res.status(400).json({ message: "Invalid Nigerian phone number" });
       }
 
-      // Get the data plan from hardcoded plans
+      // Get the data plan from Inlomax plans
       const plan = getDataPlanById(planId);
       if (!plan) {
         return res.status(404).json({ message: "Data plan not found" });
       }
 
-      // Use discounted price for the purchase
-      const planPrice = plan.discountedPrice;
-      const costPrice = plan.price;
-      const savings = plan.price - plan.discountedPrice;
+      // Use Inlomax pricing structure
+      const planPrice = plan.sellingPrice; // Our selling price to customer
+      const costPrice = plan.apiPrice; // Inlomax API cost
+      const profit = plan.profit; // Our profit margin
+      const savingsAmount = plan.savingsAmount; // Customer savings vs market
+      const savingsPercentage = plan.savingsPercentage;
 
       // Get user's wallet
       const wallet = await storage.getOrCreateWallet(userId);
@@ -6145,7 +6182,7 @@ Happy trading!`;
         });
 
         // Process the actual purchase if API is configured
-        if (!isSMEDataConfigured()) {
+        if (!isInlomaxConfigured()) {
           throw new Error("VTU_SERVICE_UNAVAILABLE");
         }
 
@@ -6164,13 +6201,19 @@ Happy trading!`;
             transaction: {
               id: walletTransaction.id,
               network: plan.network,
+              planType: plan.planType,
               planName: plan.name,
               dataAmount: plan.dataAmount,
               amount: planPrice,
-              savings: savings,
+              costPrice: costPrice,
+              profit: profit,
+              savingsAmount: savingsAmount,
+              savingsPercentage: savingsPercentage,
+              marketPrice: plan.marketPrice,
               phoneNumber,
               status: "success",
               reference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
             },
           });
         } else {
@@ -6222,7 +6265,7 @@ Happy trading!`;
     }
   });
 
-  // Purchase airtime using SME Data API
+  // Purchase airtime using Inlomax API
   app.post("/api/vtu/airtime", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -6244,18 +6287,18 @@ Happy trading!`;
         return res.status(400).json({ message: "Invalid Nigerian phone number" });
       }
 
-      // Validate network - only mtn_sme, glo_cg, airtel_cg are supported
-      const validNetworks: NetworkType[] = ["mtn_sme", "glo_cg", "airtel_cg"];
+      // Validate network - supports mtn, glo, airtel, 9mobile
+      const validNetworks: NetworkType[] = ["mtn", "glo", "airtel", "9mobile"];
       let networkToUse: NetworkType;
       
-      if (network && validNetworks.includes(network as NetworkType)) {
-        networkToUse = network as NetworkType;
+      if (network && validNetworks.includes(network.toLowerCase() as NetworkType)) {
+        networkToUse = network.toLowerCase() as NetworkType;
       } else {
         // Auto-detect network from phone number
         const detectedNetwork = detectNetwork(phoneNumber);
         if (!detectedNetwork) {
           return res.status(400).json({ 
-            message: "Could not detect network for this phone number. Only MTN, GLO, and Airtel are supported." 
+            message: "Could not detect network for this phone number. Supported networks: MTN, GLO, Airtel, 9mobile." 
           });
         }
         networkToUse = detectedNetwork;
@@ -6269,6 +6312,11 @@ Happy trading!`;
       if (amount > 50000) {
         return res.status(400).json({ message: "Maximum airtime amount is ₦50,000" });
       }
+
+      // Get network info for discount calculation
+      const networkInfo = NETWORK_INFO[networkToUse];
+      const discount = networkInfo?.airtimeDiscount || 0;
+      const discountAmount = Math.round(amount * discount);
 
       const wallet = await storage.getOrCreateWallet(userId);
       const walletBalance = parseFloat(wallet.balance);
@@ -6294,12 +6342,12 @@ Happy trading!`;
           type: "purchase",
           amount: `-${amount}`,
           status: "pending",
-          description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
+          description: `Airtime Purchase: ₦${amount} for ${phoneNumber} (${networkInfo?.displayName || networkToUse.toUpperCase()})`,
           relatedUserId: userId,
         });
 
         // Process the actual purchase if API is configured
-        if (!isSMEDataConfigured()) {
+        if (!isInlomaxConfigured()) {
           throw new Error("VTU_SERVICE_UNAVAILABLE");
         }
 
@@ -6308,7 +6356,7 @@ Happy trading!`;
         if (purchaseResult.success) {
           await storage.updateTransaction(walletTransaction.id, {
             status: "completed",
-            description: `Airtime Purchase: ₦${amount} for ${phoneNumber} - Success`,
+            description: `Airtime Purchase: ₦${amount} for ${phoneNumber} (${networkInfo?.displayName || networkToUse.toUpperCase()}) - Success`,
           });
 
           return res.json({
@@ -6317,10 +6365,14 @@ Happy trading!`;
             transaction: {
               id: walletTransaction.id,
               network: networkToUse,
+              networkName: networkInfo?.displayName || networkToUse.toUpperCase(),
               amount,
+              discountAmount,
+              discountPercentage: Math.round(discount * 100),
               phoneNumber,
               status: "success",
               reference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
             },
           });
         } else {
@@ -6369,6 +6421,605 @@ Happy trading!`;
     } catch (error) {
       console.error("Error processing airtime purchase:", error);
       res.status(500).json({ message: "Failed to process airtime purchase" });
+    }
+  });
+
+  // ==================== CABLE TV ENDPOINTS ====================
+
+  // Get all cable TV plans
+  app.get("/api/vtu/cable/plans", async (req, res) => {
+    try {
+      const plans = getAllCablePlans();
+      res.json({
+        plans,
+        providers: CABLE_PROVIDER_INFO,
+        totalPlans: plans.length,
+      });
+    } catch (error) {
+      console.error("Error fetching cable TV plans:", error);
+      res.status(500).json({ message: "Failed to fetch cable TV plans" });
+    }
+  });
+
+  // Get cable TV plans by provider (dstv, gotv, startimes)
+  app.get("/api/vtu/cable/plans/:provider", async (req, res) => {
+    try {
+      const { provider } = req.params;
+      const validProviders = ["dstv", "gotv", "startimes"];
+      
+      if (!validProviders.includes(provider.toLowerCase())) {
+        return res.status(400).json({ 
+          message: "Invalid provider. Supported providers: dstv, gotv, startimes" 
+        });
+      }
+
+      const plans = getCablePlansByProvider(provider.toLowerCase() as any);
+      const providerInfo = CABLE_PROVIDER_INFO[provider.toLowerCase() as keyof typeof CABLE_PROVIDER_INFO];
+      
+      res.json({
+        provider: providerInfo,
+        plans,
+        totalPlans: plans.length,
+      });
+    } catch (error) {
+      console.error("Error fetching cable TV plans by provider:", error);
+      res.status(500).json({ message: "Failed to fetch cable TV plans" });
+    }
+  });
+
+  // Validate smart card / IUC number
+  app.post("/api/vtu/cable/validate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { provider, smartCardNumber } = req.body;
+
+      if (!provider || !smartCardNumber) {
+        return res.status(400).json({ message: "Provider and smart card number are required" });
+      }
+
+      const validProviders = ["dstv", "gotv", "startimes"];
+      if (!validProviders.includes(provider.toLowerCase())) {
+        return res.status(400).json({ 
+          message: "Invalid provider. Supported providers: dstv, gotv, startimes" 
+        });
+      }
+
+      if (!isInlomaxConfigured()) {
+        return res.status(503).json({ message: "VTU service is temporarily unavailable" });
+      }
+
+      const validationResult = await validateSmartCard(provider.toLowerCase(), smartCardNumber);
+
+      if (validationResult.success) {
+        res.json({
+          success: true,
+          message: "Smart card validated successfully",
+          customerName: validationResult.data?.customer_name || validationResult.data?.name || "Customer",
+          smartCardNumber,
+          provider: provider.toLowerCase(),
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: validationResult.message || "Smart card validation failed",
+        });
+      }
+    } catch (error) {
+      console.error("Error validating smart card:", error);
+      res.status(500).json({ message: "Failed to validate smart card" });
+    }
+  });
+
+  // Subscribe to cable TV
+  app.post("/api/vtu/cable/subscribe", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { provider, smartCardNumber, planId, customerName } = req.body;
+
+      if (!provider || !smartCardNumber || !planId) {
+        return res.status(400).json({ 
+          message: "Provider, smart card number, and plan ID are required" 
+        });
+      }
+
+      const validProviders = ["dstv", "gotv", "startimes"];
+      if (!validProviders.includes(provider.toLowerCase())) {
+        return res.status(400).json({ 
+          message: "Invalid provider. Supported providers: dstv, gotv, startimes" 
+        });
+      }
+
+      // Get the cable plan
+      const plan = getCablePlanById(planId);
+      if (!plan) {
+        return res.status(404).json({ message: "Cable TV plan not found" });
+      }
+
+      if (plan.provider !== provider.toLowerCase()) {
+        return res.status(400).json({ message: "Plan does not match provider" });
+      }
+
+      const planPrice = plan.sellingPrice;
+      const costPrice = plan.apiPrice;
+      const profit = plan.profit;
+
+      // Get user's wallet
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < planPrice) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance",
+          required: planPrice,
+          available: walletBalance
+        });
+      }
+
+      // Deduct from wallet first and track for potential refund
+      let walletDeducted = false;
+      let walletTransaction: any = null;
+
+      try {
+        await storage.updateWalletBalance(userId, planPrice.toString(), "subtract");
+        walletDeducted = true;
+
+        walletTransaction = await storage.createTransaction({
+          walletId: wallet.id,
+          type: "purchase",
+          amount: `-${planPrice}`,
+          status: "pending",
+          description: `Cable TV: ${plan.name} for ${smartCardNumber}`,
+          relatedUserId: userId,
+        });
+
+        if (!isInlomaxConfigured()) {
+          throw new Error("VTU_SERVICE_UNAVAILABLE");
+        }
+
+        const purchaseResult = await subscribeCableTV(plan.provider, smartCardNumber, plan.planCode);
+
+        if (purchaseResult.success) {
+          await storage.updateTransaction(walletTransaction.id, {
+            status: "completed",
+            description: `Cable TV: ${plan.name} for ${smartCardNumber} - Success`,
+          });
+
+          return res.json({
+            success: true,
+            message: `${plan.name} subscription successful for ${smartCardNumber}`,
+            transaction: {
+              id: walletTransaction.id,
+              provider: plan.provider,
+              planName: plan.name,
+              duration: plan.duration,
+              amount: planPrice,
+              costPrice,
+              profit,
+              smartCardNumber,
+              customerName: customerName || "Customer",
+              status: "success",
+              reference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
+            },
+          });
+        } else {
+          throw new Error(purchaseResult.message || "API_PURCHASE_FAILED");
+        }
+      } catch (purchaseError: any) {
+        if (walletDeducted) {
+          try {
+            await storage.updateWalletBalance(userId, planPrice.toString(), "add");
+            
+            if (walletTransaction) {
+              await storage.updateTransaction(walletTransaction.id, {
+                status: "failed",
+                description: `Cable TV Failed: ${plan.name} for ${smartCardNumber} - ${purchaseError.message}`,
+              });
+            }
+
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "refund",
+              amount: planPrice.toString(),
+              status: "completed",
+              description: `Refund: ${plan.name} for ${smartCardNumber} - ${purchaseError.message}`,
+              relatedUserId: userId,
+            });
+          } catch (refundError) {
+            console.error("Cable TV refund error:", refundError);
+          }
+        }
+
+        const errorMessage = purchaseError.message === "VTU_SERVICE_UNAVAILABLE"
+          ? "VTU service is temporarily unavailable. Please try again later."
+          : purchaseError.message === "API_PURCHASE_FAILED"
+          ? "Cable TV subscription failed. Amount refunded to wallet."
+          : "Cable TV subscription failed due to network error. Amount refunded to wallet.";
+
+        const statusCode = purchaseError.message === "VTU_SERVICE_UNAVAILABLE" ? 503 : 500;
+
+        console.error("Cable TV subscription error:", purchaseError);
+        return res.status(statusCode).json({
+          success: false,
+          message: walletDeducted ? errorMessage : "Failed to process cable TV subscription",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing cable TV subscription:", error);
+      res.status(500).json({ message: "Failed to process cable TV subscription" });
+    }
+  });
+
+  // ==================== ELECTRICITY ENDPOINTS ====================
+
+  // Get all electricity distribution companies (DISCOs)
+  app.get("/api/vtu/electricity/discos", async (req, res) => {
+    try {
+      const discos = getDiscos();
+      res.json({
+        discos,
+        totalDiscos: discos.length,
+      });
+    } catch (error) {
+      console.error("Error fetching DISCOs:", error);
+      res.status(500).json({ message: "Failed to fetch electricity companies" });
+    }
+  });
+
+  // Validate meter number
+  app.post("/api/vtu/electricity/validate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { disco, meterNumber, meterType } = req.body;
+
+      if (!disco || !meterNumber || !meterType) {
+        return res.status(400).json({ 
+          message: "DISCO, meter number, and meter type are required" 
+        });
+      }
+
+      if (!["prepaid", "postpaid"].includes(meterType.toLowerCase())) {
+        return res.status(400).json({ 
+          message: "Invalid meter type. Must be 'prepaid' or 'postpaid'" 
+        });
+      }
+
+      if (!isInlomaxConfigured()) {
+        return res.status(503).json({ message: "VTU service is temporarily unavailable" });
+      }
+
+      const validationResult = await validateMeterNumber(
+        disco.toLowerCase(),
+        meterNumber,
+        meterType.toLowerCase() as "prepaid" | "postpaid"
+      );
+
+      if (validationResult.success) {
+        res.json({
+          success: true,
+          message: "Meter number validated successfully",
+          customerName: validationResult.data?.customer_name || validationResult.data?.name || "Customer",
+          customerAddress: validationResult.data?.address || "",
+          meterNumber,
+          disco,
+          meterType: meterType.toLowerCase(),
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: validationResult.message || "Meter number validation failed",
+        });
+      }
+    } catch (error) {
+      console.error("Error validating meter number:", error);
+      res.status(500).json({ message: "Failed to validate meter number" });
+    }
+  });
+
+  // Pay electricity bill
+  app.post("/api/vtu/electricity/pay", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { disco, meterNumber, meterType, amount, customerName } = req.body;
+
+      if (!disco || !meterNumber || !meterType || !amount) {
+        return res.status(400).json({ 
+          message: "DISCO, meter number, meter type, and amount are required" 
+        });
+      }
+
+      if (!["prepaid", "postpaid"].includes(meterType.toLowerCase())) {
+        return res.status(400).json({ 
+          message: "Invalid meter type. Must be 'prepaid' or 'postpaid'" 
+        });
+      }
+
+      const paymentAmount = parseFloat(amount);
+      if (isNaN(paymentAmount) || paymentAmount < 500) {
+        return res.status(400).json({ message: "Minimum electricity payment is ₦500" });
+      }
+
+      if (paymentAmount > 100000) {
+        return res.status(400).json({ message: "Maximum electricity payment is ₦100,000" });
+      }
+
+      // Get user's wallet
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < paymentAmount) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance",
+          required: paymentAmount,
+          available: walletBalance
+        });
+      }
+
+      // Deduct from wallet first and track for potential refund
+      let walletDeducted = false;
+      let walletTransaction: any = null;
+
+      try {
+        await storage.updateWalletBalance(userId, paymentAmount.toString(), "subtract");
+        walletDeducted = true;
+
+        walletTransaction = await storage.createTransaction({
+          walletId: wallet.id,
+          type: "purchase",
+          amount: `-${paymentAmount}`,
+          status: "pending",
+          description: `Electricity: ₦${paymentAmount} for ${meterNumber} (${disco.toUpperCase()})`,
+          relatedUserId: userId,
+        });
+
+        if (!isInlomaxConfigured()) {
+          throw new Error("VTU_SERVICE_UNAVAILABLE");
+        }
+
+        const purchaseResult = await payElectricityBill(
+          disco.toLowerCase(),
+          meterNumber,
+          meterType.toLowerCase() as "prepaid" | "postpaid",
+          paymentAmount,
+          customerName || "Customer"
+        );
+
+        if (purchaseResult.success) {
+          await storage.updateTransaction(walletTransaction.id, {
+            status: "completed",
+            description: `Electricity: ₦${paymentAmount} for ${meterNumber} (${disco.toUpperCase()}) - Success`,
+          });
+
+          return res.json({
+            success: true,
+            message: `₦${paymentAmount} electricity payment successful for ${meterNumber}`,
+            transaction: {
+              id: walletTransaction.id,
+              disco,
+              meterNumber,
+              meterType: meterType.toLowerCase(),
+              amount: paymentAmount,
+              customerName: customerName || "Customer",
+              token: purchaseResult.token, // For prepaid meters
+              status: "success",
+              reference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
+            },
+          });
+        } else {
+          throw new Error(purchaseResult.message || "API_PURCHASE_FAILED");
+        }
+      } catch (purchaseError: any) {
+        if (walletDeducted) {
+          try {
+            await storage.updateWalletBalance(userId, paymentAmount.toString(), "add");
+            
+            if (walletTransaction) {
+              await storage.updateTransaction(walletTransaction.id, {
+                status: "failed",
+                description: `Electricity Failed: ₦${paymentAmount} for ${meterNumber} - ${purchaseError.message}`,
+              });
+            }
+
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "refund",
+              amount: paymentAmount.toString(),
+              status: "completed",
+              description: `Refund: ₦${paymentAmount} electricity for ${meterNumber} - ${purchaseError.message}`,
+              relatedUserId: userId,
+            });
+          } catch (refundError) {
+            console.error("Electricity refund error:", refundError);
+          }
+        }
+
+        const errorMessage = purchaseError.message === "VTU_SERVICE_UNAVAILABLE"
+          ? "VTU service is temporarily unavailable. Please try again later."
+          : purchaseError.message === "API_PURCHASE_FAILED"
+          ? "Electricity payment failed. Amount refunded to wallet."
+          : "Electricity payment failed due to network error. Amount refunded to wallet.";
+
+        const statusCode = purchaseError.message === "VTU_SERVICE_UNAVAILABLE" ? 503 : 500;
+
+        console.error("Electricity payment error:", purchaseError);
+        return res.status(statusCode).json({
+          success: false,
+          message: walletDeducted ? errorMessage : "Failed to process electricity payment",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing electricity payment:", error);
+      res.status(500).json({ message: "Failed to process electricity payment" });
+    }
+  });
+
+  // ==================== EXAM PINS ENDPOINTS ====================
+
+  // Get all exam pin types with prices
+  app.get("/api/vtu/exam-pins", async (req, res) => {
+    try {
+      const examPins = getExamPins();
+      res.json({
+        examPins,
+        totalTypes: examPins.length,
+      });
+    } catch (error) {
+      console.error("Error fetching exam pins:", error);
+      res.status(500).json({ message: "Failed to fetch exam pins" });
+    }
+  });
+
+  // Purchase exam pins
+  app.post("/api/vtu/exam-pins/purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validationResult = purchaseExamPinSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Validation failed",
+          errors: validationResult.error.flatten().fieldErrors
+        });
+      }
+
+      const { examType, quantity } = validationResult.data;
+
+      // Get exam pin info
+      const examPins = getExamPins();
+      const examPin = examPins.find(p => p.type === examType);
+      if (!examPin) {
+        return res.status(404).json({ message: "Exam pin type not found" });
+      }
+
+      const totalPrice = examPin.sellingPrice * quantity;
+      const totalCostPrice = examPin.apiPrice * quantity;
+      const totalProfit = examPin.profit * quantity;
+
+      // Get user's wallet
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < totalPrice) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance",
+          required: totalPrice,
+          available: walletBalance
+        });
+      }
+
+      // Deduct from wallet first and track for potential refund
+      let walletDeducted = false;
+      let walletTransaction: any = null;
+
+      try {
+        await storage.updateWalletBalance(userId, totalPrice.toString(), "subtract");
+        walletDeducted = true;
+
+        walletTransaction = await storage.createTransaction({
+          walletId: wallet.id,
+          type: "purchase",
+          amount: `-${totalPrice}`,
+          status: "pending",
+          description: `Exam Pin: ${examPin.name} x${quantity}`,
+          relatedUserId: userId,
+        });
+
+        if (!isInlomaxConfigured()) {
+          throw new Error("VTU_SERVICE_UNAVAILABLE");
+        }
+
+        const purchaseResult = await purchaseExamPin(examType as any, quantity);
+
+        if (purchaseResult.success) {
+          await storage.updateTransaction(walletTransaction.id, {
+            status: "completed",
+            description: `Exam Pin: ${examPin.name} x${quantity} - Success`,
+          });
+
+          return res.json({
+            success: true,
+            message: `${quantity} ${examPin.name} pin(s) purchased successfully`,
+            transaction: {
+              id: walletTransaction.id,
+              examType,
+              examName: examPin.name,
+              quantity,
+              unitPrice: examPin.sellingPrice,
+              totalAmount: totalPrice,
+              costPrice: totalCostPrice,
+              profit: totalProfit,
+              pins: purchaseResult.data?.pins || [], // Array of {serial, pin}
+              status: "success",
+              reference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
+            },
+          });
+        } else {
+          throw new Error(purchaseResult.message || "API_PURCHASE_FAILED");
+        }
+      } catch (purchaseError: any) {
+        if (walletDeducted) {
+          try {
+            await storage.updateWalletBalance(userId, totalPrice.toString(), "add");
+            
+            if (walletTransaction) {
+              await storage.updateTransaction(walletTransaction.id, {
+                status: "failed",
+                description: `Exam Pin Failed: ${examPin.name} x${quantity} - ${purchaseError.message}`,
+              });
+            }
+
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "refund",
+              amount: totalPrice.toString(),
+              status: "completed",
+              description: `Refund: ${examPin.name} x${quantity} - ${purchaseError.message}`,
+              relatedUserId: userId,
+            });
+          } catch (refundError) {
+            console.error("Exam pin refund error:", refundError);
+          }
+        }
+
+        const errorMessage = purchaseError.message === "VTU_SERVICE_UNAVAILABLE"
+          ? "VTU service is temporarily unavailable. Please try again later."
+          : purchaseError.message === "API_PURCHASE_FAILED"
+          ? "Exam pin purchase failed. Amount refunded to wallet."
+          : "Exam pin purchase failed due to network error. Amount refunded to wallet.";
+
+        const statusCode = purchaseError.message === "VTU_SERVICE_UNAVAILABLE" ? 503 : 500;
+
+        console.error("Exam pin purchase error:", purchaseError);
+        return res.status(statusCode).json({
+          success: false,
+          message: walletDeducted ? errorMessage : "Failed to process exam pin purchase",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing exam pin purchase:", error);
+      res.status(500).json({ message: "Failed to process exam pin purchase" });
     }
   });
 
@@ -6707,8 +7358,8 @@ Happy trading!`;
         return res.status(400).json({ message: "Data plan no longer available" });
       }
 
-      // Process the data purchase if SME Data is configured
-      if (isSMEDataConfigured()) {
+      // Process the data purchase if Inlomax is configured
+      if (isInlomaxConfigured()) {
         try {
           const purchaseResult = await purchaseData(gift.network, gift.recipientPhone, plan.dataAmount);
           
@@ -6723,7 +7374,8 @@ Happy trading!`;
               costPrice: plan.costPrice,
               profit: (parseFloat(plan.sellingPrice) - parseFloat(plan.costPrice)).toFixed(2),
               status: "success",
-              smedataReference: purchaseResult.reference,
+              apiReference: purchaseResult.reference,
+              transactionId: purchaseResult.transactionId,
             });
 
             // Update gift as claimed with transaction reference
@@ -6748,7 +7400,7 @@ Happy trading!`;
           });
         }
       } else {
-        // SME not configured - just mark as claimed
+        // Inlomax not configured - just mark as claimed
         const claimedGift = await storage.claimGiftData(gift.id, userId);
         res.json({
           success: true,
@@ -8775,7 +9427,7 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
         consentGiven: consent,
         consentTimestamp: new Date(),
         status: "pending_verification",
-        smedataResponse: ninVerification.data,
+        apiResponse: ninVerification.data,
       });
 
       // Log successful NIN verification

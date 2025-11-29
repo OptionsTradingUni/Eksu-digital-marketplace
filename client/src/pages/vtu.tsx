@@ -27,25 +27,30 @@ import type {
   GiftData
 } from "@shared/schema";
 
-type NetworkType = "mtn_sme" | "glo_cg" | "airtel_cg";
-type ServiceType = "data" | "airtime" | "schedule" | "gift";
+type NetworkType = "mtn" | "glo" | "airtel" | "9mobile";
+type ServiceType = "data" | "airtime" | "cable" | "electricity" | "exam" | "schedule" | "gift";
 type ScheduleFrequency = "daily" | "weekly" | "monthly";
 
 interface DataPlan {
   id: string;
   network: NetworkType;
+  planType: string;
   planCode: string;
   name: string;
   dataAmount: string;
   validity: string;
-  price: number;
-  discountedPrice: number;
+  apiPrice: number;
+  marketPrice: number;
+  sellingPrice: number;
+  profit: number;
+  savingsAmount: number;
+  savingsPercentage: number;
 }
 
 interface PlansApiResponse {
   plans: DataPlan[];
-  discount: { rate: number; percentage: string; description: string };
-  networks: Record<NetworkType, { name: string; displayName: string; color: string; bgColor: string; textColor: string }>;
+  discount: { description: string; averageSavings: string };
+  networks: Record<NetworkType, { name: string; displayName: string; color: string; bgColor: string; textColor: string; airtimeDiscount: number }>;
 }
 
 interface NetworkInfo {
@@ -60,8 +65,8 @@ interface NetworkInfo {
 
 const NETWORKS: NetworkInfo[] = [
   {
-    id: "mtn_sme",
-    name: "MTN SME",
+    id: "mtn",
+    name: "MTN",
     displayName: "MTN",
     color: "bg-yellow-500",
     bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
@@ -69,8 +74,8 @@ const NETWORKS: NetworkInfo[] = [
     prefixes: ["0803", "0806", "0703", "0704", "0706", "0810", "0813", "0814", "0816", "0903", "0906", "0913", "0916", "0702"],
   },
   {
-    id: "glo_cg",
-    name: "GLO CG",
+    id: "glo",
+    name: "GLO",
     displayName: "GLO",
     color: "bg-green-600",
     bgColor: "bg-green-100 dark:bg-green-900/30",
@@ -78,13 +83,22 @@ const NETWORKS: NetworkInfo[] = [
     prefixes: ["0805", "0807", "0705", "0815", "0811", "0905", "0915"],
   },
   {
-    id: "airtel_cg",
-    name: "Airtel CG",
+    id: "airtel",
+    name: "Airtel",
     displayName: "Airtel",
     color: "bg-red-500",
     bgColor: "bg-red-100 dark:bg-red-900/30",
     textColor: "text-red-700 dark:text-red-300",
     prefixes: ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"],
+  },
+  {
+    id: "9mobile",
+    name: "9mobile",
+    displayName: "9mobile",
+    color: "bg-emerald-500",
+    bgColor: "bg-emerald-100 dark:bg-emerald-900/30",
+    textColor: "text-emerald-700 dark:text-emerald-300",
+    prefixes: ["0809", "0817", "0818", "0908", "0909"],
   },
 ];
 
@@ -140,10 +154,43 @@ function validatePhoneNumber(phone: string): { valid: boolean; message: string }
   return { valid: false, message: "Phone number must start with 0 or 234" };
 }
 
+function PriceDisplay({ 
+  marketPrice, 
+  sellingPrice, 
+  savingsPercentage,
+  size = "default" 
+}: { 
+  marketPrice: number; 
+  sellingPrice: number; 
+  savingsPercentage: number;
+  size?: "default" | "large" | "small";
+}) {
+  const textSize = size === "large" ? "text-xl" : size === "small" ? "text-sm" : "text-base";
+  const badgeSize = size === "large" ? "text-sm" : "text-xs";
+  
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className={`font-bold ${textSize} text-foreground`}>
+        ₦{sellingPrice.toLocaleString()}
+      </span>
+      {savingsPercentage > 0 && (
+        <>
+          <span className={`${size === "small" ? "text-xs" : "text-sm"} text-muted-foreground line-through`}>
+            ₦{marketPrice.toLocaleString()}
+          </span>
+          <Badge variant="secondary" className={`${badgeSize} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>
+            Save {savingsPercentage}%
+          </Badge>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function VtuPage() {
   const { toast } = useToast();
   const [serviceType, setServiceType] = useState<ServiceType>("data");
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>("mtn_sme");
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>("mtn");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -163,7 +210,7 @@ export default function VtuPage() {
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState<number>(1);
   const [scheduleTimeOfDay, setScheduleTimeOfDay] = useState<string>("09:00");
   const [schedulePhoneNumber, setSchedulePhoneNumber] = useState("");
-  const [scheduleNetwork, setScheduleNetwork] = useState<NetworkType>("mtn_sme");
+  const [scheduleNetwork, setScheduleNetwork] = useState<NetworkType>("mtn");
   const [scheduleServiceType, setScheduleServiceType] = useState<"data" | "airtime">("data");
   const [schedulePlanId, setSchedulePlanId] = useState<string | null>(null);
   const [scheduleAirtimeAmount, setScheduleAirtimeAmount] = useState<string>("");
@@ -172,7 +219,7 @@ export default function VtuPage() {
   const [giftRecipientPhone, setGiftRecipientPhone] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
   const [giftPlanId, setGiftPlanId] = useState<string | null>(null);
-  const [giftNetwork, setGiftNetwork] = useState<NetworkType>("mtn_sme");
+  const [giftNetwork, setGiftNetwork] = useState<NetworkType>("mtn");
   const [giftTab, setGiftTab] = useState<"send" | "sent" | "received">("send");
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletType>({
@@ -387,7 +434,7 @@ export default function VtuPage() {
 
   const resetScheduleForm = () => {
     setSchedulePhoneNumber("");
-    setScheduleNetwork("mtn_sme");
+    setScheduleNetwork("mtn");
     setScheduleServiceType("data");
     setSchedulePlanId(null);
     setScheduleAirtimeAmount("");
@@ -401,7 +448,7 @@ export default function VtuPage() {
     setGiftRecipientPhone("");
     setGiftMessage("");
     setGiftPlanId(null);
-    setGiftNetwork("mtn_sme");
+    setGiftNetwork("mtn");
   };
 
   const walletBalance = parseFloat(wallet?.balance || "0");
@@ -422,7 +469,7 @@ export default function VtuPage() {
       plan.dataAmount.toLowerCase().includes(query) ||
       plan.validity.toLowerCase().includes(query) ||
       plan.name.toLowerCase().includes(query) ||
-      plan.discountedPrice.toString().includes(query)
+      plan.sellingPrice.toString().includes(query)
     );
   }, [plans, searchQuery]);
 
@@ -432,7 +479,7 @@ export default function VtuPage() {
     selectedPlanId && 
     phoneValidation.valid && 
     selectedPlan && 
-    walletBalance >= selectedPlan.discountedPrice;
+    walletBalance >= selectedPlan.sellingPrice;
 
   const airtimeAmount = selectedAirtimeAmount || (customAirtimeAmount ? parseFloat(customAirtimeAmount) : 0);
   const canPurchaseAirtime = 
@@ -451,7 +498,7 @@ export default function VtuPage() {
     giftPhoneValidation.valid &&
     giftPlanId &&
     selectedGiftPlan &&
-    walletBalance >= selectedGiftPlan.discountedPrice;
+    walletBalance >= selectedGiftPlan.sellingPrice;
 
   const handleDataPurchase = () => {
     if (!selectedPlanId || !phoneValidation.valid) return;
@@ -729,9 +776,15 @@ export default function VtuPage() {
               </CardTitle>
               <CardDescription>Choose your preferred network and data plan</CardDescription>
               {discount && (
-                <Badge variant="secondary" className="w-fit mt-2">
-                  {discount.percentage} discount applied
-                </Badge>
+                <div className="mt-3 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                    <Zap className="h-4 w-4" />
+                    <span className="font-medium">{discount.description}</span>
+                  </div>
+                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                    Average savings: {discount.averageSavings}
+                  </p>
+                </div>
               )}
             </CardHeader>
             <CardContent>
@@ -740,16 +793,16 @@ export default function VtuPage() {
                 setSelectedPlanId(null);
                 setSearchQuery("");
               }}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsList className="grid w-full grid-cols-4 mb-6">
                   {NETWORKS.map((network) => (
                     <TabsTrigger 
                       key={network.id} 
                       value={network.id}
                       data-testid={`tab-network-${network.id}`}
-                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs sm:text-sm"
                     >
-                      <span className={`w-2 h-2 rounded-full ${network.color} mr-2`} />
-                      {network.displayName}
+                      <span className={`w-2 h-2 rounded-full ${network.color} mr-1 sm:mr-2`} />
+                      <span className="truncate">{network.displayName}</span>
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -795,15 +848,18 @@ export default function VtuPage() {
                           >
                             <div className="text-lg font-bold">{plan.dataAmount}</div>
                             <div className="text-sm text-muted-foreground">{plan.validity}</div>
-                            <div className="mt-2">
-                              {plan.price !== plan.discountedPrice && (
-                                <div className="text-sm text-muted-foreground line-through">
-                                  ₦{plan.price.toLocaleString()}
+                            <div className="mt-2 space-y-1">
+                              <PriceDisplay 
+                                marketPrice={plan.marketPrice} 
+                                sellingPrice={plan.sellingPrice} 
+                                savingsPercentage={plan.savingsPercentage}
+                                size="small"
+                              />
+                              {plan.savingsAmount > 0 && (
+                                <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                  You Save ₦{plan.savingsAmount.toLocaleString()}
                                 </div>
                               )}
-                              <div className="text-lg font-semibold text-primary">
-                                ₦{plan.discountedPrice.toLocaleString()}
-                              </div>
                             </div>
                           </div>
                         ))}
@@ -841,16 +897,16 @@ export default function VtuPage() {
             </CardHeader>
             <CardContent>
               <Tabs value={selectedNetwork} onValueChange={(v) => setSelectedNetwork(v as NetworkType)}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsList className="grid w-full grid-cols-4 mb-6">
                   {NETWORKS.map((network) => (
                     <TabsTrigger 
                       key={network.id} 
                       value={network.id}
                       data-testid={`tab-airtime-network-${network.id}`}
-                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs sm:text-sm"
                     >
-                      <span className={`w-2 h-2 rounded-full ${network.color} mr-2`} />
-                      {network.displayName}
+                      <span className={`w-2 h-2 rounded-full ${network.color} mr-1 sm:mr-2`} />
+                      <span className="truncate">{network.displayName}</span>
                     </TabsTrigger>
                   ))}
                 </TabsList>

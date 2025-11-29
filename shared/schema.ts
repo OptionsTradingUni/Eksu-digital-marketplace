@@ -3177,3 +3177,286 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 ]);
 
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+// ===========================================
+// RESELLER SYSTEM (3-Tier Subdomain System)
+// ===========================================
+
+// Reseller tier enum
+export const resellerTierEnum = pgEnum("reseller_tier", ["starter", "business", "enterprise"]);
+export const resellerStatusEnum = pgEnum("reseller_status", ["pending", "active", "suspended", "cancelled"]);
+
+// Reseller sites table - main reseller configuration
+export const resellerSites = pgTable("reseller_sites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  tier: resellerTierEnum("tier").notNull().default("starter"),
+  subdomain: varchar("subdomain", { length: 50 }).unique(), // e.g., "johns-data" for johns-data.yoursite.com
+  siteName: varchar("site_name", { length: 100 }).notNull(),
+  siteDescription: text("site_description"),
+  logoUrl: text("logo_url"),
+  faviconUrl: text("favicon_url"),
+  primaryColor: varchar("primary_color", { length: 7 }).default("#16a34a"), // Hex color
+  secondaryColor: varchar("secondary_color", { length: 7 }).default("#0ea5e9"),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 20 }),
+  whatsappNumber: varchar("whatsapp_number", { length: 20 }),
+  customDomain: varchar("custom_domain", { length: 255 }), // Enterprise tier only
+  // Verification info
+  businessName: varchar("business_name", { length: 200 }),
+  businessAddress: text("business_address"),
+  ninVerified: boolean("nin_verified").default(false),
+  bvnVerified: boolean("bvn_verified").default(false),
+  // Tier limits
+  dailyTransactionLimit: decimal("daily_transaction_limit", { precision: 12, scale: 2 }).default("50000.00"), // Starter: 50k
+  totalTransactions: integer("total_transactions").default(0),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0.00"),
+  totalProfit: decimal("total_profit", { precision: 12, scale: 2 }).default("0.00"),
+  // Status
+  status: resellerStatusEnum("status").default("pending"),
+  isVerified: boolean("is_verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedBy: varchar("verified_by").references(() => users.id, { onDelete: "set null" }),
+  // Fees
+  setupFeePaid: boolean("setup_fee_paid").default(false),
+  setupFeeAmount: decimal("setup_fee_amount", { precision: 10, scale: 2 }),
+  setupFeeTransactionId: varchar("setup_fee_transaction_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("reseller_sites_user_idx").on(table.userId),
+  index("reseller_sites_subdomain_idx").on(table.subdomain),
+  index("reseller_sites_status_idx").on(table.status),
+]);
+
+// Reseller pricing - custom prices per reseller
+export const resellerPricing = pgTable("reseller_pricing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId: varchar("reseller_id").notNull().references(() => resellerSites.id, { onDelete: "cascade" }),
+  serviceType: varchar("service_type", { length: 50 }).notNull(), // data, airtime, cable, electricity, exam_pin
+  serviceId: varchar("service_id", { length: 100 }).notNull(), // Plan ID or service identifier
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(), // What reseller pays us
+  sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }).notNull(), // What reseller charges customers
+  profitMargin: decimal("profit_margin", { precision: 10, scale: 2 }).notNull(), // Reseller profit per transaction
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("reseller_pricing_reseller_idx").on(table.resellerId),
+  index("reseller_pricing_service_idx").on(table.serviceType, table.serviceId),
+]);
+
+// Reseller transactions - tracks all transactions through reseller sites
+export const resellerTransactions = pgTable("reseller_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId: varchar("reseller_id").notNull().references(() => resellerSites.id, { onDelete: "cascade" }),
+  customerPhone: varchar("customer_phone", { length: 20 }),
+  customerEmail: varchar("customer_email", { length: 255 }),
+  serviceType: varchar("service_type", { length: 50 }).notNull(),
+  serviceId: varchar("service_id", { length: 100 }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(),
+  resellerProfit: decimal("reseller_profit", { precision: 10, scale: 2 }).notNull(),
+  platformFee: decimal("platform_fee", { precision: 10, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).default("pending"),
+  reference: varchar("reference", { length: 100 }),
+  apiResponse: jsonb("api_response"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("reseller_transactions_reseller_idx").on(table.resellerId),
+  index("reseller_transactions_status_idx").on(table.status),
+  index("reseller_transactions_created_idx").on(table.createdAt),
+]);
+
+// Reseller customers - track repeat customers for resellers
+export const resellerCustomers = pgTable("reseller_customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId: varchar("reseller_id").notNull().references(() => resellerSites.id, { onDelete: "cascade" }),
+  phone: varchar("phone", { length: 20 }),
+  email: varchar("email", { length: 255 }),
+  name: varchar("name", { length: 100 }),
+  totalTransactions: integer("total_transactions").default(0),
+  totalSpent: decimal("total_spent", { precision: 12, scale: 2 }).default("0.00"),
+  lastTransactionAt: timestamp("last_transaction_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("reseller_customers_reseller_idx").on(table.resellerId),
+  index("reseller_customers_phone_idx").on(table.phone),
+]);
+
+// Insert schemas for reseller system
+export const insertResellerSiteSchema = createInsertSchema(resellerSites).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalTransactions: true,
+  totalRevenue: true,
+  totalProfit: true,
+  verifiedAt: true,
+  verifiedBy: true,
+});
+
+export const createResellerSiteSchema = z.object({
+  tier: z.enum(["starter", "business", "enterprise"]),
+  siteName: z.string().min(3, "Site name must be at least 3 characters").max(100),
+  siteDescription: z.string().max(500).optional(),
+  subdomain: z.string().min(3).max(50).regex(/^[a-z0-9-]+$/, "Subdomain can only contain lowercase letters, numbers, and hyphens"),
+  contactEmail: z.string().email().optional(),
+  contactPhone: z.string().max(20).optional(),
+  whatsappNumber: z.string().max(20).optional(),
+  businessName: z.string().max(200).optional(),
+  businessAddress: z.string().max(500).optional(),
+});
+
+export const updateResellerSiteSchema = createResellerSiteSchema.partial();
+
+export const insertResellerPricingSchema = createInsertSchema(resellerPricing).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Reseller types
+export type ResellerSite = typeof resellerSites.$inferSelect;
+export type InsertResellerSite = z.infer<typeof insertResellerSiteSchema>;
+export type CreateResellerSiteInput = z.infer<typeof createResellerSiteSchema>;
+export type ResellerPricing = typeof resellerPricing.$inferSelect;
+export type InsertResellerPricing = z.infer<typeof insertResellerPricingSchema>;
+export type ResellerTransaction = typeof resellerTransactions.$inferSelect;
+export type ResellerCustomer = typeof resellerCustomers.$inferSelect;
+
+// ===========================================
+// EXAM PINS PURCHASE SYSTEM
+// ===========================================
+
+export const examTypeEnum = pgEnum("exam_type", ["waec", "neco", "nabteb"]);
+
+export const examPinPurchases = pgTable("exam_pin_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  examType: examTypeEnum("exam_type").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(),
+  profit: decimal("profit", { precision: 10, scale: 2 }).notNull(),
+  pins: jsonb("pins"), // Array of {serial, pin} objects
+  status: varchar("status", { length: 20 }).default("pending"),
+  reference: varchar("reference", { length: 100 }),
+  apiResponse: jsonb("api_response"),
+  walletTransactionId: varchar("wallet_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("exam_pin_purchases_user_idx").on(table.userId),
+  index("exam_pin_purchases_status_idx").on(table.status),
+  index("exam_pin_purchases_created_idx").on(table.createdAt),
+]);
+
+export const insertExamPinPurchaseSchema = createInsertSchema(examPinPurchases).omit({
+  id: true,
+  createdAt: true,
+  pins: true,
+  apiResponse: true,
+});
+
+export const purchaseExamPinSchema = z.object({
+  examType: z.enum(["waec", "neco", "nabteb"]),
+  quantity: z.number().min(1, "Minimum quantity is 1").max(10, "Maximum quantity is 10"),
+});
+
+export type ExamPinPurchase = typeof examPinPurchases.$inferSelect;
+export type InsertExamPinPurchase = z.infer<typeof insertExamPinPurchaseSchema>;
+export type PurchaseExamPinInput = z.infer<typeof purchaseExamPinSchema>;
+
+// ===========================================
+// CASHBACK / REWARDS POINTS SYSTEM
+// ===========================================
+
+export const rewardPoints = pgTable("reward_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  totalPoints: integer("total_points").default(0),
+  availablePoints: integer("available_points").default(0),
+  redeemedPoints: integer("redeemed_points").default(0),
+  lifetimePoints: integer("lifetime_points").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("reward_points_user_idx").on(table.userId),
+]);
+
+export const rewardPointsTransactions = pgTable("reward_points_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(), // 'earn', 'redeem', 'expire'
+  points: integer("points").notNull(),
+  description: text("description"),
+  relatedTransactionId: varchar("related_transaction_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("reward_points_tx_user_idx").on(table.userId),
+  index("reward_points_tx_type_idx").on(table.type),
+]);
+
+export const insertRewardPointsSchema = createInsertSchema(rewardPoints).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const redeemPointsSchema = z.object({
+  points: z.number().min(1000, "Minimum redemption is 1000 points"),
+});
+
+export type RewardPoints = typeof rewardPoints.$inferSelect;
+export type RewardPointsTransaction = typeof rewardPointsTransactions.$inferSelect;
+export type RedeemPointsInput = z.infer<typeof redeemPointsSchema>;
+
+// ===========================================
+// BULK VTU PURCHASES
+// ===========================================
+
+export const bulkPurchases = pgTable("bulk_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  serviceType: varchar("service_type", { length: 20 }).notNull(), // 'data' or 'airtime'
+  network: varchar("network", { length: 20 }),
+  planId: varchar("plan_id", { length: 100 }),
+  amount: decimal("amount", { precision: 10, scale: 2 }), // For airtime
+  totalRecipients: integer("total_recipients").notNull(),
+  successfulCount: integer("successful_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  pendingCount: integer("pending_count").default(0),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, processing, completed, partial, failed
+  csvFileName: varchar("csv_file_name", { length: 255 }),
+  results: jsonb("results"), // Array of {phone, status, message} for each recipient
+  walletTransactionId: varchar("wallet_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("bulk_purchases_user_idx").on(table.userId),
+  index("bulk_purchases_status_idx").on(table.status),
+  index("bulk_purchases_created_idx").on(table.createdAt),
+]);
+
+export const insertBulkPurchaseSchema = createInsertSchema(bulkPurchases).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+  successfulCount: true,
+  failedCount: true,
+  pendingCount: true,
+  results: true,
+});
+
+export const createBulkPurchaseSchema = z.object({
+  serviceType: z.enum(["data", "airtime"]),
+  network: z.enum(["mtn", "glo", "airtel", "9mobile"]).optional(),
+  planId: z.string().optional(),
+  amount: z.number().optional(),
+  recipients: z.array(z.string().min(10).max(15)).min(1, "At least 1 recipient required").max(500, "Maximum 500 recipients"),
+});
+
+export type BulkPurchase = typeof bulkPurchases.$inferSelect;
+export type InsertBulkPurchase = z.infer<typeof insertBulkPurchaseSchema>;
+export type CreateBulkPurchaseInput = z.infer<typeof createBulkPurchaseSchema>;
