@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check, AtSign, Loader2, X, CheckCircle2, Shield, RefreshCw } from "lucide-react";
+import { ShoppingBag, Mail, Lock, User, Phone, ArrowLeft, Store, ShoppingCart, Gift, Check, AtSign, Loader2, X, CheckCircle2, Shield, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   InputOTP,
@@ -197,6 +197,9 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
   const [showVerification, setShowVerification] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [registeredEmail, setRegisteredEmail] = useState("");
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -684,12 +687,24 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                           <div className="relative">
                             <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                              type="password"
+                              type={showSignInPassword ? "text" : "password"}
                               placeholder="Enter your password"
-                              className="pl-10"
+                              className="pl-10 pr-10"
                               data-testid="input-signin-password"
                               {...field}
                             />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignInPassword(!showSignInPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              data-testid="button-toggle-signin-password"
+                            >
+                              {showSignInPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
                           </div>
                         </FormControl>
                         <FormMessage />
@@ -935,12 +950,24 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                           <div className="relative">
                             <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                              type="password"
+                              type={showSignUpPassword ? "text" : "password"}
                               placeholder="Strong password required"
-                              className="pl-10"
+                              className="pl-10 pr-10"
                               data-testid="input-signup-password"
                               {...field}
                             />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignUpPassword(!showSignUpPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              data-testid="button-toggle-signup-password"
+                            >
+                              {showSignUpPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
                           </div>
                         </FormControl>
                         <PasswordStrengthIndicator password={field.value} />
@@ -959,12 +986,24 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signin", defaultRo
                           <div className="relative">
                             <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                              type="password"
+                              type={showConfirmPassword ? "text" : "password"}
                               placeholder="Re-enter your password"
-                              className="pl-10"
+                              className="pl-10 pr-10"
                               data-testid="input-signup-confirm-password"
                               {...field}
                             />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              data-testid="button-toggle-confirm-password"
+                            >
+                              {showConfirmPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
                           </div>
                         </FormControl>
                         <FormMessage />

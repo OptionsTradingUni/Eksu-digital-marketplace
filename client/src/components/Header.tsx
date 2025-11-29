@@ -21,13 +21,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme, type Theme } from "@/contexts/ThemeContext";
 
 export function Header() {
   const { user, isAuthenticated, isSeller, isAdmin } = useAuth();
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+
+  const isDarkMode = theme !== "light" && theme !== "sepia";
+  
+  const toggleTheme = () => {
+    setTheme(isDarkMode ? "light" : "dim");
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +78,20 @@ export function Header() {
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <>
+                {/* Theme Toggle in Header */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  data-testid="button-theme-toggle-header"
+                >
+                  {isDarkMode ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
+                </Button>
+
                 {/* Cart */}
                 <CartDrawer />
 
@@ -267,7 +287,7 @@ export function Header() {
                       className="cursor-pointer"
                       data-testid="button-theme-toggle"
                     >
-                      {theme === "dark" ? (
+                      {isDarkMode ? (
                         <>
                           <Sun className="mr-2 h-4 w-4" />
                           Light Mode
@@ -302,26 +322,18 @@ export function Header() {
               </>
             ) : (
               <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-testid="button-theme-toggle-guest"
-                    >
-                      {theme === "dark" ? (
-                        <Sun className="h-5 w-5" />
-                      ) : (
-                        <Moon className="h-5 w-5" />
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={toggleTheme}>
-                      {theme === "dark" ? "Light Mode" : "Dark Mode"}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  data-testid="button-theme-toggle-guest"
+                >
+                  {isDarkMode ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
+                </Button>
                 <Button variant="ghost" asChild data-testid="button-login">
                   <a href="/api/login">Log In</a>
                 </Button>

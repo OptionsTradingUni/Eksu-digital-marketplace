@@ -2,7 +2,10 @@
 
 ## Overview
 
+<<<<<<< HEAD
 The EKSU Campus Marketplace is a secure and efficient platform for Ekiti State University (EKSU) students to buy and sell items. It aims to be the leading campus marketplace, fostering a safe trading environment and generating revenue through featured listings, transaction fees, and premium subscriptions. Key capabilities include real-time communication, a robust trust system, role-based access, advanced safety features, and a variety of social and utility features. The platform is designed to be a comprehensive campus hub for commerce, social interaction, and essential services.
+
+>>>>>>> main
 
 ## User Preferences
 
@@ -18,6 +21,7 @@ The marketplace employs a modern full-stack architecture focused on performance,
 
 **UI/UX Decisions:**
 - **Design System:** Shadcn UI + Tailwind CSS for a responsive, mobile-first design with full dark mode support.
+<<<<<<< HEAD
 - **Real-Time Features:** WhatsApp-inspired chat UI, real-time status updates, and a social feed ("The Plug") with X/Twitter-style interaction.
 - **Safety Features:** Safety Shield Modal, enhanced seller cards with trust scores, and an auto-follow system for new users to receive safety tips from a system account.
 - **Navigation:** Enhanced bottom navigation and header with dedicated links.
@@ -46,20 +50,27 @@ The marketplace employs a modern full-stack architecture focused on performance,
 - **Hostel & Roommate Finder:** Listings with filters, amenities, agent contact, and distance from campus.
 - **Game Library:** Integration of 15+ multiplayer betting games (Ludo, Whot, Chess, Aviator, etc.) with wallet integration and real-time WebSocket support.
 
+>>>>>>> main
+
 **System Design Choices:**
 - **Database Schema:** Structured for Users, Products, Categories, Messages, Reviews, Watchlist, Reports, Support Tickets, KYC, Sponsored Ads, Games, Study Materials, and Hostels.
 - **File Structure:** `client/` for frontend, `server/` for backend, `shared/` for common utilities.
-- **API Endpoints:** Organized by functionality (Auth, Products, Messages, Users, Admin, Categories, Watchlist, Reviews, Chatbot, Error Reporting, Support, VTU).
+- **API Endpoints:** Organized by functionality.
 
 ## External Dependencies
 
 - **PostgreSQL:** Primary database.
 - **Groq API:** For AI Chatbot (`llama-3.3-70b-versatile`).
+<<<<<<< HEAD
 - **Squad/Habari API:** Payment gateway for Card, Bank Transfer, USSD transactions.
+>>>>>>> main
 - **Passport.js:** Authentication middleware.
 - **Drizzle ORM:** Database interaction layer.
 - **Socket.io-like WebSocket:** Real-time communication.
+<<<<<<< HEAD
 - **Multer:** For handling multi-part form data, primarily image uploads.
 - **SMEDATA.NG API:** For Virtual Top-Up (VTU) data and airtime sales.
 - **Resend Email API:** Primary email service (with Brevo, Gmail, Mailgun fallbacks).
+
+>>>>>>> main
 - **Render:** Recommended deployment platform.

@@ -15,11 +15,13 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
+<<<<<<< HEAD
 localPort = 33771
 externalPort = 6000
 
 [[ports]]
 localPort = 38599
+>>>>>>> main
 externalPort = 4200
 
 [[ports]]
