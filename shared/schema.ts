@@ -3295,12 +3295,21 @@ export const resellerSites = pgTable("reseller_sites", {
   setupFeePaid: boolean("setup_fee_paid").default(false),
   setupFeeAmount: decimal("setup_fee_amount", { precision: 10, scale: 2 }),
   setupFeeTransactionId: varchar("setup_fee_transaction_id"),
+  // API Credentials
+  apiKey: varchar("api_key", { length: 64 }).unique(), // Public API key (pk_live_xxxxx or pk_test_xxxxx)
+  apiSecret: varchar("api_secret", { length: 64 }).unique(), // Secret key (sk_live_xxxxx or sk_test_xxxxx)
+  apiEnabled: boolean("api_enabled").default(false),
+  apiCreatedAt: timestamp("api_created_at"),
+  apiRateLimit: integer("api_rate_limit").default(100), // Requests per minute
+  apiWebhookUrl: varchar("api_webhook_url", { length: 500 }),
+  apiWebhookSecret: varchar("api_webhook_secret", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("reseller_sites_user_idx").on(table.userId),
   index("reseller_sites_subdomain_idx").on(table.subdomain),
   index("reseller_sites_status_idx").on(table.status),
+  index("reseller_sites_api_key_idx").on(table.apiKey),
 ]);
 
 // Reseller pricing - custom prices per reseller

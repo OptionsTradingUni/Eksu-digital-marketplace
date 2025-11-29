@@ -13211,5 +13211,107 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     }
   });
 
+  // Generate API keys for reseller
+  app.post("/api/reseller/api-keys", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      // Check if API keys already exist
+      if (site.apiKey) {
+        return res.status(400).json({ message: "API keys already generated. Revoke existing keys first." });
+      }
+
+      const { apiKey, apiSecret, webhookSecret } = req.body;
+      
+      if (!apiKey || !apiSecret || !webhookSecret) {
+        return res.status(400).json({ message: "Missing required credentials" });
+      }
+
+      // Check if user is admin (free access) or needs to pay
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.role === "admin";
+
+      if (!isAdmin) {
+        // Check wallet balance for API fee
+        const wallet = await storage.getWallet(userId);
+        if (!wallet || parseFloat(wallet.balance) < 5000) {
+          return res.status(400).json({ message: "Insufficient balance. API access costs ₦5,000" });
+        }
+
+        // Deduct API fee
+        await storage.updateWallet(wallet.id, {
+          balance: (parseFloat(wallet.balance) - 5000).toFixed(2),
+        });
+
+        // Create transaction record
+        await storage.createTransaction({
+          walletId: wallet.id,
+          type: "api_access_fee",
+          amount: "-5000.00",
+          description: "API Access Fee - Reseller API Keys Generation",
+          status: "completed",
+        });
+      }
+
+      // Save API keys
+      const updatedSite = await storage.updateResellerSite(site.id, {
+        apiKey,
+        apiSecret,
+        apiWebhookSecret: webhookSecret,
+        apiEnabled: true,
+        apiCreatedAt: new Date(),
+      });
+
+      res.json({ 
+        message: "API keys generated successfully",
+        apiKey: updatedSite.apiKey,
+        apiEnabled: updatedSite.apiEnabled,
+      });
+    } catch (error) {
+      console.error("Error generating API keys:", error);
+      res.status(500).json({ message: "Failed to generate API keys" });
+    }
+  });
+
+  // Revoke/Delete API keys for reseller
+  app.delete("/api/reseller/api-keys", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      if (!site.apiKey) {
+        return res.status(400).json({ message: "No API keys to revoke" });
+      }
+
+      // Revoke API keys
+      await storage.updateResellerSite(site.id, {
+        apiKey: null,
+        apiSecret: null,
+        apiWebhookSecret: null,
+        apiEnabled: false,
+      });
+
+      res.json({ message: "API keys revoked successfully" });
+    } catch (error) {
+      console.error("Error revoking API keys:", error);
+      res.status(500).json({ message: "Failed to revoke API keys" });
+    }
+  });
+
   return httpServer;
 }

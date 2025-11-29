@@ -32,10 +32,12 @@ import { z } from "zod";
 import { 
   Store, TrendingUp, Users, DollarSign, Settings, History, 
   CheckCircle, Crown, Rocket, Building2, ExternalLink, Copy,
-  Loader2, AlertCircle, Phone, Mail, Globe
+  Loader2, AlertCircle, Phone, Mail, Globe, Key, Terminal, 
+  Shield, Eye, EyeOff, Code, Zap, RefreshCw
 } from "lucide-react";
 import { format } from "date-fns";
-import type { ResellerSite, ResellerTransaction, ResellerCustomer, Wallet } from "@shared/schema";
+import type { ResellerSite, ResellerTransaction, ResellerCustomer, Wallet, User } from "@shared/schema";
+import { ApiTerminal } from "@/components/api-terminal";
 
 type ResellerTier = "starter" | "business" | "enterprise";
 
@@ -492,6 +494,14 @@ function StatsCard({ title, value, icon: Icon, subtext }: {
 function ResellerDashboard({ site }: { site: ResellerSite }) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
+  const [showApiTerminal, setShowApiTerminal] = useState(false);
+  const [showApiSecret, setShowApiSecret] = useState(false);
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  const isAdmin = currentUser?.role === "admin";
 
   const { data: stats, isLoading: statsLoading } = useQuery<{
     totalRevenue: string;
@@ -508,6 +518,43 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
 
   const { data: customers, isLoading: customersLoading } = useQuery<ResellerCustomer[]>({
     queryKey: ["/api/reseller/customers"],
+  });
+
+  const generateApiMutation = useMutation({
+    mutationFn: async (credentials: { apiKey: string; apiSecret: string; webhookSecret: string }) => {
+      const response = await apiRequest("POST", "/api/reseller/api-keys", credentials);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "API credentials generated and saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/reseller"] });
+      setShowApiTerminal(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to generate API credentials",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const regenerateApiMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", "/api/reseller/api-keys");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "API Keys Revoked", description: "Your old API keys have been revoked. Generate new ones." });
+      queryClient.invalidateQueries({ queryKey: ["/api/reseller"] });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to revoke API keys",
+        variant: "destructive"
+      });
+    },
   });
 
   const settingsForm = useForm<z.infer<typeof updateSettingsFormSchema>>({
@@ -599,6 +646,10 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
           <TabsTrigger value="customers" data-testid="tab-customers">
             <Users className="h-4 w-4 mr-1" />
             Customers
+          </TabsTrigger>
+          <TabsTrigger value="api" data-testid="tab-api">
+            <Key className="h-4 w-4 mr-1" />
+            API Access
           </TabsTrigger>
           <TabsTrigger value="settings" data-testid="tab-settings">
             <Settings className="h-4 w-4 mr-1" />
@@ -810,6 +861,211 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
           </Card>
         </TabsContent>
 
+        <TabsContent value="api">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  API Access
+                </CardTitle>
+                <CardDescription>
+                  Generate API credentials to integrate VTU services into your own applications
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {site.apiKey ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-green-500/10 border border-green-500/30">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span className="text-green-600 dark:text-green-400 font-medium">API Access Enabled</span>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-md bg-muted/50 space-y-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">API Key (Public)</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <code className="flex-1 p-2 rounded bg-background font-mono text-sm">
+                              {site.apiKey}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard.writeText(site.apiKey || "");
+                                toast({ title: "Copied", description: "API Key copied to clipboard" });
+                              }}
+                              data-testid="button-copy-api-key"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs text-muted-foreground">API Secret (Private)</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <code className="flex-1 p-2 rounded bg-background font-mono text-sm">
+                              {showApiSecret ? (site.apiSecret || "sk_live_****") : "sk_live_" + "*".repeat(28)}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowApiSecret(!showApiSecret)}
+                              data-testid="button-toggle-api-secret"
+                            >
+                              {showApiSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard.writeText(site.apiSecret || "");
+                                toast({ title: "Copied", description: "API Secret copied to clipboard" });
+                              }}
+                              data-testid="button-copy-api-secret"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Never share your API Secret publicly
+                          </p>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Rate Limit</Label>
+                          <p className="font-medium">{site.apiRateLimit || 100} requests per minute</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 pt-2">
+                        <Button
+                          variant="destructive"
+                          onClick={() => regenerateApiMutation.mutate()}
+                          disabled={regenerateApiMutation.isPending}
+                          data-testid="button-revoke-api"
+                        >
+                          {regenerateApiMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Regenerate API Keys
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="text-center py-8 space-y-4">
+                      <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Terminal className="h-8 w-8 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">Generate API Credentials</h3>
+                        <p className="text-muted-foreground text-sm mt-1">
+                          Create secure API keys to integrate VTU services into your applications
+                        </p>
+                      </div>
+                      
+                      {!isAdmin && (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Shield className="h-4 w-4" />
+                          <span>One-time fee: <span className="font-bold text-foreground">₦5,000</span></span>
+                        </div>
+                      )}
+                      {isAdmin && (
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                          Admin - Free Access
+                        </Badge>
+                      )}
+
+                      <Button
+                        size="lg"
+                        onClick={() => setShowApiTerminal(true)}
+                        data-testid="button-generate-api"
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Generate API Keys
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Code className="h-8 w-8 mx-auto mb-2 text-primary" />
+                          <h4 className="font-medium">Easy Integration</h4>
+                          <p className="text-xs text-muted-foreground">Simple REST API with comprehensive documentation</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Shield className="h-8 w-8 mx-auto mb-2 text-primary" />
+                          <h4 className="font-medium">Secure</h4>
+                          <p className="text-xs text-muted-foreground">Industry-standard encryption and authentication</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <Zap className="h-8 w-8 mx-auto mb-2 text-primary" />
+                          <h4 className="font-medium">Fast</h4>
+                          <p className="text-xs text-muted-foreground">Real-time processing with instant webhooks</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {site.apiKey && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Code className="h-5 w-5" />
+                    API Documentation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-4 rounded-md bg-gray-900 text-gray-100 font-mono text-sm overflow-x-auto">
+                    <p className="text-green-400"># Purchase Data</p>
+                    <p className="text-gray-400">POST https://api.eksuplug.com/v1/data/purchase</p>
+                    <p className="text-gray-500 mt-2"># Headers</p>
+                    <p>Authorization: Bearer {"{"}your_api_key{"}"}</p>
+                    <p>X-API-Secret: {"{"}your_api_secret{"}"}</p>
+                    <p className="text-gray-500 mt-2"># Body</p>
+                    <p>{"{"}</p>
+                    <p className="pl-4">"phone": "08012345678",</p>
+                    <p className="pl-4">"network": "mtn_sme",</p>
+                    <p className="pl-4">"plan_id": "mtn_500mb_30days"</p>
+                    <p>{"}"}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-medium mb-2">Available Endpoints</h4>
+                      <ul className="text-sm space-y-1 text-muted-foreground">
+                        <li>POST /v1/data/purchase - Purchase data</li>
+                        <li>POST /v1/airtime/purchase - Purchase airtime</li>
+                        <li>GET /v1/plans - List available plans</li>
+                        <li>GET /v1/balance - Check wallet balance</li>
+                        <li>GET /v1/transactions - List transactions</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Rate Limits</h4>
+                      <ul className="text-sm space-y-1 text-muted-foreground">
+                        <li>100 requests per minute</li>
+                        <li>10,000 requests per day</li>
+                        <li>Webhook retries: 3 attempts</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
         <TabsContent value="settings">
           <Card>
             <CardHeader>
@@ -953,6 +1209,15 @@ function ResellerDashboard({ site }: { site: ResellerSite }) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ApiTerminal
+        isOpen={showApiTerminal}
+        onComplete={(credentials) => generateApiMutation.mutate(credentials)}
+        onClose={() => setShowApiTerminal(false)}
+        siteName={site.siteName}
+        tier={site.tier}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }
