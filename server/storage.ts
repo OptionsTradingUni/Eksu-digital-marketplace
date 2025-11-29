@@ -281,7 +281,10 @@ export interface IStorage {
   // Message operations
   getMessageThread(userId1: string, userId2: string): Promise<Message[]>;
   getMessageThreads(userId: string): Promise<any[]>;
+  getTotalUnreadMessageCount(userId: string): Promise<number>;
   createMessage(message: InsertMessage): Promise<Message>;
+  getMessage(id: string): Promise<Message | undefined>;
+  deleteMessage(id: string, userId: string): Promise<void>;
   markMessagesAsRead(userId: string, fromUserId: string): Promise<void>;
   
   // Enhanced messaging operations
@@ -1265,9 +1268,38 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async getTotalUnreadMessageCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.receiverId, userId),
+          eq(messages.isRead, false)
+        )
+      );
+    return result[0]?.count || 0;
+  }
+
   async createMessage(message: InsertMessage): Promise<Message> {
     const [created] = await db.insert(messages).values(message).returning();
     return created;
+  }
+
+  async getMessage(id: string): Promise<Message | undefined> {
+    const [message] = await db.select().from(messages).where(eq(messages.id, id));
+    return message;
+  }
+
+  async deleteMessage(id: string, userId: string): Promise<void> {
+    const [message] = await db.select().from(messages).where(eq(messages.id, id));
+    if (!message) {
+      throw new Error("Message not found");
+    }
+    if (message.senderId !== userId) {
+      throw new Error("You can only delete your own messages");
+    }
+    await db.delete(messages).where(eq(messages.id, id));
   }
 
   async markMessagesAsRead(userId: string, fromUserId: string): Promise<void> {

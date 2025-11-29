@@ -61,6 +61,8 @@ import {
   sendEmailVerificationCode, 
   sendErrorReportToAdmin, 
   sendMessageNotification, 
+  sendOrderMessageNotification,
+  sendMessageReplyNotification,
   sendOrderEmail,
   sendWelcomeEmail,
   sendNewFollowerEmail,
@@ -3503,6 +3505,21 @@ Happy trading!`;
     }
   });
 
+  app.get("/api/messages/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const count = await storage.getTotalUnreadMessageCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread message count:", error);
+      res.status(500).json({ message: "Failed to fetch unread count" });
+    }
+  });
+
   app.get("/api/messages/:otherUserId", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -3720,10 +3737,72 @@ Happy trading!`;
               relatedProductId: validated.productId || undefined,
             });
 
-            // Send email notification for new message
-            sendMessageNotification(receiver.email, senderName).catch(err => {
-              console.error("Failed to send message email notification:", err);
-            });
+            // Send enhanced email notification with product/order context
+            (async () => {
+              try {
+                // Check if message is related to a product
+                let product = null;
+                let relatedOrder = null;
+                
+                if (validated.productId) {
+                  product = await storage.getProduct(validated.productId);
+                  
+                  // Check if there's an active order between these users for this product
+                  const senderOrders = await storage.getUserOrders(userId, 'buyer');
+                  const receiverOrders = await storage.getUserOrders(validated.receiverId, 'seller');
+                  
+                  // Find any order where sender is buyer and receiver is seller (or vice versa)
+                  relatedOrder = senderOrders.find(o => 
+                    o.productId === validated.productId && 
+                    o.sellerId === validated.receiverId &&
+                    !['completed', 'cancelled', 'refunded'].includes(o.status)
+                  ) || receiverOrders.find(o =>
+                    o.productId === validated.productId && 
+                    o.buyerId === userId &&
+                    !['completed', 'cancelled', 'refunded'].includes(o.status)
+                  );
+                }
+                
+                // Check if this is a reply (existing conversation)
+                const existingMessages = await storage.getMessageThread(userId, validated.receiverId);
+                const isReply = existingMessages.length > 1; // More than just this message
+                
+                // Send order-specific email if there's an active order
+                if (relatedOrder && product) {
+                  const isBuyerMessage = relatedOrder.buyerId === userId;
+                  await sendOrderMessageNotification(receiver.email, {
+                    senderName,
+                    senderId: userId,
+                    messagePreview: validated.content,
+                    orderId: relatedOrder.id,
+                    productName: product.title,
+                    productId: validated.productId || undefined,
+                    orderStatus: relatedOrder.status,
+                    isBuyerMessage,
+                  });
+                } else if (isReply) {
+                  // Send reply notification with product context if available
+                  await sendMessageReplyNotification(receiver.email, {
+                    senderName,
+                    senderId: userId,
+                    messagePreview: validated.content,
+                    productName: product?.title,
+                    productId: validated.productId || undefined,
+                  });
+                } else {
+                  // Send regular message notification with enhanced context
+                  await sendMessageNotification(receiver.email, senderName, {
+                    messagePreview: validated.content,
+                    productName: product?.title,
+                    productId: validated.productId || undefined,
+                    senderId: userId,
+                    isReply: false,
+                  });
+                }
+              } catch (emailErr) {
+                console.error("Failed to send message email notification:", emailErr);
+              }
+            })();
           }
         }
       }
@@ -3807,7 +3886,8 @@ Happy trading!`;
       // Create notification for the message receiver (except for system account)
       if (validated.receiverId && validated.receiverId !== userId && !isSystemAccount(validated.receiverId)) {
         const sender = await storage.getUser(userId);
-        if (sender) {
+        const receiver = await storage.getUser(validated.receiverId);
+        if (sender && receiver) {
           const senderName = sender.firstName && sender.lastName 
             ? `${sender.firstName} ${sender.lastName}` 
             : sender.email;
@@ -3828,6 +3908,68 @@ Happy trading!`;
             relatedUserId: userId,
             relatedProductId: validated.productId || undefined,
           });
+
+          // Send enhanced email notification with product/order context
+          (async () => {
+            try {
+              let product = null;
+              let relatedOrder = null;
+              
+              if (validated.productId) {
+                product = await storage.getProduct(validated.productId);
+                
+                const senderOrders = await storage.getUserOrders(userId, 'buyer');
+                const receiverOrders = await storage.getUserOrders(validated.receiverId, 'seller');
+                
+                relatedOrder = senderOrders.find(o => 
+                  o.productId === validated.productId && 
+                  o.sellerId === validated.receiverId &&
+                  !['completed', 'cancelled', 'refunded'].includes(o.status)
+                ) || receiverOrders.find(o =>
+                  o.productId === validated.productId && 
+                  o.buyerId === userId &&
+                  !['completed', 'cancelled', 'refunded'].includes(o.status)
+                );
+              }
+              
+              const existingMessages = await storage.getMessageThread(userId, validated.receiverId);
+              const isReply = existingMessages.length > 1;
+              
+              const emailMessagePreview = imageUrl ? "[Image attachment]" : validated.content;
+              
+              if (relatedOrder && product) {
+                const isBuyerMessage = relatedOrder.buyerId === userId;
+                await sendOrderMessageNotification(receiver.email, {
+                  senderName,
+                  senderId: userId,
+                  messagePreview: emailMessagePreview,
+                  orderId: relatedOrder.id,
+                  productName: product.title,
+                  productId: validated.productId || undefined,
+                  orderStatus: relatedOrder.status,
+                  isBuyerMessage,
+                });
+              } else if (isReply) {
+                await sendMessageReplyNotification(receiver.email, {
+                  senderName,
+                  senderId: userId,
+                  messagePreview: emailMessagePreview,
+                  productName: product?.title,
+                  productId: validated.productId || undefined,
+                });
+              } else {
+                await sendMessageNotification(receiver.email, senderName, {
+                  messagePreview: emailMessagePreview,
+                  productName: product?.title,
+                  productId: validated.productId || undefined,
+                  senderId: userId,
+                  isReply: false,
+                });
+              }
+            } catch (emailErr) {
+              console.error("Failed to send message email notification:", emailErr);
+            }
+          })();
         }
       }
       
@@ -3835,6 +3977,22 @@ Happy trading!`;
     } catch (error: any) {
       console.error("Error creating message with attachment:", error);
       res.status(400).json({ message: error.message || "Failed to send message" });
+    }
+  });
+
+  // Delete message route (only own messages)
+  app.delete("/api/messages/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await storage.deleteMessage(req.params.id, userId);
+      res.json({ message: "Message deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting message:", error);
+      res.status(400).json({ message: error.message || "Failed to delete message" });
     }
   });
 

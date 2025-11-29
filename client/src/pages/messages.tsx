@@ -11,6 +11,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Lightbox, useLightbox } from "@/components/ui/lightbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Send, 
   Paperclip, 
@@ -37,7 +44,11 @@ import {
   ChevronUp,
   X,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Copy,
+  Trash2,
+  Pin,
+  MoreVertical
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -308,7 +319,7 @@ function parseMessageContent(content: string): Array<{ type: 'text' | 'image'; v
   return parts;
 }
 
-// Chat bubble component with reactions and blue checkmarks - memoized for performance
+// Chat bubble component with reactions, context menu, and blue checkmarks - memoized for performance
 const ChatBubble = memo(function ChatBubble({ 
   message, 
   isOwn, 
@@ -316,6 +327,8 @@ const ChatBubble = memo(function ChatBubble({
   reactions,
   onAddReaction,
   onRemoveReaction,
+  onCopyMessage,
+  onDeleteMessage,
   currentUserId,
   onImageClick
 }: { 
@@ -325,10 +338,13 @@ const ChatBubble = memo(function ChatBubble({
   reactions?: ReactionWithUser[];
   onAddReaction: (messageId: string, reaction: string) => void;
   onRemoveReaction: (messageId: string) => void;
+  onCopyMessage: (content: string) => void;
+  onDeleteMessage: (messageId: string) => void;
   currentUserId?: string;
   onImageClick?: (src: string) => void;
 }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Memoize the date formatting to avoid recalculation
@@ -343,9 +359,17 @@ const ChatBubble = memo(function ChatBubble({
     return parseMessageContent(message.content);
   }, [message.content]);
 
+  // Get plain text content for copying
+  const plainTextContent = useMemo(() => {
+    return parsedContent
+      .filter(part => part.type === 'text')
+      .map(part => part.value)
+      .join(' ');
+  }, [parsedContent]);
+
   const handleTouchStart = useCallback(() => {
     longPressTimerRef.current = setTimeout(() => {
-      setShowReactionPicker(true);
+      setShowContextMenu(true);
     }, 500);
   }, []);
 
@@ -357,7 +381,7 @@ const ChatBubble = memo(function ChatBubble({
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setShowReactionPicker(true);
+    setShowContextMenu(true);
   }, []);
 
   const handleReactionSelect = useCallback((reaction: string) => {
@@ -377,16 +401,74 @@ const ChatBubble = memo(function ChatBubble({
   const handleCloseReactionPicker = useCallback(() => {
     setShowReactionPicker(false);
   }, []);
+
+  const handleCopy = useCallback(() => {
+    onCopyMessage(plainTextContent || message.content || '');
+    setShowContextMenu(false);
+  }, [onCopyMessage, plainTextContent, message.content]);
+
+  const handleDelete = useCallback(() => {
+    onDeleteMessage(message.id);
+    setShowContextMenu(false);
+  }, [onDeleteMessage, message.id]);
   
   return (
     <div
-      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1 relative`}
+      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1 relative group`}
       data-testid={`message-${message.id}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onContextMenu={handleContextMenu}
     >
-      <div className="relative">
+      <div className="relative flex items-center gap-1">
+        {/* Context menu dropdown - visible on hover or long-press */}
+        <DropdownMenu open={showContextMenu} onOpenChange={setShowContextMenu}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${isOwn ? "order-first" : "order-last"}`}
+              data-testid={`button-message-menu-${message.id}`}
+            >
+              <MoreVertical className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align={isOwn ? "end" : "start"} className="w-40">
+            {(message.content || plainTextContent) && (
+              <DropdownMenuItem 
+                onClick={handleCopy}
+                data-testid={`button-copy-message-${message.id}`}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={() => {
+                setShowContextMenu(false);
+                setShowReactionPicker(true);
+              }}
+              data-testid={`button-react-message-${message.id}`}
+            >
+              <Heart className="h-4 w-4 mr-2" />
+              React
+            </DropdownMenuItem>
+            {isOwn && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={handleDelete}
+                  className="text-destructive focus:text-destructive"
+                  data-testid={`button-delete-message-${message.id}`}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <div
           className={`relative max-w-[75%] ${message.imageUrl ? 'p-1' : 'px-3 py-2'} ${
             isOwn
@@ -526,6 +608,8 @@ const ThreadItem = memo(function ThreadItem({
   onClick,
   isOnline,
   onArchive,
+  onPin,
+  isPinned = false,
   isArchived = false,
 }: {
   thread: ChatThread;
@@ -533,6 +617,8 @@ const ThreadItem = memo(function ThreadItem({
   onClick: () => void;
   isOnline: boolean;
   onArchive: () => void;
+  onPin: () => void;
+  isPinned?: boolean;
   isArchived?: boolean;
 }) {
   const x = useMotionValue(0);
@@ -555,9 +641,14 @@ const ThreadItem = memo(function ThreadItem({
     }
   }, [x, onArchive]);
 
+  const handlePinClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onPin();
+  }, [onPin]);
+
   return (
     <motion.div 
-      className="relative overflow-hidden"
+      className="relative overflow-hidden group"
       data-testid={`thread-${thread.user.id}`}
     >
       {/* Archive indicator behind the thread item */}
@@ -577,11 +668,10 @@ const ThreadItem = memo(function ThreadItem({
         </div>
       </motion.div>
       
-      <motion.button
-        onClick={onClick}
+      <motion.div
         className={`w-full p-4 hover-elevate text-left transition-all duration-200 ${
           isSelected ? "bg-accent" : "bg-background"
-        } ${isSystemAccount ? "border-l-2 border-l-yellow-500/50" : ""}`}
+        } ${isSystemAccount ? "border-l-2 border-l-yellow-500/50" : ""} ${isPinned ? "bg-muted/30" : ""}`}
         style={{ x }}
         drag="x"
         dragConstraints={{ left: -100, right: 0 }}
@@ -589,67 +679,89 @@ const ThreadItem = memo(function ThreadItem({
         onDragEnd={handleDragEnd}
       >
         <div className="flex items-center gap-3">
-          {/* Avatar with online indicator */}
-          <div className="relative">
-            <Avatar className={isSystemAccount ? "ring-2 ring-yellow-500/50" : ""}>
-              <AvatarImage src={thread.user.profileImageUrl || undefined} loading="lazy" />
-              <AvatarFallback className={isSystemAccount ? "bg-gradient-to-br from-yellow-500/30 to-amber-400/20" : ""}>
-                {thread.user.firstName?.[0] || thread.user.email?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            {/* Online/Offline indicator - System accounts always show online */}
-            <span
-              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                effectiveOnline ? "bg-green-500" : "bg-muted-foreground/50"
-              }`}
-              data-testid={`status-online-${thread.user.id}`}
-            />
-          </div>
+          {/* Pin button - visible on hover or when pinned */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-6 w-6 shrink-0 transition-opacity ${
+              isPinned ? "opacity-100 text-primary" : "opacity-0 group-hover:opacity-100"
+            }`}
+            onClick={handlePinClick}
+            data-testid={`button-pin-thread-${thread.user.id}`}
+          >
+            <Pin className={`h-3.5 w-3.5 ${isPinned ? "fill-current" : ""}`} />
+          </Button>
           
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
-                  {thread.user.firstName || thread.user.email}
-                </p>
-                {isSystemAccount && (
-                  <CheckCircle 
-                    className="h-4 w-4 text-yellow-500 shrink-0" 
-                    data-testid={`badge-verified-${thread.user.id}`}
-                  />
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {lastMessageTime && (
-                  <span 
-                    className="text-xs text-muted-foreground"
-                    data-testid={`text-thread-time-${thread.user.id}`}
-                  >
-                    {lastMessageTime}
-                  </span>
-                )}
-                {thread.unreadCount > 0 && (
-                  <Badge 
-                    variant="default" 
-                    className="min-w-[20px] h-5 flex items-center justify-center text-xs animate-pulse"
-                    data-testid={`badge-unread-${thread.user.id}`}
-                  >
-                    {thread.unreadCount}
-                  </Badge>
-                )}
-              </div>
+          {/* Main clickable area */}
+          <button
+            onClick={onClick}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          >
+            {/* Avatar with online indicator */}
+            <div className="relative">
+              <Avatar className={isSystemAccount ? "ring-2 ring-yellow-500/50" : ""}>
+                <AvatarImage src={thread.user.profileImageUrl || undefined} loading="lazy" />
+                <AvatarFallback className={isSystemAccount ? "bg-gradient-to-br from-yellow-500/30 to-amber-400/20" : ""}>
+                  {thread.user.firstName?.[0] || thread.user.email?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              {/* Online/Offline indicator - System accounts always show online */}
+              <span
+                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
+                  effectiveOnline ? "bg-green-500" : "bg-muted-foreground/50"
+                }`}
+                data-testid={`status-online-${thread.user.id}`}
+              />
             </div>
-            {thread.lastMessage && (
-              <p 
-                className="text-sm text-muted-foreground truncate mt-0.5"
-                data-testid={`text-thread-preview-${thread.user.id}`}
-              >
-                {thread.lastMessage.content}
-              </p>
-            )}
-          </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isPinned && (
+                    <Pin className="h-3 w-3 text-primary shrink-0 fill-current" data-testid={`icon-pinned-${thread.user.id}`} />
+                  )}
+                  <p className="font-medium truncate" data-testid={`text-thread-name-${thread.user.id}`}>
+                    {thread.user.firstName || thread.user.email}
+                  </p>
+                  {isSystemAccount && (
+                    <CheckCircle 
+                      className="h-4 w-4 text-yellow-500 shrink-0" 
+                      data-testid={`badge-verified-${thread.user.id}`}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {lastMessageTime && (
+                    <span 
+                      className="text-xs text-muted-foreground"
+                      data-testid={`text-thread-time-${thread.user.id}`}
+                    >
+                      {lastMessageTime}
+                    </span>
+                  )}
+                  {thread.unreadCount > 0 && (
+                    <Badge 
+                      variant="default" 
+                      className="min-w-[20px] h-5 flex items-center justify-center text-xs animate-pulse"
+                      data-testid={`badge-unread-${thread.user.id}`}
+                    >
+                      {thread.unreadCount}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {thread.lastMessage && (
+                <p 
+                  className="text-sm text-muted-foreground truncate mt-0.5"
+                  data-testid={`text-thread-preview-${thread.user.id}`}
+                >
+                  {thread.lastMessage.content}
+                </p>
+              )}
+            </div>
+          </button>
         </div>
-      </motion.button>
+      </motion.div>
     </motion.div>
   );
 });
@@ -746,6 +858,16 @@ export default function Messages() {
   const [showArchivedSection, setShowArchivedSection] = useState(false);
   const [showConversationSettings, setShowConversationSettings] = useState(false);
   const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, ReactionWithUser[]>>({});
+  
+  // Pinned chats state with localStorage persistence
+  const [pinnedChats, setPinnedChats] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('pinnedChats');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   
   const { isOpen: lightboxOpen, currentImage, openLightbox, closeLightbox } = useLightbox();
   
@@ -903,6 +1025,74 @@ export default function Messages() {
       });
     },
   });
+
+  // Delete message mutation (only for own messages)
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await apiRequest("DELETE", `/api/messages/${messageId}`);
+    },
+    onSuccess: () => {
+      // Invalidate messages cache to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
+      toast({
+        title: "Message deleted",
+        description: "Your message has been deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete message",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Pin chat toggle handler
+  const handlePinChat = useCallback((userId: string) => {
+    setPinnedChats(prev => {
+      const newPinned = new Set(prev);
+      if (newPinned.has(userId)) {
+        newPinned.delete(userId);
+        toast({
+          title: "Chat unpinned",
+          description: "Chat has been unpinned from the top.",
+        });
+      } else {
+        newPinned.add(userId);
+        toast({
+          title: "Chat pinned",
+          description: "Chat will appear at the top of your list.",
+        });
+      }
+      // Persist to localStorage
+      localStorage.setItem('pinnedChats', JSON.stringify([...newPinned]));
+      return newPinned;
+    });
+  }, [toast]);
+
+  // Copy message handler
+  const handleCopyMessage = useCallback((content: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      toast({
+        title: "Copied",
+        description: "Message copied to clipboard.",
+      });
+    }).catch(() => {
+      toast({
+        title: "Error",
+        description: "Failed to copy message to clipboard.",
+        variant: "destructive",
+      });
+    });
+  }, [toast]);
+
+  // Delete message handler
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    deleteMessageMutation.mutate(messageId);
+  }, [deleteMessageMutation]);
 
   // Archive conversation mutation
   const archiveMutation = useMutation({
@@ -1107,6 +1297,7 @@ export default function Messages() {
     );
 
     queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
   }, [currentUser?.id]);
 
   // WebSocket connection with proper JWT authentication and reconnection
@@ -1267,6 +1458,7 @@ export default function Messages() {
         console.log("WebSocket not connected, polling for messages...");
         queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedUser] });
         queryClient.invalidateQueries({ queryKey: ["/api/messages/threads"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
       }
     }, 5000);
 
@@ -1460,14 +1652,30 @@ export default function Messages() {
   }, [archivedConversations]);
 
   // Memoize filtered threads to avoid recalculation on every render
+  // Pinned chats appear at the top
   const filteredThreads = useMemo(() => {
-    return threads?.filter((thread) => {
+    const filtered = threads?.filter((thread) => {
       const name = thread.user.firstName || thread.user.email || "";
       const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
       const notArchived = !archivedUserIds.has(thread.user.id);
       return matchesSearch && notArchived;
     });
-  }, [threads, searchQuery, archivedUserIds]);
+    
+    // Sort: pinned chats first, then by last message time
+    return filtered?.sort((a, b) => {
+      const aPinned = pinnedChats.has(a.user.id);
+      const bPinned = pinnedChats.has(b.user.id);
+      
+      // Pinned chats come first
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      
+      // Within same category, sort by last message time
+      const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+      const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [threads, searchQuery, archivedUserIds, pinnedChats]);
 
   // Calculate if there are more messages to load
   const hasMoreMessages = useMemo(() => {
@@ -1559,6 +1767,8 @@ export default function Messages() {
                 onClick={() => handleSelectThread(thread.user.id)}
                 isOnline={onlineUserIds.has(thread.user.id)}
                 onArchive={() => handleArchiveConversation(thread.user.id)}
+                onPin={() => handlePinChat(thread.user.id)}
+                isPinned={pinnedChats.has(thread.user.id)}
               />
             ))}
           </div>
@@ -1604,6 +1814,8 @@ export default function Messages() {
                       onClick={() => handleSelectThread(archived.otherUser.id)}
                       isOnline={onlineUserIds.has(archived.otherUser.id)}
                       onArchive={() => handleUnarchiveConversation(archived.otherUser.id)}
+                      onPin={() => handlePinChat(archived.otherUser.id)}
+                      isPinned={pinnedChats.has(archived.otherUser.id)}
                       isArchived={true}
                     />
                   ))}
@@ -1784,6 +1996,8 @@ export default function Messages() {
                       reactions={messageReactionsMap[item.message.id]}
                       onAddReaction={handleAddReaction}
                       onRemoveReaction={handleRemoveReaction}
+                      onCopyMessage={handleCopyMessage}
+                      onDeleteMessage={handleDeleteMessage}
                       currentUserId={currentUser?.id}
                       onImageClick={openLightbox}
                     />

@@ -1,7 +1,10 @@
 import { Link, useLocation } from "wouter";
 import { Home, Zap, MessageSquare, Gamepad2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -9,20 +12,32 @@ interface NavItemProps {
   href: string;
   isActive: boolean;
   testId: string;
+  badgeCount?: number;
 }
 
-function NavItem({ icon, label, href, isActive, testId }: NavItemProps) {
+function NavItem({ icon, label, href, isActive, testId, badgeCount }: NavItemProps) {
   return (
     <Link href={href}>
       <Button
         variant="ghost"
         className={cn(
-          "flex flex-col items-center justify-center h-full w-full gap-0.5 rounded-none",
+          "flex flex-col items-center justify-center h-full w-full gap-0.5 rounded-none relative",
           isActive && "text-primary"
         )}
         data-testid={testId}
       >
-        <div className="h-5 w-5">{icon}</div>
+        <div className="relative h-5 w-5">
+          {icon}
+          {badgeCount !== undefined && badgeCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-2 -right-3 h-4 min-w-4 flex items-center justify-center p-0 text-[10px]"
+              data-testid="badge-unread-messages"
+            >
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </Badge>
+          )}
+        </div>
         <span className="text-xs">{label}</span>
       </Button>
     </Link>
@@ -31,6 +46,15 @@ function NavItem({ icon, label, href, isActive, testId }: NavItemProps) {
 
 export function BottomNav() {
   const [location] = useLocation();
+  const { isAuthenticated } = useAuth();
+
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-count"],
+    refetchInterval: 30000,
+    enabled: isAuthenticated,
+  });
+
+  const unreadCount = unreadData?.count || 0;
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -67,6 +91,7 @@ export function BottomNav() {
           href="/messages"
           isActive={isActive("/messages")}
           testId="button-nav-messages"
+          badgeCount={unreadCount}
         />
 
         <NavItem

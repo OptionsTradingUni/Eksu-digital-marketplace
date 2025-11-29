@@ -22,11 +22,20 @@ import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useQuery } from "@tanstack/react-query";
 
 export function Header() {
   const { user, isAuthenticated, isSeller, isAdmin } = useAuth();
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-count"],
+    refetchInterval: 30000,
+    enabled: isAuthenticated,
+  });
+
+  const unreadCount = unreadData?.count || 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +85,27 @@ export function Header() {
 
                 {/* Cart */}
                 <CartDrawer />
+
+                {/* Messages */}
+                <Link href="/messages">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                    data-testid="button-header-messages"
+                  >
+                    <MessageSquare className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center p-0 text-[10px]"
+                        data-testid="badge-header-unread-messages"
+                      >
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </Link>
 
                 {/* Notifications */}
                 <NotificationBell />

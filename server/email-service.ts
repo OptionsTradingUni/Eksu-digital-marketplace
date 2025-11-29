@@ -191,15 +191,160 @@ export async function sendOrderEmail(email: string, orderDetails: {
   return sendEmail(email, titles[orderDetails.type], getBaseTemplate(titles[orderDetails.type], content));
 }
 
-export async function sendMessageNotification(email: string, senderName: string): Promise<EmailResult> {
+export async function sendMessageNotification(
+  email: string, 
+  senderName: string,
+  options?: {
+    messagePreview?: string;
+    productName?: string;
+    productId?: string;
+    senderId?: string;
+    isReply?: boolean;
+  }
+): Promise<EmailResult> {
+  const messagePreview = options?.messagePreview 
+    ? (options.messagePreview.length > 100 
+        ? options.messagePreview.substring(0, 100) + '...' 
+        : options.messagePreview)
+    : null;
+  
+  const productContext = options?.productName 
+    ? `<div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #16a34a;">
+        <p style="margin: 0; font-size: 13px; color: #166534;">
+          <strong>Regarding:</strong> ${options.productName}
+        </p>
+      </div>`
+    : '';
+  
+  const messageBox = messagePreview 
+    ? `<div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0; color: #374151; font-style: italic;">"${messagePreview}"</p>
+      </div>`
+    : '';
+  
+  const actionText = options?.isReply ? 'Continue Conversation' : 'View Message';
+  const linkUrl = options?.senderId 
+    ? `${APP_URL}/messages?user=${options.senderId}` 
+    : `${APP_URL}/messages`;
+  
   const content = `
     <p style="font-size: 16px; margin-top: 0;">You have a new message from <strong>${senderName}</strong>!</p>
+    ${productContext}
+    ${messageBox}
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${APP_URL}/messages" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">View Message</a>
+      <a href="${linkUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">${actionText}</a>
     </div>
     <p style="color: #666; font-size: 14px;">Quick responses build trust with buyers and sellers!</p>
+    <p style="color: #999; font-size: 12px; text-align: center;">
+      <a href="${APP_URL}/settings" style="color: #16a34a; text-decoration: none;">Manage notification preferences</a>
+    </p>
   `;
-  return sendEmail(email, `New message from ${senderName}`, getBaseTemplate('New Message', content));
+  
+  const subject = options?.isReply 
+    ? `${senderName} replied to your message` 
+    : `New message from ${senderName}`;
+  
+  return sendEmail(email, subject, getBaseTemplate('New Message', content));
+}
+
+export async function sendOrderMessageNotification(
+  email: string,
+  details: {
+    senderName: string;
+    senderId: string;
+    messagePreview: string;
+    orderId: string;
+    productName: string;
+    productId?: string;
+    orderStatus?: string;
+    isBuyerMessage: boolean;
+  }
+): Promise<EmailResult> {
+  const truncatedPreview = details.messagePreview.length > 150 
+    ? details.messagePreview.substring(0, 150) + '...' 
+    : details.messagePreview;
+  
+  const roleLabel = details.isBuyerMessage ? 'Buyer' : 'Seller';
+  const statusBadge = details.orderStatus 
+    ? `<span style="display: inline-block; background: #dbeafe; color: #1d4ed8; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; margin-left: 10px;">${details.orderStatus}</span>`
+    : '';
+  
+  const content = `
+    <p style="font-size: 16px; margin-top: 0;">
+      <strong>${details.senderName}</strong> (${roleLabel}) sent you a message about your order!
+    </p>
+    
+    <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #bbf7d0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <p style="margin: 0; font-size: 14px; color: #166534;">
+          <strong>Order:</strong> #${details.orderId.substring(0, 8)}...
+        </p>
+        ${statusBadge}
+      </div>
+      <p style="margin: 0; font-size: 14px; color: #166534;">
+        <strong>Product:</strong> ${details.productName}
+      </p>
+    </div>
+    
+    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+      <p style="margin: 0 0 5px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Message Preview</p>
+      <p style="margin: 0; color: #374151; font-style: italic;">"${truncatedPreview}"</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/messages?user=${details.senderId}" style="display: inline-block; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">Reply to Message</a>
+    </div>
+    
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      Respond quickly to keep your transaction moving smoothly!
+    </p>
+    <p style="color: #999; font-size: 12px; text-align: center;">
+      <a href="${APP_URL}/settings" style="color: #16a34a; text-decoration: none;">Manage notification preferences</a>
+    </p>
+  `;
+  
+  return sendEmail(
+    email, 
+    `Message about your order: ${details.productName}`, 
+    getBaseTemplate('Order Message', content)
+  );
+}
+
+export async function sendMessageReplyNotification(
+  email: string,
+  details: {
+    senderName: string;
+    senderId: string;
+    messagePreview: string;
+    productName?: string;
+    productId?: string;
+  }
+): Promise<EmailResult> {
+  const truncatedPreview = details.messagePreview.length > 100 
+    ? details.messagePreview.substring(0, 100) + '...' 
+    : details.messagePreview;
+  
+  const productContext = details.productName 
+    ? `<div style="background: #f0fdf4; padding: 12px 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #16a34a;">
+        <p style="margin: 0; font-size: 13px; color: #166534;">
+          <strong>About:</strong> ${details.productName}
+        </p>
+      </div>`
+    : '';
+  
+  const content = `
+    <p style="font-size: 16px; margin-top: 0;"><strong>${details.senderName}</strong> replied to your conversation!</p>
+    ${productContext}
+    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 0; color: #374151; font-style: italic;">"${truncatedPreview}"</p>
+    </div>
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/messages?user=${details.senderId}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">Continue Conversation</a>
+    </div>
+    <p style="color: #666; font-size: 14px; text-align: center;">Quick responses build trust!</p>
+  `;
+  
+  return sendEmail(email, `${details.senderName} replied to you`, getBaseTemplate('New Reply', content));
 }
 
 export async function sendPasswordReset(email: string, resetLink: string): Promise<EmailResult> {

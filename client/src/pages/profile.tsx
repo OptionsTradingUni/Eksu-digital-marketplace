@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import eksuplugLogo from "/favicon.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
@@ -105,6 +106,10 @@ function formatJoinDate(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = new Date(date);
   return format(d, "MMMM yyyy");
+}
+
+function isEKSUPlugAccount(user: User | null | undefined): boolean {
+  return user?.isSystemAccount === true && user?.systemAccountType === 'eksuplug';
 }
 
 type PostWithAuthor = SocialPost & { author: User };
@@ -788,13 +793,18 @@ export default function Profile() {
     );
   }
 
+  const isOfficialEKSUPlug = isEKSUPlugAccount(displayUser);
+  const isCurrentUserAdmin = currentUser?.role === "admin" || currentUser?.id?.slice(0, 8).toLowerCase() === "e461e9f4";
+
   const initials = displayUser.firstName && displayUser.lastName
     ? `${displayUser.firstName[0]}${displayUser.lastName[0]}`
     : displayUser.email?.[0] || "U";
 
-  const fullName = displayUser.firstName && displayUser.lastName
-    ? `${displayUser.firstName} ${displayUser.lastName}`
-    : displayUser.firstName || "User";
+  const fullName = isOfficialEKSUPlug 
+    ? "Eksu Market Plug"
+    : displayUser.firstName && displayUser.lastName
+      ? `${displayUser.firstName} ${displayUser.lastName}`
+      : displayUser.firstName || "User";
 
   const username = displayUser.username || displayUser.email?.split("@")[0] || "user";
   const shortId = displayUser.id?.slice(0, 8).toUpperCase() || "00000000";
@@ -802,6 +812,8 @@ export default function Profile() {
   const isSeller = displayUser.role === "seller" || displayUser.role === "both" || displayUser.role === "admin";
   const isSystemAccount = displayUser.isSystemAccount === true;
   const isVerified = displayUser.isVerified || displayUser.ninVerified || isSystemAccount;
+  
+  const shouldHideFollowStats = isOfficialEKSUPlug && !isCurrentUserAdmin;
 
   const canEdit = isOwnProfile && !isPreviewMode;
 
@@ -888,9 +900,9 @@ export default function Profile() {
                     }`}
                   >
                     <Avatar className={`h-28 w-28 md:h-36 md:w-36 ring-4 ring-background shadow-2xl ${isSystemAccount ? 'ring-yellow-500/50' : ''}`}>
-                      <AvatarImage src={previewUrl || displayUser.profileImageUrl || undefined} />
+                      <AvatarImage src={isOfficialEKSUPlug ? eksuplugLogo : (previewUrl || displayUser.profileImageUrl || undefined)} />
                       <AvatarFallback className={`text-3xl md:text-4xl font-bold ${isSystemAccount ? 'bg-gradient-to-br from-yellow-500/30 to-amber-400/20' : 'bg-gradient-to-br from-primary/20 to-primary/5'}`}>
-                        {initials}
+                        {isOfficialEKSUPlug ? "EP" : initials}
                       </AvatarFallback>
                     </Avatar>
                   </div>
@@ -1142,24 +1154,26 @@ export default function Profile() {
               )}
             </div>
             
-            <div className="flex items-center gap-4 text-sm">
-              <button 
-                className="hover:underline"
-                onClick={() => {}}
-                data-testid="button-following-count"
-              >
-                <span className="font-semibold">{formatCount(followStats?.followingCount || 0)}</span>
-                <span className="text-muted-foreground ml-1">Following</span>
-              </button>
-              <button 
-                className="hover:underline"
-                onClick={() => {}}
-                data-testid="button-follower-count"
-              >
-                <span className="font-semibold">{formatCount(followStats?.followerCount || 0)}</span>
-                <span className="text-muted-foreground ml-1">Followers</span>
-              </button>
-            </div>
+            {!shouldHideFollowStats && (
+              <div className="flex items-center gap-4 text-sm">
+                <button 
+                  className="hover:underline"
+                  onClick={() => {}}
+                  data-testid="button-following-count"
+                >
+                  <span className="font-semibold">{formatCount(followStats?.followingCount || 0)}</span>
+                  <span className="text-muted-foreground ml-1">Following</span>
+                </button>
+                <button 
+                  className="hover:underline"
+                  onClick={() => {}}
+                  data-testid="button-follower-count"
+                >
+                  <span className="font-semibold">{formatCount(followStats?.followerCount || 0)}</span>
+                  <span className="text-muted-foreground ml-1">Followers</span>
+                </button>
+              </div>
+            )}
 
           </motion.div>
 
