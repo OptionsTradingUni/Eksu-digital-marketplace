@@ -1,0 +1,150 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: yes configured 
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+COPY AND PASTE THIS TO YOUR DEVELOPER:
+EKSU Marketplace - Bug Fixes & Improvements Task List
+CRITICAL BUG #1: Payment System Broken
+Error: relation "squad_payments" does not exist
+
+Problem: The squad_payments table is defined in the code (shared/schema.ts line 509) but was never created in the production database.
+
+Fix Required:
+
+Run database migration: npx drizzle-kit push
+Verify the table exists in Neon database console
+Test a payment to confirm it works
+CRITICAL BUG #2: Hostel Finder and Study Materials Not Visible
+Problem: These features exist and work, but there are NO links to access them anywhere on the site. Users can only access via direct URL typing (/hostels and /study-materials).
+
+Current State:
+
+Route /hostels exists in App.tsx line 297-301
+Route /study-materials exists in App.tsx line 292-296
+Both pages are fully built and functional
+MISSING: No links in navigation anywhere
+Fix Required:
+
+File 1: client/src/components/Header.tsx
+
+Find the "Services" submenu (around line 206-227)
+Add these menu items:
+<DropdownMenuItem asChild>
+  <Link href="/hostels" data-testid="link-hostels">
+    <Home className="mr-2 h-4 w-4" />
+    Hostel Finder
+  </Link>
+</DropdownMenuItem>
+<DropdownMenuItem asChild>
+  <Link href="/study-materials" data-testid="link-study-materials">
+    <BookOpen className="mr-2 h-4 w-4" />
+    Study Materials
+  </Link>
+</DropdownMenuItem>
+Import BookOpen and Home from lucide-react
+File 2: client/src/components/BottomNav.tsx
+
+Currently only has 5 items: Home, The Plug, Messages, Games, Profile
+Option A: Replace "Games" with a "More" or "Services" icon that opens a sheet with: Hostels, Study Materials, Games, VTU, etc.
+Option B: Add a 6th item for "Services" that opens a quick menu
+File 3: client/src/pages/home.tsx
+
+Add a "Quick Services" section near the top of the page with clickable cards for:
+Hostel Finder
+Study Materials
+VTU Data
+Games
+Secret Messages
+CRITICAL BUG #3: Support Ticket Email Notifications Not Working
+Problem: When users submit support tickets, the admin doesn't receive any email notification. Also, there's no way for admin to reply to tickets via email.
+
+Current State:
+
+Tickets are created and stored in database correctly
+Admin can see tickets at /admin panel
+But NO email is sent to admin when new ticket created
+NO email is sent to user when admin replies
+Admin can only reply through the website (no email reply feature)
+Fix Required in server/email-service.ts:
+
+Add two new email functions:
+
+sendNewTicketNotificationToAdmin(ticket) - Sends email to admin when new ticket is created
+sendTicketReplyNotification(ticket, reply, recipientEmail) - Sends email to user when admin replies
+Update server/routes.ts:
+
+In the POST /api/support route (line 2370-2383), add: call sendNewTicketNotificationToAdmin() after ticket is created
+In the POST /api/support/:id/reply route (line 2416-2468), add: call sendTicketReplyNotification() after reply is created
+Admin Email Reply System (Optional but Recommended):
+
+Set up an email webhook (using Resend or similar) that receives replies to ticket notification emails
+Parse incoming emails and add them as replies to the ticket
+UI/UX IMPROVEMENTS
+1. Create an Explore/Discover Page
+
+New route: /explore
+Shows all features in a grid with icons and descriptions
+Categories: Marketplace, Housing, Education, Social, Services, Games
+2. Improve Home Page Layout
+
+Add "Quick Services" grid at top (before products)
+Add "Featured Hostels" section
+Add "Latest Study Materials" section
+Keep "Products" section as main content
+3. Better Empty States
+
+When no products/hostels/materials found, show helpful illustration
+Include "Create First Listing" button
+NEW FEATURES TO ADD
+Priority 1 (Should have):
+
+Roommate Finder - Companion to Hostel Finder
+Push Notifications - Browser push when messages/orders received
+Share to WhatsApp - Quick share buttons on products/hostels
+Priority 2 (Nice to have):
+
+Hostel Reviews & Ratings
+Study Material Reviews
+Price Drop Alerts
+Location-based sorting (closest first)
+Advanced Global Search across all features
+OTHER BUGS TO CHECK
+Verify Resend API key is set correctly for emails
+Check if ADMIN_EMAIL environment variable is set to your email
+Test login/logout flow on mobile
+Test image uploads work (Cloudinary)
+Verify WebSocket connection for real-time messages
+Test all pages work in dark mode
+ENVIRONMENT VARIABLES NEEDED
+Make sure these are set in production:
+
+ADMIN_EMAIL - Your admin email for receiving notifications
+RESEND_API_KEY - For sending emails
+DATABASE_URL - Neon database connection
+CLOUDINARY_* - For image uploads
+SQUAD_SECRET_KEY - For payments
+FILE LOCATIONS REFERENCE
+Feature	Frontend Page	Backend Route
+Hostels	client/src/pages/hostels.tsx	/api/hostels
+Study Materials	client/src/pages/study-materials.tsx	/api/study-materials
+Support Tickets	client/src/pages/support.tsx	/api/support
+Navigation	client/src/components/BottomNav.tsx	-
+Header Menu	client/src/components/Header.tsx	-
+Home Page	client/src/pages/home.tsx	-
+Email Service	server/email-service.ts	-
+Database Schema	shared/schema.ts	-
+SUMMARY - PRIORITY ORDER
+RUN DATABASE MIGRATION - Fixes payment error immediately
+Add navigation links for Hostels and Study Materials
+Add email notifications for support tickets
+Add Quick Services section to home page
+Create Explore page for feature discovery
+Add new features based on priority list
