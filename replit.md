@@ -2,7 +2,10 @@
 
 ## Overview
 
-The EKSU Campus Marketplace is a secure and efficient platform for Ekiti State University (EKSU) students to buy and sell items. It aims to be the leading campus marketplace by fostering a safe trading environment and generating revenue through featured listings, transaction fees, and premium subscriptions. Key capabilities include real-time communication, a robust trust system, role-based access, advanced safety features, and integrated financial services.
+<<<<<<< HEAD
+The EKSU Campus Marketplace is a secure and efficient platform for Ekiti State University (EKSU) students to buy and sell items. It aims to be the leading campus marketplace, fostering a safe trading environment and generating revenue through featured listings, transaction fees, and premium subscriptions. Key capabilities include real-time communication, a robust trust system, role-based access, advanced safety features, and a variety of social and utility features. The platform is designed to be a comprehensive campus hub for commerce, social interaction, and essential services.
+
+>>>>>>> main
 
 ## User Preferences
 
@@ -14,36 +17,40 @@ Do not make changes to the file `Y`.
 
 ## System Architecture
 
-The marketplace employs a modern full-stack architecture focusing on performance, security, and user experience.
+The marketplace employs a modern full-stack architecture focused on performance, security, and user experience, built with React, TypeScript, and Express.js.
 
 **UI/UX Decisions:**
 - **Design System:** Shadcn UI + Tailwind CSS for a responsive, mobile-first design with full dark mode support.
-- **Real-Time Features:** WhatsApp-inspired chat UI, real-time status updates, and X/Twitter-style "The Plug" feed with engagement tracking.
-- **Safety Features:** Safety Shield Modal, enhanced seller cards with trust scores, and an auto-follow system for new users to receive safety tips from the "Campus Hub" system account.
+<<<<<<< HEAD
+- **Real-Time Features:** WhatsApp-inspired chat UI, real-time status updates, and a social feed ("The Plug") with X/Twitter-style interaction.
+- **Safety Features:** Safety Shield Modal, enhanced seller cards with trust scores, and an auto-follow system for new users to receive safety tips from a system account.
 - **Navigation:** Enhanced bottom navigation and header with dedicated links.
 - **Interaction:** Haptic feedback, pull-to-refresh, and back-to-top functionality.
+- **Theming:** Support for 8 distinct themes (light, dim, lights-out, sunset, ocean, forest, sepia, high-contrast) with full CSS variable integration.
 
 **Technical Implementations:**
-- **Frontend:** React + TypeScript, Wouter for routing, TanStack Query for data fetching, and WebSockets for real-time communication. Performance optimizations include lazy loading and skeleton loaders.
+- **Frontend:** React + TypeScript, Wouter for routing, TanStack Query for data fetching, WebSockets for real-time communication, optimized with lazy loading and skeleton loaders.
 - **Backend:** Express.js, PostgreSQL with Drizzle ORM, Passport.js for authentication, and a WebSocket server.
-- **Authentication:** Email/password with role selection, session management, and protected routes.
-- **Products:** Multi-image uploads, search/filter, seller dashboard, and admin moderation.
-- **Chat:** WebSocket-based messaging with advanced features like image lightbox, voice input, and message deletion.
-- **User Management:** Editable profiles, verification badges, trust scores, sales history, user blocking/reporting, and a virtual wallet with escrow support. KYC verification is implemented with ID and liveness detection.
+- **Authentication:** Email/password, role-based access control (buyer/seller/admin/support), session management, and email verification.
+- **Products:** Multi-image uploads, advanced search/filter, seller dashboards, and admin moderation.
+- **Chat:** WebSocket-based messaging with rich features like image sharing, voice input, and message deletion.
+- **User Management:** Editable profiles, verification badges, trust scores, sales history, reporting, and a virtual wallet with escrow.
 - **Admin Panel:** Comprehensive moderation, analytics, revenue tracking, and support ticket management.
-- **AI Chatbot:** Groq-powered with payment scam detection, safety warnings, quick help buttons, Nigerian language support, and smart handoff to human support.
-- **Payment System:** Squad/Habari integration for Card, Bank Transfer, USSD with instant settlements and bank verification.
+- **AI Chatbot:** Groq-powered with payment scam detection, safety warnings, quick help, Nigerian language support, and smart handoff to human support.
+- **Payment System:** Squad/Habari integration for Card, Bank Transfer, USSD with instant settlements, fee calculation, and bank verification.
 - **Order Management:** 11 delivery statuses with audit trails, role-based permissions, and escrow.
-- **Security:** Role-based access control, user verification, reporting, admin moderation, and HTTPS.
-- **Location Services:** Geolocation with IP fallback, campus detection, and location-aware feeds.
-- **VTU Data Sales:** Integrated SMEDATA.NG API for data resale with phone number validation.
-- **PWA Support:** Service worker for offline caching.
-- **Support Ticket System:** Threaded conversations and status tracking.
-- **Social Post Reporting:** User reporting with auto-hiding functionality.
-- **Gaming Platform:** Integrated 15+ multiplayer betting games (e.g., Ludo, Whot, Chess Blitz, Aviator) with wallet integration and secure random number generation.
-- **Secret Messages Hub:** Anonymous messaging system with auto-refresh and ghost branding.
-- **Study Materials:** Feature for buying/selling academic materials (past questions, handouts) with wallet purchases and a rating system.
-- **Hostel & Roommate Finder:** Listings with multi-image support, filtering by location, amenities, and price.
+- **Security:** Role-based access control, user verification, reporting, and HTTPS.
+- **Location Services:** Geolocation for campus detection and location-aware feeds.
+- **KYC Verification:** Multi-step wizard with ID and liveness detection.
+- **VTU Data Sales:** Integrated SMEDATA.NG API for data and airtime resale with wallet integration and refund logic.
+- **PWA Support:** Service worker for offline caching and install prompt.
+- **Support Ticket System:** Threaded conversations with status tracking.
+- **Social Features:** "The Plug" feed for posts, confessions page with voting, and a "Secret Messages Hub" for anonymous communication.
+- **Educational Resources:** Study Materials feature for buying/selling academic resources (past questions, handouts) with a revenue split.
+- **Hostel & Roommate Finder:** Listings with filters, amenities, agent contact, and distance from campus.
+- **Game Library:** Integration of 15+ multiplayer betting games (Ludo, Whot, Chess, Aviator, etc.) with wallet integration and real-time WebSocket support.
+
+>>>>>>> main
 
 **System Design Choices:**
 - **Database Schema:** Structured for Users, Products, Categories, Messages, Reviews, Watchlist, Reports, Support Tickets, KYC, Sponsored Ads, Games, Study Materials, and Hostels.
@@ -54,11 +61,16 @@ The marketplace employs a modern full-stack architecture focusing on performance
 
 - **PostgreSQL:** Primary database.
 - **Groq API:** For AI Chatbot (`llama-3.3-70b-versatile`).
-- **Squad/Habari API:** Payment gateway.
+<<<<<<< HEAD
+- **Squad/Habari API:** Payment gateway for Card, Bank Transfer, USSD transactions.
+>>>>>>> main
 - **Passport.js:** Authentication middleware.
-- **Drizzle ORM:** Database interaction.
+- **Drizzle ORM:** Database interaction layer.
 - **Socket.io-like WebSocket:** Real-time communication.
-- **Multer:** Image uploads.
-- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data sales.
-- **Resend Email API:** Primary email service with Brevo, Gmail, Mailgun fallbacks.
+<<<<<<< HEAD
+- **Multer:** For handling multi-part form data, primarily image uploads.
+- **SMEDATA.NG API:** For Virtual Top-Up (VTU) data and airtime sales.
+- **Resend Email API:** Primary email service (with Brevo, Gmail, Mailgun fallbacks).
+
+>>>>>>> main
 - **Render:** Recommended deployment platform.

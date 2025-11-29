@@ -49,8 +49,6 @@ import {
   reviewKycSchema,
   createScheduledPurchaseApiSchema,
   createGiftDataApiSchema,
-  payBillSchema,
-  validateCustomerSchema,
   createStorySchema,
   createSecretMessageLinkSchema,
   sendSecretMessageSchema,
@@ -58,7 +56,7 @@ import {
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";
-import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, verifyNIN, validateBillCustomer, getCablePackages, payBill, getBillServiceInfo, requeryOrder } from "./smedata";
+import { purchaseData, purchaseAirtime, isSMEDataConfigured, isValidNigerianPhone, requeryOrder, getAllDataPlans, getDataPlanById, getDataPlansByNetwork, detectNetwork, getDiscountInfo, calculateSavings, NETWORK_INFO, type NetworkType, type DataPlan } from "./smedata";
 import { 
   sendEmailVerificationCode, 
   sendErrorReportToAdmin, 
@@ -5684,12 +5682,25 @@ Happy trading!`;
     }
   });
 
-  // Get all VTU plans (optionally filter by network)
+  // Get all VTU data plans (optionally filter by network)
+  // Uses hardcoded plans from SME Data API documentation with discount applied
   app.get("/api/vtu/plans", async (req, res) => {
     try {
       const { network } = req.query;
-      const plans = await storage.getVtuPlans(typeof network === "string" ? network : undefined);
-      res.json(plans);
+      const discountInfo = getDiscountInfo();
+      
+      let plans: DataPlan[];
+      if (network && typeof network === "string" && ["mtn_sme", "glo_cg", "airtel_cg"].includes(network)) {
+        plans = getDataPlansByNetwork(network as NetworkType);
+      } else {
+        plans = getAllDataPlans();
+      }
+      
+      res.json({
+        plans,
+        discount: discountInfo,
+        networks: NETWORK_INFO,
+      });
     } catch (error) {
       console.error("Error fetching VTU plans:", error);
       res.status(500).json({ message: "Failed to fetch VTU plans" });
@@ -5768,8 +5779,8 @@ Happy trading!`;
         });
       }
 
-      // Validate network
-      const validNetworks = ["mtn_sme", "glo_cg", "airtel_cg", "9mobile"];
+      // Validate network (only MTN, GLO, AIRTEL supported - no 9mobile)
+      const validNetworks = ["mtn_sme", "glo_cg", "airtel_cg"];
       if (!validNetworks.includes(network)) {
         return res.status(400).json({ message: "Invalid network. Must be one of: " + validNetworks.join(", ") });
       }
@@ -5855,7 +5866,7 @@ Happy trading!`;
     }
   });
 
-  // Purchase VTU data
+  // Purchase VTU data using SME Data API
   app.post("/api/vtu/purchase", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -5879,19 +5890,16 @@ Happy trading!`;
         return res.status(400).json({ message: "Invalid Nigerian phone number" });
       }
 
-      // Get the VTU plan
-      const plan = await storage.getVtuPlan(planId);
+      // Get the data plan from hardcoded plans
+      const plan = getDataPlanById(planId);
       if (!plan) {
-        return res.status(404).json({ message: "VTU plan not found" });
+        return res.status(404).json({ message: "Data plan not found" });
       }
 
-      if (!plan.isActive) {
-        return res.status(400).json({ message: "This VTU plan is currently unavailable" });
-      }
-
-      const planPrice = parseFloat(plan.sellingPrice);
-      const costPrice = parseFloat(plan.costPrice);
-      const profit = planPrice - costPrice;
+      // Use discounted price for the purchase
+      const planPrice = plan.discountedPrice;
+      const costPrice = plan.price;
+      const savings = plan.price - plan.discountedPrice;
 
       // Get user's wallet
       const wallet = await storage.getOrCreateWallet(userId);
@@ -5906,112 +5914,94 @@ Happy trading!`;
         });
       }
 
-      // Deduct from wallet
-      await storage.updateWalletBalance(userId, planPrice.toString(), "subtract");
+      // Deduct from wallet first and track for potential refund
+      let walletDeducted = false;
+      let walletTransaction: any = null;
 
-      // Create VTU transaction with pending status
-      const transaction = await storage.createVtuTransaction({
-        userId,
-        planId,
-        phoneNumber,
-        amount: plan.sellingPrice,
-        network: plan.network,
-        costPrice: plan.costPrice,
-        profit: profit.toString(),
-        status: "pending",
-      });
+      try {
+        await storage.updateWalletBalance(userId, planPrice.toString(), "subtract");
+        walletDeducted = true;
 
-      // Create wallet transaction record
-      await storage.createTransaction({
-        walletId: wallet.id,
-        type: "purchase",
-        amount: `-${planPrice}`,
-        status: "completed",
-        description: `VTU Data Purchase: ${plan.dataAmount} for ${phoneNumber}`,
-        relatedUserId: userId,
-      });
+        // Create wallet transaction record
+        walletTransaction = await storage.createTransaction({
+          walletId: wallet.id,
+          type: "purchase",
+          amount: `-${planPrice}`,
+          status: "pending",
+          description: `Data Purchase: ${plan.name} (${plan.dataAmount}) for ${phoneNumber}`,
+          relatedUserId: userId,
+        });
 
-      // Process the actual purchase if API is configured
-      if (isSMEDataConfigured()) {
-        try {
-          // Use dataAmount (e.g., "1GB", "500MB") for SME Data API, not planCode
-          const purchaseResult = await purchaseData(plan.network, phoneNumber, plan.dataAmount);
-          
-          if (purchaseResult.success) {
-            // Update transaction as successful
-            await storage.updateVtuTransaction(transaction.id, {
+        // Process the actual purchase if API is configured
+        if (!isSMEDataConfigured()) {
+          throw new Error("VTU_SERVICE_UNAVAILABLE");
+        }
+
+        const purchaseResult = await purchaseData(plan.network, phoneNumber, plan.planCode);
+        
+        if (purchaseResult.success) {
+          // Update wallet transaction as completed
+          await storage.updateTransaction(walletTransaction.id, {
+            status: "completed",
+            description: `Data Purchase: ${plan.name} (${plan.dataAmount}) for ${phoneNumber} - Success`,
+          });
+
+          return res.json({
+            success: true,
+            message: `${plan.dataAmount} data purchased successfully for ${phoneNumber}`,
+            transaction: {
+              id: walletTransaction.id,
+              network: plan.network,
+              planName: plan.name,
+              dataAmount: plan.dataAmount,
+              amount: planPrice,
+              savings: savings,
+              phoneNumber,
               status: "success",
-              smedataReference: purchaseResult.reference,
-            });
-
-            res.json({
-              success: true,
-              message: "Data purchase successful",
-              transaction: {
-                ...transaction,
-                status: "success",
-                smedataReference: purchaseResult.reference,
-              },
-            });
-          } else {
-            // Purchase failed - refund the user
+              reference: purchaseResult.reference,
+            },
+          });
+        } else {
+          throw new Error(purchaseResult.message || "API_PURCHASE_FAILED");
+        }
+      } catch (purchaseError: any) {
+        // Refund the user if wallet was deducted
+        if (walletDeducted) {
+          try {
             await storage.updateWalletBalance(userId, planPrice.toString(), "add");
-            await storage.updateVtuTransaction(transaction.id, {
-              status: "failed",
-              errorMessage: purchaseResult.message || purchaseResult.error,
-            });
+            
+            if (walletTransaction) {
+              await storage.updateTransaction(walletTransaction.id, {
+                status: "failed",
+                description: `Data Purchase Failed: ${plan.dataAmount} for ${phoneNumber} - ${purchaseError.message}`,
+              });
+            }
 
-            // Create refund transaction record
             await storage.createTransaction({
               walletId: wallet.id,
               type: "refund",
               amount: planPrice.toString(),
               status: "completed",
-              description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - ${purchaseResult.message}`,
+              description: `Refund: ${plan.dataAmount} data for ${phoneNumber} - ${purchaseError.message}`,
               relatedUserId: userId,
             });
-
-            res.status(400).json({
-              success: false,
-              message: purchaseResult.message || "Data purchase failed. Amount refunded.",
-              error: purchaseResult.error,
-            });
+          } catch (refundError) {
+            console.error("VTU refund error:", refundError);
           }
-        } catch (apiError: any) {
-          // API call failed - refund the user
-          await storage.updateWalletBalance(userId, planPrice.toString(), "add");
-          await storage.updateVtuTransaction(transaction.id, {
-            status: "failed",
-            errorMessage: apiError.message || "API error",
-          });
-
-          // Create refund transaction record
-          await storage.createTransaction({
-            walletId: wallet.id,
-            type: "refund",
-            amount: planPrice.toString(),
-            status: "completed",
-            description: `VTU Refund: ${plan.dataAmount} for ${phoneNumber} - API Error`,
-            relatedUserId: userId,
-          });
-
-          console.error("VTU API error:", apiError);
-          res.status(500).json({
-            success: false,
-            message: "Data purchase failed due to network error. Amount refunded.",
-          });
         }
-      } else {
-        // API not configured - mark as pending for manual processing
-        await storage.updateVtuTransaction(transaction.id, {
-          status: "pending",
-          errorMessage: "VTU service temporarily unavailable",
-        });
 
-        res.json({
-          success: true,
-          message: "Purchase request submitted. Your data will be delivered shortly.",
-          transaction,
+        const errorMessage = purchaseError.message === "VTU_SERVICE_UNAVAILABLE"
+          ? "VTU service is temporarily unavailable. Please try again later."
+          : purchaseError.message === "API_PURCHASE_FAILED"
+          ? "Data purchase failed. Amount refunded to wallet."
+          : "Data purchase failed due to network error. Amount refunded to wallet.";
+
+        const statusCode = purchaseError.message === "VTU_SERVICE_UNAVAILABLE" ? 503 : 500;
+
+        console.error("VTU purchase error:", purchaseError);
+        return res.status(statusCode).json({
+          success: false,
+          message: walletDeducted ? errorMessage : "Failed to process VTU purchase",
         });
       }
     } catch (error) {
@@ -6020,7 +6010,7 @@ Happy trading!`;
     }
   });
 
-  // Purchase airtime
+  // Purchase airtime using SME Data API
   app.post("/api/vtu/airtime", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -6042,6 +6032,32 @@ Happy trading!`;
         return res.status(400).json({ message: "Invalid Nigerian phone number" });
       }
 
+      // Validate network - only mtn_sme, glo_cg, airtel_cg are supported
+      const validNetworks: NetworkType[] = ["mtn_sme", "glo_cg", "airtel_cg"];
+      let networkToUse: NetworkType;
+      
+      if (network && validNetworks.includes(network as NetworkType)) {
+        networkToUse = network as NetworkType;
+      } else {
+        // Auto-detect network from phone number
+        const detectedNetwork = detectNetwork(phoneNumber);
+        if (!detectedNetwork) {
+          return res.status(400).json({ 
+            message: "Could not detect network for this phone number. Only MTN, GLO, and Airtel are supported." 
+          });
+        }
+        networkToUse = detectedNetwork;
+      }
+
+      // Validate amount (minimum airtime amount)
+      if (amount < 50) {
+        return res.status(400).json({ message: "Minimum airtime amount is ₦50" });
+      }
+
+      if (amount > 50000) {
+        return res.status(400).json({ message: "Maximum airtime amount is ₦50,000" });
+      }
+
       const wallet = await storage.getOrCreateWallet(userId);
       const walletBalance = parseFloat(wallet.balance);
 
@@ -6053,70 +6069,89 @@ Happy trading!`;
         });
       }
 
-      await storage.updateWalletBalance(userId, amount.toString(), "subtract");
+      // Deduct from wallet first and track for potential refund
+      let walletDeducted = false;
+      let walletTransaction: any = null;
 
-      await storage.createTransaction({
-        walletId: wallet.id,
-        type: "purchase",
-        amount: `-${amount}`,
-        status: "pending",
-        description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
-      });
+      try {
+        await storage.updateWalletBalance(userId, amount.toString(), "subtract");
+        walletDeducted = true;
 
-      if (isSMEDataConfigured()) {
-        try {
-          const purchaseResult = await purchaseAirtime(network, phoneNumber, amount);
-          
-          if (purchaseResult.success) {
-            await storage.createTransaction({
-              walletId: wallet.id,
-              type: "purchase",
-              amount: `-${amount}`,
-              status: "completed",
-              description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
-            });
+        walletTransaction = await storage.createTransaction({
+          walletId: wallet.id,
+          type: "purchase",
+          amount: `-${amount}`,
+          status: "pending",
+          description: `Airtime Purchase: ₦${amount} for ${phoneNumber}`,
+          relatedUserId: userId,
+        });
 
-            res.json({
-              success: true,
-              message: "Airtime purchase successful",
+        // Process the actual purchase if API is configured
+        if (!isSMEDataConfigured()) {
+          throw new Error("VTU_SERVICE_UNAVAILABLE");
+        }
+
+        const purchaseResult = await purchaseAirtime(networkToUse, phoneNumber, amount);
+        
+        if (purchaseResult.success) {
+          await storage.updateTransaction(walletTransaction.id, {
+            status: "completed",
+            description: `Airtime Purchase: ₦${amount} for ${phoneNumber} - Success`,
+          });
+
+          return res.json({
+            success: true,
+            message: `₦${amount} airtime purchased successfully for ${phoneNumber}`,
+            transaction: {
+              id: walletTransaction.id,
+              network: networkToUse,
+              amount,
+              phoneNumber,
+              status: "success",
               reference: purchaseResult.reference,
-            });
-          } else {
+            },
+          });
+        } else {
+          throw new Error(purchaseResult.message || "API_PURCHASE_FAILED");
+        }
+      } catch (purchaseError: any) {
+        // Refund the user if wallet was deducted
+        if (walletDeducted) {
+          try {
             await storage.updateWalletBalance(userId, amount.toString(), "add");
+            
+            if (walletTransaction) {
+              await storage.updateTransaction(walletTransaction.id, {
+                status: "failed",
+                description: `Airtime Purchase Failed: ₦${amount} for ${phoneNumber} - ${purchaseError.message}`,
+              });
+            }
+
             await storage.createTransaction({
               walletId: wallet.id,
               type: "refund",
               amount: amount.toString(),
               status: "completed",
-              description: `Airtime Refund: ₦${amount} for ${phoneNumber} - ${purchaseResult.message}`,
+              description: `Refund: ₦${amount} airtime for ${phoneNumber} - ${purchaseError.message}`,
+              relatedUserId: userId,
             });
-
-            res.status(400).json({
-              success: false,
-              message: purchaseResult.message || "Airtime purchase failed. Amount refunded.",
-              error: purchaseResult.error,
-            });
+          } catch (refundError) {
+            console.error("Airtime refund error:", refundError);
           }
-        } catch (apiError: any) {
-          await storage.updateWalletBalance(userId, amount.toString(), "add");
-          await storage.createTransaction({
-            walletId: wallet.id,
-            type: "refund",
-            amount: amount.toString(),
-            status: "completed",
-            description: `Airtime Refund: ₦${amount} for ${phoneNumber} - API Error`,
-          });
-
-          console.error("Airtime API error:", apiError);
-          res.status(500).json({
-            success: false,
-            message: "Airtime purchase failed due to network error. Amount refunded.",
-          });
         }
-      } else {
-        res.json({
-          success: true,
-          message: "Airtime purchase request submitted. Your airtime will be delivered shortly.",
+
+        const errorMessage = purchaseError.message === "VTU_SERVICE_UNAVAILABLE"
+          ? "VTU service is temporarily unavailable. Please try again later."
+          : purchaseError.message === "API_PURCHASE_FAILED"
+          ? "Airtime purchase failed. Amount refunded to wallet."
+          : "Airtime purchase failed due to network error. Amount refunded to wallet.";
+
+        const statusCode = purchaseError.message === "VTU_SERVICE_UNAVAILABLE" ? 503 : 500;
+
+        console.error("Airtime purchase error:", purchaseError);
+        return res.status(statusCode).json({
+          success: false,
+          message: walletDeducted ? errorMessage : "Failed to process airtime purchase",
         });
       }
     } catch (error) {
@@ -6512,214 +6547,6 @@ Happy trading!`;
     } catch (error) {
       console.error("Error claiming gift:", error);
       res.status(500).json({ message: "Failed to claim gift" });
-    }
-  });
-
-  // ==================== BILL PAYMENTS API ROUTES ====================
-
-  // Validate customer ID (decoder/meter number)
-  app.post("/api/bills/validate", isAuthenticated, async (req: any, res) => {
-    try {
-      const validationResult = validateCustomerSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({
-          message: "Invalid input",
-          errors: validationResult.error.errors,
-        });
-      }
-
-      const { serviceType, customerId } = validationResult.data;
-      const result = await validateBillCustomer(serviceType, customerId);
-
-      if (result.success) {
-        res.json({
-          success: true,
-          customerName: result.data?.customerName,
-          customerId: result.data?.customerId,
-          meterType: result.data?.meterType,
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: result.message || "Customer validation failed",
-        });
-      }
-    } catch (error) {
-      console.error("Error validating customer:", error);
-      res.status(500).json({ message: "Failed to validate customer" });
-    }
-  });
-
-  // Get available packages for cable TV services
-  app.get("/api/bills/packages/:service", async (req, res) => {
-    try {
-      const { service } = req.params;
-      const serviceInfo = getBillServiceInfo(service);
-
-      if (!serviceInfo || serviceInfo.type !== "cable") {
-        return res.status(400).json({ message: "Invalid cable service type" });
-      }
-
-      const result = await getCablePackages(service);
-
-      if (result.success) {
-        res.json({
-          success: true,
-          packages: result.packages || [],
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: result.message || "Failed to get packages",
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching packages:", error);
-      res.status(500).json({ message: "Failed to fetch packages" });
-    }
-  });
-
-  // Process bill payment
-  app.post("/api/bills/pay", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const validationResult = payBillSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({
-          message: "Invalid input",
-          errors: validationResult.error.errors,
-        });
-      }
-
-      const { serviceType, billType, customerId, amount, packageCode, packageName } = validationResult.data;
-
-      // Get user's wallet
-      const wallet = await storage.getOrCreateWallet(userId);
-      if (!wallet) {
-        return res.status(400).json({ message: "Wallet not found. Please contact support." });
-      }
-
-      // Check if user has sufficient balance
-      const walletBalance = parseFloat(wallet.balance);
-      if (walletBalance < amount) {
-        return res.status(400).json({
-          message: "Insufficient wallet balance",
-          required: amount,
-          available: walletBalance,
-        });
-      }
-
-      // Create bill payment record
-      const billPayment = await storage.createBillPayment({
-        userId,
-        serviceType: serviceType as any,
-        billType,
-        customerId,
-        amount: amount.toString(),
-        packageName: packageName || null,
-        status: "pending",
-      });
-
-      // Process with SMEDATA API
-      if (isSMEDataConfigured()) {
-        try {
-          // Update status to processing
-          await storage.updateBillPayment(billPayment.id, { status: "processing" });
-
-          // Call SMEDATA bill payment API
-          const apiResult = await payBill(serviceType, customerId, amount, packageCode);
-
-          if (apiResult.success) {
-            // Deduct from wallet
-            await storage.updateWalletBalance(userId, amount.toString(), "subtract");
-
-            // Create wallet transaction
-            const walletTransaction = await storage.createTransaction({
-              walletId: wallet.id,
-              type: "purchase",
-              amount: (-amount).toString(),
-              description: `${billType === "cable" ? "Cable TV" : "Electricity"} bill payment - ${serviceType.toUpperCase()} - ${customerId} (Ref: ${apiResult.reference || 'N/A'})`,
-              status: "completed",
-            });
-
-            // Update bill payment as successful
-            await storage.updateBillPayment(billPayment.id, {
-              status: "success",
-              reference: apiResult.reference || null,
-              token: apiResult.token || null,
-              apiResponse: apiResult.data,
-              walletTransactionId: walletTransaction.id,
-            });
-
-            res.json({
-              success: true,
-              message: apiResult.token
-                ? `Bill payment successful! Your token: ${apiResult.token}`
-                : "Bill payment successful!",
-              reference: apiResult.reference,
-              token: apiResult.token,
-              newBalance: walletBalance - amount,
-            });
-          } else {
-            // Update bill payment as failed
-            await storage.updateBillPayment(billPayment.id, {
-              status: "failed",
-              errorMessage: apiResult.message,
-              apiResponse: apiResult,
-            });
-
-            res.status(400).json({
-              success: false,
-              message: apiResult.message || "Bill payment failed. Please try again.",
-            });
-          }
-        } catch (apiError: any) {
-          console.error("Bill payment API error:", apiError);
-          await storage.updateBillPayment(billPayment.id, {
-            status: "failed",
-            errorMessage: apiError.message || "API error",
-          });
-
-          res.status(500).json({
-            success: false,
-            message: "Bill payment failed due to network error. Please try again.",
-          });
-        }
-      } else {
-        // SMEDATA not configured - simulate for testing
-        await storage.updateBillPayment(billPayment.id, {
-          status: "failed",
-          errorMessage: "Bill payment service is not configured",
-        });
-
-        res.status(503).json({
-          success: false,
-          message: "Bill payment service is currently unavailable. Please try again later.",
-        });
-      }
-    } catch (error) {
-      console.error("Error processing bill payment:", error);
-      res.status(500).json({ message: "Failed to process bill payment" });
-    }
-  });
-
-  // Get user's bill payment history
-  app.get("/api/bills/history", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const payments = await storage.getUserBillPayments(userId);
-      res.json(payments);
-    } catch (error) {
-      console.error("Error fetching bill history:", error);
-      res.status(500).json({ message: "Failed to fetch bill history" });
     }
   });
 

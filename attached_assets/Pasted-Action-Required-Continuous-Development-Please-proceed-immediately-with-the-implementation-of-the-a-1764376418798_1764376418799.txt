@@ -1,0 +1,134 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: SME API is configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+The VTU plan isn’t working 
+
+Delete all codes regarding the VTU 
+
+This time around refer to smesite to build 
+
+Remove any cached or test stuffs 
+
+Use sme 
+Airtime data schedule gift 
+Don’t include cable payments and electricity
+
+Remove everything and build normally 
+Also name it Buy Data and Airtime 
+
+Check the site to see the plans etc 
+
+https://smedata.ng
+
+API BASE URL
+The Live API BASE URL: https://smedata.ng/wp-json/api/v1/
+Authentication
+The API uses Basic Authentication. You need to always pass your token as part of the URL parameters.
+Request Methods
+All requests methods are GET.
+Response
+All responses from the API are returned in the JSON format.
+Available Products and Services on the  API include:
+MTN SME DATA API, GLO CG DATA API, AIRTEL CG DATA API
+How to Purchase Data (MTN, GLO, AIRTEL) via HTTP API
+Data Endpoint URL: https://smedata.ng/wp-json/api/v1/data
+Request Method: GET
+Parameters
+Field Name	Example Value	Description
+token	9d4f89904352767e2f980705	Unique API Token generated in the Reseller Dashboard
+phone	07045461790	The phone number that will receive the airtime
+network	mtn	The network is used to make each network unique. They include mtn, glo, airtel. Notice that they are all in small letters.
+size	1GB	The available data size on the platform
+MTN DATA
+230mb1d = MTN Direct Data 230MB Daily Plan
+1gb1d = MTN Direct Data 1GB + 1.5Mins Daily plan
+1gb1w = MTN Direct Data 1GB Weekly plan
+1.5gb2d = MTN Direct Data 1.5GB 2 – Days Plan
+1.5gb1w = MTN Direct Data 1.5GB Weekly plan
+2.5gb1d = MTN Direct Data 2.5GB Daily plan
+2.5gb2d = MTN Direct Data 2.5GB 2 Days plan
+2gb1m = MTN Direct Data 2GB + 2Mins for 30days
+2.7gb1m = MTN Direct Data 2.7GB + 5Mins for 30days
+6gb1w = MTN Direct Data 6GB weekly plan
+3.5gb1m = MTN Direct Data 3.5GB + 5Mins for 30 Days
+7gb1m = MTN Direct Data 7GB for 30 Days
+10gb1m = MTN Direct Data 10GB +10Mins for 30days
+12.5gb1m = MTN Direct Data 12.5GB for 30days
+16.5gb1m = MTN Direct Data 16.5GB + 10mins for 30days
+20gb1m = MTN Direct Data 20GB for 30 days
+25gb1m = MTN Direct Data 25GB Monthly plan
+GLO  CG DATA
+500MB = GLO Data 500MB (SME) – 30 Days
+1GB = GLO Data 1GB (SME) – 30 Days
+2GB = GLO Data 2GB (SME) – 30 Days
+3GB = GLO Data 3GB (SME) – 30 Days
+5GB = GLO Data 5GB (SME) – 30 Days
+10GB = GLO Data 10GB (SME) – 30 Days
+AIRTEL  CG DATA
+300mb2d = Airtel Direct Data 300MB for 2 Days
+500mb1w = Airtel Direct Data 500MB Weekly Plan
+1gb1w = Airtel Direct Data 1GB Weekly Plan
+1.5gb2d = Airtel Direct Data 1.5GB for 2 Days
+1.5gb1w = Airtel Direct Data 1.5GB Weekly Plan
+3.5gb1w = Airtel Direct Data 3.5GB Weekly Plan
+6gb1w = Airtel Direct Data 6GB Weekly Plan
+10gb1w = Airtel Direct Data 10GB Weekly Plan
+15gb1w = Airtel Direct Data 15GB Weekly Plan
+2gb1m = Airtel Direct Data 2GB Monthly Plan
+3gb1m = Airtel Direct Data 3GB Monthly Plan
+4gb1m = Airtel Direct Data 4GB Monthly Plan
+8gb1m = Airtel Direct Data 8GB Monthly Plan
+10gb1m = Airtel Direct Data 10GB Monthly Plan
+13gb1m = Airtel Direct Data 13GB Monthly Plan
+18gb1m = Airtel Direct Data 18GB Monthly Plan
+25gb1m = Airtel Direct Data 25GB Monthly Plan
+35gb1m = Airtel Direct Data 35GB Monthly Plan
+ 
+Example [Purchasing Data]
+https://smedata.ng/wp-json/api/v1/data?token=9d4f89904352767e2f980705&network=MTN&phone=08056708975&size=1GB
+Sample Response on Success
+{"code":"success","message":"Data successfully delivered","data":{"network":"mtn","data_plan":"1gb","phone":"08056708975","amount":"NGN245","order_id":236}}
+Sample Response on Failure
+{"code":"failure","message":"Insufficient Balance"}
+Webhook Samples
+SUCCESS
+{"code":"success","message":"Order delivered for 08056708975","data":{"product":"CHEAP MTN 500MB DATA PLAN","phone":"08056708975","amount":"NGN170","order_id":670290}}
+FAILED
+{"code":"failure","message":"Order refunded for 08056708975","data":{"product":"CHEAP MTN 1GB DATA PLAN","phone":"08056708975","amount":"NGN290","order_id":670285}}
+ 
+Requery Sample Request
+https://smedata.ng/wp-json/api/v1/requery?token=9d4f89904352767e2f980705&orderid=670299
+Requery Sample Response
+FAILED
+{"code":"failure","message":"Order refunded for 07056708975","data":{"product":"CHEAP MTN 500MB DATA PLAN","phone":"07056708975","amount":"NGN170","order_id":"670299"}}
+PROCESSING
+{"code":"processing","message":"Order processing for 08056708975","data":{"product":"CHEAP MTN 500MB DATA PLAN","phone":"08056708975","amount":"NGN170","order_id":"670302"}}
+SUCCESS
+{"code":"success","message":"Order delivered for 08056708975","data":{"product":"CHEAP MTN 500MB DATA PLAN","phone":"08056708975","amount":"NGN170","order_id":"670302"}}
+
+MTN SME DATA, GLO CG, Airtel CG Data Reseller & API Reseller Dashboard
+
+You are now a Reseller, You will get MTN SME DATA, AIRTEL & GLO CG DATA at discounted rates, VTU discount(2-3%) on all purchases on the platform, this discount is applied on checkout page, SMS Commands and WhatsApp Commands while API endpoint is the same if you are a developer with a website
+API Token: 71ac566d23623c17d2e4d8ece
+Your API is active, you can reset it if your token is compromised:
+Reset Token
+Webhook URL 
+
+
+ API DOCUMENTATIONS
+
+https://smedata.ng/reseller/
+
+
+The stupid page and naughty page I built that doesn’t work 
+
+https://eksu-digital-marketplace.onrender.com/vtu
