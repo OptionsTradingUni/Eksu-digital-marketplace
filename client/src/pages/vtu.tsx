@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,54 +11,42 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Wallet, Smartphone, Signal, CheckCircle, XCircle, Clock, Loader2, Plus, AlertCircle, 
-  Search, Phone, Zap, Users, Star, Trash2, Filter, Gift, Sparkles, Calendar, 
-  Play, Pause, Send, Copy, Download, Tv, Lightbulb, Receipt
+  Search, Phone, Zap, Star, Trash2, Filter, Gift, Calendar, 
+  Play, Pause, Send, Copy
 } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import type { 
   Wallet as WalletType, 
-  VtuPlan, 
   VtuTransaction, 
   VtuBeneficiary,
   ScheduledVtuPurchase,
-  GiftData,
-  BillPayment
+  GiftData
 } from "@shared/schema";
 
-type NetworkType = "mtn_sme" | "glo_cg" | "airtel_cg" | "9mobile";
-type ServiceType = "data" | "airtime" | "schedule" | "gift" | "bills";
-type BillType = "cable" | "electricity";
-type BillServiceType = "dstv" | "gotv" | "startimes" | "showmax" | "ekedc" | "ikedc" | "aedc" | "ibedc" | "phedc" | "eedc";
+type NetworkType = "mtn_sme" | "glo_cg" | "airtel_cg";
+type ServiceType = "data" | "airtime" | "schedule" | "gift";
+type ScheduleFrequency = "daily" | "weekly" | "monthly";
 
-interface BillPackage {
-  code: string;
+interface DataPlan {
+  id: string;
+  network: NetworkType;
+  planCode: string;
   name: string;
-  amount: number;
-  validity?: string;
+  dataAmount: string;
+  validity: string;
+  price: number;
+  discountedPrice: number;
 }
 
-const CABLE_SERVICES = [
-  { id: "dstv" as BillServiceType, name: "DSTV", icon: "TV" },
-  { id: "gotv" as BillServiceType, name: "GOtv", icon: "TV" },
-  { id: "startimes" as BillServiceType, name: "StarTimes", icon: "TV" },
-  { id: "showmax" as BillServiceType, name: "Showmax", icon: "TV" },
-];
-
-const ELECTRICITY_SERVICES = [
-  { id: "ekedc" as BillServiceType, name: "Eko (EKEDC)", region: "Lagos" },
-  { id: "ikedc" as BillServiceType, name: "Ikeja (IKEDC)", region: "Lagos" },
-  { id: "aedc" as BillServiceType, name: "Abuja (AEDC)", region: "Abuja" },
-  { id: "ibedc" as BillServiceType, name: "Ibadan (IBEDC)", region: "Ibadan" },
-  { id: "phedc" as BillServiceType, name: "Port Harcourt (PHEDC)", region: "PH" },
-  { id: "eedc" as BillServiceType, name: "Enugu (EEDC)", region: "Enugu" },
-];
-
-type ScheduleFrequency = "daily" | "weekly" | "monthly";
+interface PlansApiResponse {
+  plans: DataPlan[];
+  discount: { rate: number; percentage: string; description: string };
+  networks: Record<NetworkType, { name: string; displayName: string; color: string; bgColor: string; textColor: string }>;
+}
 
 interface NetworkInfo {
   id: NetworkType;
@@ -97,15 +85,6 @@ const NETWORKS: NetworkInfo[] = [
     bgColor: "bg-red-100 dark:bg-red-900/30",
     textColor: "text-red-700 dark:text-red-300",
     prefixes: ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"],
-  },
-  {
-    id: "9mobile",
-    name: "9mobile",
-    displayName: "9mobile",
-    color: "bg-green-500",
-    bgColor: "bg-emerald-100 dark:bg-emerald-900/30",
-    textColor: "text-emerald-700 dark:text-emerald-300",
-    prefixes: ["0809", "0817", "0818", "0909", "0908"],
   },
 ];
 
@@ -171,16 +150,13 @@ export default function VtuPage() {
   const [customAirtimeAmount, setCustomAirtimeAmount] = useState("");
   const [selectedAirtimeAmount, setSelectedAirtimeAmount] = useState<number | null>(null);
   
-  // Beneficiary states
   const [showBeneficiaryDialog, setShowBeneficiaryDialog] = useState(false);
   const [newBeneficiaryName, setNewBeneficiaryName] = useState("");
   const [selectedBeneficiary, setSelectedBeneficiary] = useState<VtuBeneficiary | null>(null);
   
-  // Transaction filter states
   const [txStatusFilter, setTxStatusFilter] = useState<string>("all");
   const [txNetworkFilter, setTxNetworkFilter] = useState<string>("all");
 
-  // Schedule states
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("daily");
   const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState<number>(1);
@@ -192,7 +168,6 @@ export default function VtuPage() {
   const [schedulePlanId, setSchedulePlanId] = useState<string | null>(null);
   const [scheduleAirtimeAmount, setScheduleAirtimeAmount] = useState<string>("");
 
-  // Gift Data states
   const [showGiftDialog, setShowGiftDialog] = useState(false);
   const [giftRecipientPhone, setGiftRecipientPhone] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
@@ -200,31 +175,20 @@ export default function VtuPage() {
   const [giftNetwork, setGiftNetwork] = useState<NetworkType>("mtn_sme");
   const [giftTab, setGiftTab] = useState<"send" | "sent" | "received">("send");
 
-  // Bill Payment states
-  const [billType, setBillType] = useState<BillType>("cable");
-  const [selectedBillService, setSelectedBillService] = useState<BillServiceType>("dstv");
-  const [billCustomerId, setBillCustomerId] = useState("");
-  const [billCustomerName, setBillCustomerName] = useState<string | null>(null);
-  const [billCustomerValidated, setBillCustomerValidated] = useState(false);
-  const [selectedBillPackage, setSelectedBillPackage] = useState<BillPackage | null>(null);
-  const [billElectricityAmount, setBillElectricityAmount] = useState("");
-  const [billPackages, setBillPackages] = useState<BillPackage[]>([]);
-  const [loadingBillPackages, setLoadingBillPackages] = useState(false);
-
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletType>({
     queryKey: ["/api/wallet"],
   });
 
-  const { data: plans, isLoading: plansLoading } = useQuery<VtuPlan[]>({
+  const { data: plansData, isLoading: plansLoading } = useQuery<PlansApiResponse>({
     queryKey: ["/api/vtu/plans", { network: selectedNetwork }],
   });
 
-  const { data: schedulePlans } = useQuery<VtuPlan[]>({
+  const { data: schedulePlansData } = useQuery<PlansApiResponse>({
     queryKey: ["/api/vtu/plans", { network: scheduleNetwork }],
     enabled: showScheduleDialog,
   });
 
-  const { data: giftPlans } = useQuery<VtuPlan[]>({
+  const { data: giftPlansData } = useQuery<PlansApiResponse>({
     queryKey: ["/api/vtu/plans", { network: giftNetwork }],
     enabled: serviceType === "gift" || showGiftDialog,
   });
@@ -252,10 +216,10 @@ export default function VtuPage() {
     enabled: serviceType === "gift",
   });
 
-  const { data: billPayments, isLoading: billPaymentsLoading } = useQuery<BillPayment[]>({
-    queryKey: ["/api/bills/history"],
-    enabled: serviceType === "bills",
-  });
+  const plans = plansData?.plans || [];
+  const schedulePlans = schedulePlansData?.plans || [];
+  const giftPlans = giftPlansData?.plans || [];
+  const discount = plansData?.discount;
 
   const createBeneficiaryMutation = useMutation({
     mutationFn: async (data: { name: string; phoneNumber: string; network: NetworkType }) => {
@@ -336,7 +300,6 @@ export default function VtuPage() {
     },
   });
 
-  // Schedule mutations
   const createScheduleMutation = useMutation({
     mutationFn: async (data: {
       serviceType: "data" | "airtime";
@@ -391,7 +354,6 @@ export default function VtuPage() {
     },
   });
 
-  // Gift mutations
   const sendGiftMutation = useMutation({
     mutationFn: async (data: { recipientPhone: string; planId: string; network: NetworkType; message?: string }) => {
       const response = await apiRequest("POST", "/api/vtu/gift-data", data);
@@ -423,61 +385,6 @@ export default function VtuPage() {
     },
   });
 
-  const validateBillCustomerMutation = useMutation({
-    mutationFn: async (data: { serviceType: BillServiceType; customerId: string }) => {
-      const response = await apiRequest("POST", "/api/bills/validate", data);
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      if (data.success) {
-        setBillCustomerName(data.customerName);
-        setBillCustomerValidated(true);
-        toast({ title: "Verified", description: `Customer: ${data.customerName}` });
-      } else {
-        setBillCustomerName(null);
-        setBillCustomerValidated(false);
-        toast({ title: "Validation Failed", description: data.message || "Invalid customer ID", variant: "destructive" });
-      }
-    },
-    onError: (error: any) => {
-      setBillCustomerName(null);
-      setBillCustomerValidated(false);
-      toast({ title: "Error", description: error.message || "Failed to validate customer", variant: "destructive" });
-    },
-  });
-
-  const payBillMutation = useMutation({
-    mutationFn: async (data: { 
-      serviceType: BillServiceType; 
-      billType: BillType; 
-      customerId: string; 
-      amount: number;
-      packageCode?: string;
-      packageName?: string;
-    }) => {
-      const response = await apiRequest("POST", "/api/bills/pay", data);
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      if (data.success) {
-        toast({ 
-          title: "Payment Successful", 
-          description: data.token 
-            ? `Token: ${data.token}` 
-            : "Bill payment completed successfully!" 
-        });
-        queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/bills/history"] });
-        resetBillForm();
-      } else {
-        toast({ title: "Payment Failed", description: data.message || "Bill payment failed", variant: "destructive" });
-      }
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to process payment", variant: "destructive" });
-    },
-  });
-
   const resetScheduleForm = () => {
     setSchedulePhoneNumber("");
     setScheduleNetwork("mtn_sme");
@@ -497,89 +404,7 @@ export default function VtuPage() {
     setGiftNetwork("mtn_sme");
   };
 
-  const resetBillForm = () => {
-    setBillCustomerId("");
-    setBillCustomerName(null);
-    setBillCustomerValidated(false);
-    setSelectedBillPackage(null);
-    setBillElectricityAmount("");
-    setBillPackages([]);
-  };
-
-  const fetchCablePackages = async (service: BillServiceType) => {
-    setLoadingBillPackages(true);
-    try {
-      const response = await fetch(`/api/bills/packages/${service}`);
-      const data = await response.json();
-      if (data.success && data.packages) {
-        setBillPackages(data.packages);
-      } else {
-        setBillPackages([]);
-      }
-    } catch (error) {
-      setBillPackages([]);
-    } finally {
-      setLoadingBillPackages(false);
-    }
-  };
-
-  const handleBillServiceChange = (service: BillServiceType) => {
-    setSelectedBillService(service);
-    resetBillForm();
-    if (billType === "cable") {
-      fetchCablePackages(service);
-    }
-  };
-
-  const handleBillTypeChange = (type: BillType) => {
-    setBillType(type);
-    resetBillForm();
-    if (type === "cable") {
-      setSelectedBillService("dstv");
-      fetchCablePackages("dstv");
-    } else {
-      setSelectedBillService("ekedc");
-    }
-  };
-
-  const handleValidateCustomer = () => {
-    if (!billCustomerId.trim()) return;
-    validateBillCustomerMutation.mutate({
-      serviceType: selectedBillService,
-      customerId: billCustomerId.trim(),
-    });
-  };
-
-  const handleBillPayment = () => {
-    const amount = billType === "cable" 
-      ? selectedBillPackage?.amount || 0 
-      : parseFloat(billElectricityAmount) || 0;
-
-    if (!amount || !billCustomerValidated) return;
-
-    payBillMutation.mutate({
-      serviceType: selectedBillService,
-      billType,
-      customerId: billCustomerId.trim(),
-      amount,
-      packageCode: selectedBillPackage?.code,
-      packageName: selectedBillPackage?.name,
-    });
-  };
-
   const walletBalance = parseFloat(wallet?.balance || "0");
-
-  const canPayBill = billCustomerValidated && (
-    (billType === "cable" && selectedBillPackage && walletBalance >= selectedBillPackage.amount) ||
-    (billType === "electricity" && parseFloat(billElectricityAmount) >= 500 && walletBalance >= parseFloat(billElectricityAmount))
-  );
-
-  const getBillServiceName = (service: BillServiceType): string => {
-    const cable = CABLE_SERVICES.find(s => s.id === service);
-    if (cable) return cable.name;
-    const elec = ELECTRICITY_SERVICES.find(s => s.id === service);
-    return elec?.name || service.toUpperCase();
-  };
 
   const detectedNetwork = useMemo(() => detectNetwork(phoneNumber), [phoneNumber]);
   const phoneValidation = useMemo(() => validatePhoneNumber(phoneNumber), [phoneNumber]);
@@ -589,15 +414,15 @@ export default function VtuPage() {
   const giftPhoneValidation = useMemo(() => validatePhoneNumber(giftRecipientPhone), [giftRecipientPhone]);
 
   const filteredPlans = useMemo(() => {
-    if (!plans) return [];
+    if (!plans.length) return [];
     if (!searchQuery.trim()) return plans;
     
     const query = searchQuery.toLowerCase();
     return plans.filter(plan => 
       plan.dataAmount.toLowerCase().includes(query) ||
       plan.validity.toLowerCase().includes(query) ||
-      plan.planName.toLowerCase().includes(query) ||
-      plan.sellingPrice.includes(query)
+      plan.name.toLowerCase().includes(query) ||
+      plan.discountedPrice.toString().includes(query)
     );
   }, [plans, searchQuery]);
 
@@ -607,7 +432,7 @@ export default function VtuPage() {
     selectedPlanId && 
     phoneValidation.valid && 
     selectedPlan && 
-    walletBalance >= parseFloat(selectedPlan.sellingPrice);
+    walletBalance >= selectedPlan.discountedPrice;
 
   const airtimeAmount = selectedAirtimeAmount || (customAirtimeAmount ? parseFloat(customAirtimeAmount) : 0);
   const canPurchaseAirtime = 
@@ -626,7 +451,7 @@ export default function VtuPage() {
     giftPhoneValidation.valid &&
     giftPlanId &&
     selectedGiftPlan &&
-    walletBalance >= parseFloat(selectedGiftPlan.sellingPrice);
+    walletBalance >= selectedGiftPlan.discountedPrice;
 
   const handleDataPurchase = () => {
     if (!selectedPlanId || !phoneValidation.valid) return;
@@ -876,7 +701,7 @@ export default function VtuPage() {
       </Card>
 
       <Tabs value={serviceType} onValueChange={(v) => setServiceType(v as ServiceType)} className="mb-8">
-        <TabsList className="grid w-full grid-cols-5 mb-6">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
           <TabsTrigger value="data" data-testid="tab-service-data" className="flex items-center gap-2">
             <Signal className="h-4 w-4" />
             <span className="hidden sm:inline">Buy</span> Data
@@ -884,10 +709,6 @@ export default function VtuPage() {
           <TabsTrigger value="airtime" data-testid="tab-service-airtime" className="flex items-center gap-2">
             <Phone className="h-4 w-4" />
             <span className="hidden sm:inline">Buy</span> Airtime
-          </TabsTrigger>
-          <TabsTrigger value="bills" data-testid="tab-service-bills" className="flex items-center gap-2">
-            <Receipt className="h-4 w-4" />
-            Bills
           </TabsTrigger>
           <TabsTrigger value="schedule" data-testid="tab-service-schedule" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -907,6 +728,11 @@ export default function VtuPage() {
                 Select Network & Plan
               </CardTitle>
               <CardDescription>Choose your preferred network and data plan</CardDescription>
+              {discount && (
+                <Badge variant="secondary" className="w-fit mt-2">
+                  {discount.percentage} discount applied
+                </Badge>
+              )}
             </CardHeader>
             <CardContent>
               <Tabs value={selectedNetwork} onValueChange={(v) => {
@@ -914,7 +740,7 @@ export default function VtuPage() {
                 setSelectedPlanId(null);
                 setSearchQuery("");
               }}>
-                <TabsList className="grid w-full grid-cols-4 mb-6">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
                   {NETWORKS.map((network) => (
                     <TabsTrigger 
                       key={network.id} 
@@ -969,8 +795,15 @@ export default function VtuPage() {
                           >
                             <div className="text-lg font-bold">{plan.dataAmount}</div>
                             <div className="text-sm text-muted-foreground">{plan.validity}</div>
-                            <div className="text-lg font-semibold text-primary mt-2">
-                              ₦{parseFloat(plan.sellingPrice).toLocaleString()}
+                            <div className="mt-2">
+                              {plan.price !== plan.discountedPrice && (
+                                <div className="text-sm text-muted-foreground line-through">
+                                  ₦{plan.price.toLocaleString()}
+                                </div>
+                              )}
+                              <div className="text-lg font-semibold text-primary">
+                                ₦{plan.discountedPrice.toLocaleString()}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1008,7 +841,7 @@ export default function VtuPage() {
             </CardHeader>
             <CardContent>
               <Tabs value={selectedNetwork} onValueChange={(v) => setSelectedNetwork(v as NetworkType)}>
-                <TabsList className="grid w-full grid-cols-4 mb-6">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
                   {NETWORKS.map((network) => (
                     <TabsTrigger 
                       key={network.id} 
@@ -1062,254 +895,6 @@ export default function VtuPage() {
                   Minimum: ₦50 | Maximum: ₦50,000
                 </p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="bills">
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5" />
-                Pay Bills
-              </CardTitle>
-              <CardDescription>Pay cable TV and electricity bills</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={billType === "cable" ? "default" : "outline"}
-                  onClick={() => handleBillTypeChange("cable")}
-                  className="flex-1"
-                  data-testid="button-bill-type-cable"
-                >
-                  <Tv className="h-4 w-4 mr-2" />
-                  Cable TV
-                </Button>
-                <Button
-                  type="button"
-                  variant={billType === "electricity" ? "default" : "outline"}
-                  onClick={() => handleBillTypeChange("electricity")}
-                  className="flex-1"
-                  data-testid="button-bill-type-electricity"
-                >
-                  <Lightbulb className="h-4 w-4 mr-2" />
-                  Electricity
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Service Provider</Label>
-                <Select 
-                  value={selectedBillService} 
-                  onValueChange={(v) => handleBillServiceChange(v as BillServiceType)}
-                >
-                  <SelectTrigger data-testid="select-bill-service">
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {billType === "cable" ? (
-                      CABLE_SERVICES.map(s => (
-                        <SelectItem key={s.id} value={s.id}>
-                          <span className="flex items-center gap-2">
-                            <Tv className="h-4 w-4" />
-                            {s.name}
-                          </span>
-                        </SelectItem>
-                      ))
-                    ) : (
-                      ELECTRICITY_SERVICES.map(s => (
-                        <SelectItem key={s.id} value={s.id}>
-                          <span className="flex items-center gap-2">
-                            <Lightbulb className="h-4 w-4" />
-                            {s.name}
-                          </span>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>{billType === "cable" ? "Decoder Number" : "Meter Number"}</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder={billType === "cable" ? "Enter decoder number" : "Enter meter number"}
-                    value={billCustomerId}
-                    onChange={(e) => {
-                      setBillCustomerId(e.target.value);
-                      setBillCustomerValidated(false);
-                      setBillCustomerName(null);
-                    }}
-                    className="flex-1"
-                    data-testid="input-bill-customer-id"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleValidateCustomer}
-                    disabled={!billCustomerId.trim() || validateBillCustomerMutation.isPending}
-                    data-testid="button-validate-customer"
-                  >
-                    {validateBillCustomerMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Verify"
-                    )}
-                  </Button>
-                </div>
-                {billCustomerValidated && billCustomerName && (
-                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                    <CheckCircle className="h-4 w-4" />
-                    Customer: {billCustomerName}
-                  </div>
-                )}
-              </div>
-
-              {billType === "cable" ? (
-                <div className="space-y-2">
-                  <Label>Select Package</Label>
-                  {loadingBillPackages ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {[...Array(4)].map((_, i) => (
-                        <Skeleton key={i} className="h-16" />
-                      ))}
-                    </div>
-                  ) : billPackages.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
-                      {billPackages.map((pkg) => (
-                        <div
-                          key={pkg.code}
-                          onClick={() => setSelectedBillPackage(pkg)}
-                          className={`p-3 rounded-md border-2 cursor-pointer transition-all ${
-                            selectedBillPackage?.code === pkg.code
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover-elevate"
-                          }`}
-                          data-testid={`card-bill-package-${pkg.code}`}
-                        >
-                          <div className="font-medium">{pkg.name}</div>
-                          <div className="text-lg font-bold text-primary">
-                            ₦{pkg.amount.toLocaleString()}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Tv className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      <p>No packages available. Select a provider first.</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Amount (min ₦500)</Label>
-                  <Input
-                    type="number"
-                    placeholder="Enter amount"
-                    value={billElectricityAmount}
-                    onChange={(e) => setBillElectricityAmount(e.target.value)}
-                    min={500}
-                    data-testid="input-bill-electricity-amount"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Minimum amount: ₦500
-                  </p>
-                </div>
-              )}
-
-              <Button
-                onClick={handleBillPayment}
-                disabled={!canPayBill || payBillMutation.isPending}
-                className="w-full"
-                data-testid="button-pay-bill"
-              >
-                {payBillMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    Pay Bill
-                    {billType === "cable" && selectedBillPackage && ` - ₦${selectedBillPackage.amount.toLocaleString()}`}
-                    {billType === "electricity" && billElectricityAmount && ` - ₦${parseFloat(billElectricityAmount).toLocaleString()}`}
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Bill Payment History
-              </CardTitle>
-              <CardDescription>Your recent bill payments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {billPaymentsLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-16" />
-                  ))}
-                </div>
-              ) : billPayments && billPayments.length > 0 ? (
-                <div className="space-y-4">
-                  {billPayments.map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 rounded-md bg-muted/30"
-                      data-testid={`bill-payment-${payment.id}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-primary/10">
-                          {payment.billType === "cable" ? (
-                            <Tv className="h-4 w-4 text-primary" />
-                          ) : (
-                            <Lightbulb className="h-4 w-4 text-primary" />
-                          )}
-                        </div>
-                        <div>
-                          <div className="font-medium flex flex-wrap items-center gap-2">
-                            {getBillServiceName(payment.serviceType as BillServiceType)}
-                            <Badge variant="outline" className="text-xs">
-                              {payment.billType === "cable" ? "Cable" : "Electricity"}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {payment.customerId}
-                            {payment.token && (
-                              <span className="ml-2 text-green-600 dark:text-green-400">
-                                Token: {payment.token}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {payment.createdAt && format(new Date(payment.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 sm:text-right">
-                        <div>
-                          <div className="font-bold">₦{parseFloat(payment.amount).toLocaleString()}</div>
-                        </div>
-                        {getStatusBadge(payment.status)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Receipt className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                  <p>No bill payments yet.</p>
-                  <p className="text-sm">Your bill payment history will appear here.</p>
-                </div>
-              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1429,7 +1014,7 @@ export default function VtuPage() {
                             <SelectContent>
                               {schedulePlans?.map(plan => (
                                 <SelectItem key={plan.id} value={plan.id}>
-                                  {plan.dataAmount} - {plan.validity} (₦{parseFloat(plan.sellingPrice).toLocaleString()})
+                                  {plan.dataAmount} - {plan.validity} (₦{plan.discountedPrice.toLocaleString()})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1497,7 +1082,7 @@ export default function VtuPage() {
                       )}
 
                       <div className="space-y-2">
-                        <Label>Time</Label>
+                        <Label>Time of Day</Label>
                         <Input
                           type="time"
                           value={scheduleTimeOfDay}
@@ -1507,10 +1092,10 @@ export default function VtuPage() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button
+                      <Button 
                         onClick={handleCreateSchedule}
                         disabled={!canCreateSchedule || createScheduleMutation.isPending}
-                        data-testid="button-confirm-create-schedule"
+                        data-testid="button-confirm-schedule"
                       >
                         {createScheduleMutation.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1528,7 +1113,7 @@ export default function VtuPage() {
               {schedulesLoading ? (
                 <div className="space-y-4">
                   {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-20" />
+                    <Skeleton key={i} className="h-24" />
                   ))}
                 </div>
               ) : scheduledPurchases && scheduledPurchases.length > 0 ? (
@@ -1536,64 +1121,70 @@ export default function VtuPage() {
                   {scheduledPurchases.map((schedule) => (
                     <div
                       key={schedule.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-muted/30"
+                      className="p-4 rounded-md bg-muted/30 space-y-3"
                       data-testid={`schedule-${schedule.id}`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === schedule.network)?.bgColor || "bg-muted"}`}>
-                          {schedule.serviceType === "data" ? (
-                            <Signal className={`h-4 w-4 ${NETWORKS.find(n => n.id === schedule.network)?.textColor || "text-muted-foreground"}`} />
-                          ) : (
-                            <Phone className={`h-4 w-4 ${NETWORKS.find(n => n.id === schedule.network)?.textColor || "text-muted-foreground"}`} />
-                          )}
-                        </div>
-                        <div>
-                          <div className="font-medium flex flex-wrap items-center gap-2">
-                            {schedule.phoneNumber}
-                            {getNetworkBadge(schedule.network)}
-                            <Badge variant="outline" className="text-xs">
-                              {schedule.serviceType === "data" ? "Data" : "Airtime"}
-                            </Badge>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === schedule.network)?.bgColor || "bg-muted"}`}>
+                            {schedule.serviceType === "data" ? (
+                              <Signal className={`h-4 w-4 ${NETWORKS.find(n => n.id === schedule.network)?.textColor || "text-muted-foreground"}`} />
+                            ) : (
+                              <Phone className={`h-4 w-4 ${NETWORKS.find(n => n.id === schedule.network)?.textColor || "text-muted-foreground"}`} />
+                            )}
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            {getFrequencyLabel(schedule)}
-                          </div>
-                          {schedule.nextRunAt && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Next: {format(new Date(schedule.nextRunAt), "MMM d, yyyy 'at' h:mm a")}
+                          <div>
+                            <div className="font-medium flex flex-wrap items-center gap-2">
+                              {schedule.phoneNumber}
+                              {getNetworkBadge(schedule.network as NetworkType)}
                             </div>
-                          )}
+                            <div className="text-sm text-muted-foreground">
+                              {getFrequencyLabel(schedule)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {getScheduleStatusBadge(schedule.status)}
+                          <div className="font-bold">
+                            ₦{parseFloat(schedule.amount || "0").toLocaleString()}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {schedule.amount && (
-                          <span className="font-bold">₦{parseFloat(schedule.amount).toLocaleString()}</span>
-                        )}
-                        {getScheduleStatusBadge(schedule.status || "active")}
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            checked={schedule.status === "active"}
-                            onCheckedChange={(checked) => {
-                              updateScheduleStatusMutation.mutate({
-                                id: schedule.id,
-                                status: checked ? "active" : "paused",
-                              });
-                            }}
-                            data-testid={`switch-schedule-${schedule.id}`}
-                          />
+                      <div className="flex flex-wrap items-center gap-2">
+                        {schedule.status === "active" ? (
                           <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this schedule?")) {
-                                deleteScheduleMutation.mutate(schedule.id);
-                              }
-                            }}
-                            data-testid={`button-delete-schedule-${schedule.id}`}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateScheduleStatusMutation.mutate({ id: schedule.id, status: "paused" })}
+                            disabled={updateScheduleStatusMutation.isPending}
+                            data-testid={`button-pause-schedule-${schedule.id}`}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Pause className="h-3 w-3 mr-1" />
+                            Pause
                           </Button>
-                        </div>
+                        ) : schedule.status === "paused" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateScheduleStatusMutation.mutate({ id: schedule.id, status: "active" })}
+                            disabled={updateScheduleStatusMutation.isPending}
+                            data-testid={`button-resume-schedule-${schedule.id}`}
+                          >
+                            <Play className="h-3 w-3 mr-1" />
+                            Resume
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                          disabled={deleteScheduleMutation.isPending}
+                          className="text-destructive"
+                          data-testid={`button-delete-schedule-${schedule.id}`}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -1612,169 +1203,136 @@ export default function VtuPage() {
         <TabsContent value="gift">
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gift className="h-5 w-5" />
-                Gift Data
-              </CardTitle>
-              <CardDescription>Send data as a gift or claim received gifts</CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Gift className="h-5 w-5" />
+                    Gift Data
+                  </CardTitle>
+                  <CardDescription>Send data as a gift to friends and family</CardDescription>
+                </div>
+                <Dialog open={showGiftDialog} onOpenChange={setShowGiftDialog}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-send-gift">
+                      <Send className="h-4 w-4 mr-2" />
+                      Send Gift
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Send Data Gift</DialogTitle>
+                      <DialogDescription>Gift data to someone special</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Network</Label>
+                        <Select value={giftNetwork} onValueChange={(v) => {
+                          setGiftNetwork(v as NetworkType);
+                          setGiftPlanId(null);
+                        }}>
+                          <SelectTrigger data-testid="select-gift-network">
+                            <SelectValue placeholder="Select network" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {NETWORKS.map(n => (
+                              <SelectItem key={n.id} value={n.id}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${n.color}`} />
+                                  {n.displayName}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Recipient Phone Number</Label>
+                        <Input
+                          placeholder="08012345678"
+                          value={giftRecipientPhone}
+                          onChange={(e) => setGiftRecipientPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                          data-testid="input-gift-phone"
+                        />
+                        {giftPhoneValidation.message && (
+                          <p className="text-sm text-red-500">{giftPhoneValidation.message}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Data Plan</Label>
+                        <Select value={giftPlanId || ""} onValueChange={setGiftPlanId}>
+                          <SelectTrigger data-testid="select-gift-plan">
+                            <SelectValue placeholder="Select plan" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {giftPlans?.map(plan => (
+                              <SelectItem key={plan.id} value={plan.id}>
+                                {plan.dataAmount} - {plan.validity} (₦{plan.discountedPrice.toLocaleString()})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Gift Message (Optional)</Label>
+                        <Textarea
+                          placeholder="Add a personal message to your gift..."
+                          value={giftMessage}
+                          onChange={(e) => setGiftMessage(e.target.value)}
+                          rows={3}
+                          data-testid="input-gift-message"
+                        />
+                      </div>
+
+                      {selectedGiftPlan && (
+                        <div className="p-4 rounded-md bg-muted/50 space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Plan:</span>
+                            <span className="font-medium">{selectedGiftPlan.dataAmount} - {selectedGiftPlan.validity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Cost:</span>
+                            <span className="font-bold text-primary">₦{selectedGiftPlan.discountedPrice.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        onClick={handleSendGift}
+                        disabled={!canSendGift || sendGiftMutation.isPending}
+                        data-testid="button-confirm-gift"
+                      >
+                        {sendGiftMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Gift className="h-4 w-4 mr-2" />
+                        )}
+                        Send Gift
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               <Tabs value={giftTab} onValueChange={(v) => setGiftTab(v as "send" | "sent" | "received")}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
-                  <TabsTrigger value="send" data-testid="tab-gift-send" className="flex items-center gap-2">
-                    <Send className="h-4 w-4" />
-                    Send Gift
-                  </TabsTrigger>
-                  <TabsTrigger value="sent" data-testid="tab-gift-sent" className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" />
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                  <TabsTrigger value="sent" data-testid="tab-gift-sent">
                     Sent Gifts
                   </TabsTrigger>
-                  <TabsTrigger value="received" data-testid="tab-gift-received" className="flex items-center gap-2">
-                    <Download className="h-4 w-4" />
-                    Received
+                  <TabsTrigger value="received" data-testid="tab-gift-received">
+                    Received Gifts
                   </TabsTrigger>
                 </TabsList>
-
-                <TabsContent value="send">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Recipient Phone Number</Label>
-                      <Input
-                        placeholder="08012345678"
-                        value={giftRecipientPhone}
-                        onChange={(e) => setGiftRecipientPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
-                        data-testid="input-gift-recipient-phone"
-                      />
-                      {giftPhoneValidation.message && (
-                        <p className="text-sm text-red-500">{giftPhoneValidation.message}</p>
-                      )}
-                      {beneficiaries && beneficiaries.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {beneficiaries.slice(0, 4).map((b) => (
-                            <Button
-                              key={b.id}
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setGiftRecipientPhone(b.phoneNumber);
-                                setGiftNetwork(b.network as NetworkType);
-                              }}
-                              className="text-xs"
-                              data-testid={`button-gift-beneficiary-${b.id}`}
-                            >
-                              {b.name}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Network</Label>
-                      <Select value={giftNetwork} onValueChange={(v) => {
-                        setGiftNetwork(v as NetworkType);
-                        setGiftPlanId(null);
-                      }}>
-                        <SelectTrigger data-testid="select-gift-network">
-                          <SelectValue placeholder="Select network" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {NETWORKS.map(n => (
-                            <SelectItem key={n.id} value={n.id}>
-                              <span className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${n.color}`} />
-                                {n.displayName}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Data Plan</Label>
-                      <Select value={giftPlanId || ""} onValueChange={setGiftPlanId}>
-                        <SelectTrigger data-testid="select-gift-plan">
-                          <SelectValue placeholder="Select plan to gift" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {giftPlans?.map(plan => (
-                            <SelectItem key={plan.id} value={plan.id}>
-                              {plan.dataAmount} - {plan.validity} (₦{parseFloat(plan.sellingPrice).toLocaleString()})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Message (Optional)</Label>
-                      <Textarea
-                        placeholder="Add a personal message..."
-                        value={giftMessage}
-                        onChange={(e) => setGiftMessage(e.target.value)}
-                        maxLength={200}
-                        className="resize-none"
-                        data-testid="input-gift-message"
-                      />
-                      <p className="text-xs text-muted-foreground text-right">{giftMessage.length}/200</p>
-                    </div>
-
-                    {selectedGiftPlan && (
-                      <div className="p-4 rounded-md bg-muted/50 space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Plan:</span>
-                          <span className="font-medium">{selectedGiftPlan.dataAmount} - {selectedGiftPlan.validity}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Network:</span>
-                          {getNetworkBadge(giftNetwork)}
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Amount:</span>
-                          <span className="font-bold text-primary">₦{parseFloat(selectedGiftPlan.sellingPrice).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedGiftPlan && walletBalance < parseFloat(selectedGiftPlan.sellingPrice) && (
-                      <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 flex items-center gap-3">
-                        <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                        <div>
-                          <p className="font-medium">Insufficient Balance</p>
-                          <p className="text-sm">You need ₦{(parseFloat(selectedGiftPlan.sellingPrice) - walletBalance).toLocaleString()} more to send this gift.</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={handleSendGift}
-                      disabled={!canSendGift || sendGiftMutation.isPending}
-                      className="w-full"
-                      data-testid="button-send-gift"
-                    >
-                      {sendGiftMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          <Gift className="h-4 w-4 mr-2" />
-                          Send Gift
-                          {selectedGiftPlan && ` - ₦${parseFloat(selectedGiftPlan.sellingPrice).toLocaleString()}`}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </TabsContent>
 
                 <TabsContent value="sent">
                   {sentGiftsLoading ? (
                     <div className="space-y-4">
                       {[...Array(3)].map((_, i) => (
-                        <Skeleton key={i} className="h-20" />
+                        <Skeleton key={i} className="h-24" />
                       ))}
                     </div>
                   ) : sentGifts && sentGifts.length > 0 ? (
@@ -1782,50 +1340,53 @@ export default function VtuPage() {
                       {sentGifts.map((gift) => (
                         <div
                           key={gift.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-muted/30"
-                          data-testid={`sent-gift-${gift.id}`}
+                          className="p-4 rounded-md bg-muted/30 space-y-2"
+                          data-testid={`gift-sent-${gift.id}`}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === gift.network)?.bgColor || "bg-muted"}`}>
-                              <Gift className={`h-4 w-4 ${NETWORKS.find(n => n.id === gift.network)?.textColor || "text-muted-foreground"}`} />
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === gift.network)?.bgColor || "bg-muted"}`}>
+                                <Gift className={`h-4 w-4 ${NETWORKS.find(n => n.id === gift.network)?.textColor || "text-muted-foreground"}`} />
+                              </div>
+                              <div>
+                                <div className="font-medium flex flex-wrap items-center gap-2">
+                                  To: {gift.recipientPhone}
+                                  {getNetworkBadge(gift.network as NetworkType)}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {gift.createdAt && format(new Date(gift.createdAt), "MMM d, yyyy")}
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-medium flex flex-wrap items-center gap-2">
-                                To: {gift.recipientPhone}
-                                {getNetworkBadge(gift.network)}
-                              </div>
-                              {gift.message && (
-                                <p className="text-sm text-muted-foreground mt-1 italic">"{gift.message}"</p>
-                              )}
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {gift.createdAt && format(new Date(gift.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                              </div>
+                            <div className="flex items-center gap-2">
+                              {getGiftStatusBadge(gift.status)}
+                              <div className="font-bold">₦{parseFloat(gift.amount || "0").toLocaleString()}</div>
                             </div>
                           </div>
-                          <div className="flex flex-col sm:items-end gap-2">
-                            {getGiftStatusBadge(gift.status || "pending")}
-                            {gift.giftCode && (
-                              <div className="flex items-center gap-2">
-                                <code className="text-xs bg-muted px-2 py-1 rounded">{gift.giftCode}</code>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleCopyGiftCode(gift.giftCode!)}
-                                  data-testid={`button-copy-gift-code-${gift.id}`}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
-                          </div>
+                          {gift.giftCode && gift.status === "pending" && (
+                            <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
+                              <code className="text-sm font-mono">{gift.giftCode}</code>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCopyGiftCode(gift.giftCode!)}
+                                data-testid={`button-copy-gift-code-${gift.id}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                          {gift.message && (
+                            <p className="text-sm text-muted-foreground italic">"{gift.message}"</p>
+                          )}
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div className="text-center py-12 text-muted-foreground">
-                      <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <Gift className="h-12 w-12 mx-auto mb-4 opacity-30" />
                       <p>No gifts sent yet.</p>
-                      <p className="text-sm">Send your first data gift to someone special!</p>
+                      <p className="text-sm">Send your first data gift!</p>
                     </div>
                   )}
                 </TabsContent>
@@ -1834,7 +1395,7 @@ export default function VtuPage() {
                   {receivedGiftsLoading ? (
                     <div className="space-y-4">
                       {[...Array(3)].map((_, i) => (
-                        <Skeleton key={i} className="h-20" />
+                        <Skeleton key={i} className="h-24" />
                       ))}
                     </div>
                   ) : receivedGifts && receivedGifts.length > 0 ? (
@@ -1842,57 +1403,56 @@ export default function VtuPage() {
                       {receivedGifts.map((gift) => (
                         <div
                           key={gift.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-muted/30"
-                          data-testid={`received-gift-${gift.id}`}
+                          className="p-4 rounded-md bg-muted/30 space-y-2"
+                          data-testid={`gift-received-${gift.id}`}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === gift.network)?.bgColor || "bg-muted"}`}>
-                              <Gift className={`h-4 w-4 ${NETWORKS.find(n => n.id === gift.network)?.textColor || "text-muted-foreground"}`} />
-                            </div>
-                            <div>
-                              <div className="font-medium flex flex-wrap items-center gap-2">
-                                Data Gift
-                                {getNetworkBadge(gift.network)}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${NETWORKS.find(n => n.id === gift.network)?.bgColor || "bg-muted"}`}>
+                                <Gift className={`h-4 w-4 ${NETWORKS.find(n => n.id === gift.network)?.textColor || "text-muted-foreground"}`} />
                               </div>
-                              {gift.message && (
-                                <p className="text-sm text-muted-foreground mt-1 italic">"{gift.message}"</p>
-                              )}
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {gift.createdAt && format(new Date(gift.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                              </div>
-                              {gift.expiresAt && gift.status === "pending" && (
-                                <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                                  Expires: {format(new Date(gift.expiresAt), "MMM d, yyyy")}
+                              <div>
+                                <div className="font-medium flex flex-wrap items-center gap-2">
+                                  From: {gift.senderPhone || "Anonymous"}
+                                  {getNetworkBadge(gift.network as NetworkType)}
                                 </div>
-                              )}
+                                <div className="text-sm text-muted-foreground">
+                                  {gift.createdAt && format(new Date(gift.createdAt), "MMM d, yyyy")}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getGiftStatusBadge(gift.status)}
+                              <div className="font-bold">₦{parseFloat(gift.amount || "0").toLocaleString()}</div>
                             </div>
                           </div>
-                          <div className="flex flex-col sm:items-end gap-2">
-                            {getGiftStatusBadge(gift.status || "pending")}
-                            {gift.status === "pending" && gift.giftCode && (
-                              <Button
-                                size="sm"
-                                onClick={() => claimGiftMutation.mutate(gift.giftCode!)}
-                                disabled={claimGiftMutation.isPending}
-                                data-testid={`button-claim-gift-${gift.id}`}
-                              >
-                                {claimGiftMutation.isPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                ) : (
-                                  <Download className="h-4 w-4 mr-2" />
-                                )}
-                                Claim Gift
-                              </Button>
-                            )}
-                          </div>
+                          {gift.message && (
+                            <p className="text-sm text-muted-foreground italic">"{gift.message}"</p>
+                          )}
+                          {gift.status === "pending" && gift.giftCode && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => claimGiftMutation.mutate(gift.giftCode!)}
+                              disabled={claimGiftMutation.isPending}
+                              data-testid={`button-claim-gift-${gift.id}`}
+                            >
+                              {claimGiftMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                              )}
+                              Claim Gift
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div className="text-center py-12 text-muted-foreground">
-                      <Download className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <Gift className="h-12 w-12 mx-auto mb-4 opacity-30" />
                       <p>No gifts received yet.</p>
-                      <p className="text-sm">Gifts you receive will appear here.</p>
+                      <p className="text-sm">When someone sends you data, it will appear here.</p>
                     </div>
                   )}
                 </TabsContent>
@@ -1902,13 +1462,12 @@ export default function VtuPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Saved Beneficiaries Quick Select - Only show for data and airtime tabs */}
-      {(serviceType === "data" || serviceType === "airtime") && beneficiaries && beneficiaries.length > 0 && (
-        <Card className="mb-4">
+      {beneficiaries && beneficiaries.length > 0 && (serviceType === "data" || serviceType === "airtime") && (
+        <Card className="mb-8">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Quick Select
+            <CardTitle className="text-base flex items-center gap-2">
+              <Star className="h-4 w-4" />
+              Quick Contacts
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1938,7 +1497,6 @@ export default function VtuPage() {
         </Card>
       )}
 
-      {/* Phone Number and Purchase Card - Only show for data and airtime tabs */}
       {(serviceType === "data" || serviceType === "airtime") && (
         <Card className="mb-8">
           <CardHeader>
@@ -2053,7 +1611,14 @@ export default function VtuPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount:</span>
-                  <span className="font-bold text-primary">₦{parseFloat(selectedPlan.sellingPrice).toLocaleString()}</span>
+                  <div className="text-right">
+                    {selectedPlan.price !== selectedPlan.discountedPrice && (
+                      <span className="text-sm text-muted-foreground line-through mr-2">
+                        ₦{selectedPlan.price.toLocaleString()}
+                      </span>
+                    )}
+                    <span className="font-bold text-primary">₦{selectedPlan.discountedPrice.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -2075,12 +1640,12 @@ export default function VtuPage() {
               </div>
             )}
 
-            {serviceType === "data" && selectedPlan && walletBalance < parseFloat(selectedPlan.sellingPrice) && (
+            {serviceType === "data" && selectedPlan && walletBalance < selectedPlan.discountedPrice && (
               <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
                 <div>
                   <p className="font-medium">Insufficient Balance</p>
-                  <p className="text-sm">You need ₦{(parseFloat(selectedPlan.sellingPrice) - walletBalance).toLocaleString()} more to purchase this plan.</p>
+                  <p className="text-sm">You need ₦{(selectedPlan.discountedPrice - walletBalance).toLocaleString()} more to purchase this plan.</p>
                 </div>
               </div>
             )}
@@ -2110,7 +1675,7 @@ export default function VtuPage() {
                 ) : (
                   <>
                     Purchase Data
-                    {selectedPlan && ` - ₦${parseFloat(selectedPlan.sellingPrice).toLocaleString()}`}
+                    {selectedPlan && ` - ₦${selectedPlan.discountedPrice.toLocaleString()}`}
                   </>
                 )}
               </Button>
@@ -2138,7 +1703,6 @@ export default function VtuPage() {
         </Card>
       )}
 
-      {/* Transaction History - Only show for data and airtime tabs */}
       {(serviceType === "data" || serviceType === "airtime") && (
         <Card>
           <CardHeader>

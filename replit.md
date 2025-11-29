@@ -115,12 +115,27 @@ The marketplace employs a modern full-stack architecture focusing on performance
   - Consistent fee calculations across frontend and backend
 - **Removed:** All Paystack, Flutterwave, Monnify references
 
-### ✅ **VTU Integration (Graceful Fallback)**
-- Primary: SMEDATA.NG API `/plans` endpoint
-- Fallback: Static database plans if API returns 404
-- Phone number validation
-- Wallet integration for data purchase
-- Error handling prevents app crash on API failure
+### ✅ **VTU Integration (Rebuilt - November 2024)**
+- **Networks:** MTN, GLO, and Airtel only (9mobile removed)
+- **Services:** Data purchase and Airtime only (Bill payments removed)
+- **API:** SMEDATA.NG API with hardcoded plan codes from documentation
+- **Plan Codes:** 50+ hardcoded data plans in server/smedata.ts
+  - MTN: 25+ plans (500MB to 120GB)
+  - GLO: 10+ plans (200MB to 50GB)
+  - Airtel: 15+ plans (100MB to 40GB)
+- **Discount System:** 3% default discount on all data plans
+  - Displays original price, discounted price, and savings
+- **Wallet Integration:** 
+  - Balance deducted before API call with tracking
+  - Automatic refund on any failure (API error, network error, service unavailable)
+  - Refund transactions logged with descriptions
+- **API Endpoints:**
+  - GET `/api/vtu/plans` - Returns hardcoded plans with discount pricing
+  - POST `/api/vtu/purchase` - Data purchase with wallet deduction
+  - POST `/api/vtu/airtime` - Airtime purchase (₦50-₦50,000)
+  - Scheduled purchases and gift data endpoints available
+- **Phone Validation:** Nigerian phone number detection with network auto-detect
+- **Error Handling:** Robust refund logic for all failure scenarios
 
 ### ✅ **Security Enhancements**
 - Error sanitization prevents dev detail leakage
