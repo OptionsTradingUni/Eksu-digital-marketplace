@@ -1,0 +1,196 @@
+1. Move Reseller functionality INTO the VTU page as a tab:
+   - Add "Reseller" tab to the VTU page Tabs component
+   - Include: tier selection, reseller dashboard, transactions, customers, pricing settings, API keys
+   - Keep '/reseller' route as redirect to '/vtu?tab=reseller' for backwards compatibility
+
+2. Move Rewards functionality INTO the VTU page as a tab:
+   - Add "Rewards" tab to the VTU page Tabs component
+   - Include: points balance, tier status, redemption options, points history
+   - Keep '/rewards' route as redirect to '/vtu?tab=rewards'
+
+3. Organize VTU page tabs logically:
+   - Primary row: Data | Airtime | Bills (cable, electricity, exam pins)
+   - Secondary row: Scheduled | Gift | Bulk | Beneficiaries
+   - Business row: Reseller | Rewards | History
+   - Use tab groups or horizontal scroll if needed on mobile
+
+4. Test all lazy-loaded pages load without errors:
+   - Visit each route directly and check browser console for import errors
+   - Verify ErrorBoundary catches failures gracefully with user-friendly message
+
+5. Create public-facing reseller storefront at route /store/:subdomain:
+   - Load reseller configuration by subdomain from database
+   - Apply reseller's primaryColor, secondaryColor, logo, siteName dynamically
+   - Display only VTU services (data, airtime, bills) with reseller's custom pricing
+   - Allow purchases WITHOUT requiring user login (guest checkout with phone number only)
+   - Track all transactions with reseller attribution (resellerId)
+   - Show "Powered by EKSU Marketplace" footer with link to main site
+
+6. Add subdomain routing support (for production):
+   - When someone visits snow.eksuplug.com, serve the reseller storefront for "snow"
+   - Parse hostname to extract subdomain
+   - Fall back to /store/:subdomain route if subdomain routing not available
+
+7. Guest checkout flow for reseller storefronts:
+   - Collect only: phone number, email (optional), service selection
+   - Process payment via Squad (no wallet required)
+   - Send receipt via SMS or email
+   - No account creation required for buyers
+
+8. Create reseller payout/withdrawal system:
+   - Add /api/reseller/withdraw endpoint
+   - Create withdrawal request form in reseller dashboard tab
+   - Require bank account details (bank name, account number, account name)
+   - Verify bank account before first withdrawal using Squad/Paystack verify
+   - Track payout history: pending, processing, completed, failed
+   - Minimum withdrawal: ₦1,000
+   - Admin approval required for withdrawals over ₦50,000
+
+9. Add reseller earnings dashboard:
+   - Show total earnings, pending balance, withdrawn amount
+   - Daily/weekly/monthly earnings chart
+   - Transaction breakdown by service type
+   - Top customers list
+
+10. Implement background job for scheduled VTU purchases:
+    - Use node-cron or setInterval to check vtuSchedules table every minute
+    - Find schedules where nextExecutionDate <= now AND status = 'active'
+    - Execute the VTU purchase using existing purchase logic
+    - Deduct from user's wallet
+    - Update nextExecutionDate based on frequency (daily/weekly/monthly)
+    - Send push notification and/or email on success/failure
+    - If wallet balance insufficient, mark schedule as 'paused' and notify user
+
+11. Add schedule management features:
+    - Pause/resume scheduled purchases
+    - Edit schedule details (amount, phone, frequency)
+    - View execution history for each schedule
+    - Set maximum executions limit (optional)
+
+12. Add transaction PIN for wallet security:
+    - Add 'transactionPin' (hashed with bcrypt) field to users table
+    - Add 'transactionPinSet' boolean field
+    - Require 4-6 digit PIN for: withdrawals, transfers over ₦1,000, reseller payouts
+    - Create PIN setup flow in Settings page
+    - Add PIN reset via email verification
+    - Lock account after 5 wrong PIN attempts (30 minute lockout)
+
+13. Implement rate limiting on critical endpoints:
+    - VTU purchases: max 10 per minute per user
+    - Wallet withdrawals: max 3 per hour per user
+    - Login attempts: max 5 per 15 minutes per IP
+    - Signup: max 3 per hour per IP (prevent welcome bonus abuse)
+    - API requests (reseller): respect apiRateLimit field (default 100/minute)
+
+14. Add CAPTCHA protection:
+    - Show CAPTCHA after 3 failed login attempts
+    - Require CAPTCHA on all signups
+    - Use hCaptcha or Cloudflare Turnstile (free options)
+    - Add to password reset flow
+
+15. Create audit log table and tracking:
+    - New table: audit_logs (id, userId, action, ipAddress, userAgent, metadata, createdAt)
+    - Log: withdrawals, admin actions, reseller tier changes, PIN changes, login attempts
+    - Create admin page to view and filter audit logs
+    - Retain logs for 90 days minimum
+
+16. Split shared/schema.ts into multiple files:
+    - Create shared/schemas/ folder
+    - auth.schema.ts: users, sessions, emailVerification
+    - products.schema.ts: products, categories, reviews, watchlist
+    - wallet.schema.ts: wallets, transactions, escrow
+    - vtu.schema.ts: vtuTransactions, vtuSchedules, vtuplans, beneficiaries
+    - reseller.schema.ts: resellerSites, resellerPricing, resellerTransactions, resellerCustomers
+    - social.schema.ts: posts, comments, confessions, messages, conversations
+    - admin.schema.ts: reports, supportTickets, announcements, auditLogs
+    - Create index.ts barrel export to maintain backwards compatibility
+    - Update all imports across codebase
+
+17. Create dedicated service files:
+    - server/services/resellerService.ts: storefront logic, pricing calculation, transaction attribution
+    - server/services/vtuService.ts: purchase processing, schedule execution, API calls
+    - server/services/walletService.ts: balance operations, escrow, withdrawals
+    - server/services/notificationService.ts: push, email, SMS notifications
+
+18. Enable API access for Enterprise resellers:
+    - Remove "coming soon" label from Enterprise tier
+    - API key generation already works - enable it fully
+    - Create API documentation page at /api-docs or /reseller?tab=api-docs
+    - Document endpoints: POST /api/v1/vtu/data, POST /api/v1/vtu/airtime, GET /api/v1/balance
+    - Add webhook notifications: send POST to reseller's webhookUrl on transaction complete
+    - Include code examples in JavaScript, Python, PHP, cURL
+
+19. Add push notifications (PWA):
+    - Implement Web Push API using web-push library
+    - Add notification permission request on first login
+    - Notify on: new messages, order updates, VTU confirmations, low balance warnings
+    - Add notification preferences toggle in Settings page
+    - Store push subscriptions in database
+
+20. Add WhatsApp quick-buy integration:
+    - Add "Buy via WhatsApp" button on VTU page
+    - Generate pre-filled WhatsApp message: "Hi, I want to buy [plan] for [phone]"
+    - Link to your business WhatsApp number
+    - Consider WhatsApp Business API for automated order processing (future)
+
+21. Improve admin analytics dashboard:
+    - Add revenue charts: daily, weekly, monthly trends
+    - VTU breakdown: pie chart of data vs airtime vs bills
+    - User metrics: new signups, active users, retention
+    - Reseller performance: top resellers by volume, total reseller revenue
+    - Payment methods breakdown: card vs transfer vs USSD
+    - Export analytics as CSV/PDF
+
+22. Group related features into parent pages with tabs:
+
+    VTU PAGE (/vtu) should include tabs for:
+    - Data, Airtime, Bills, Scheduled, Gift, Bulk, Beneficiaries, Reseller, Rewards, History
+
+    THE PLUG PAGE (/the-plug) should include tabs for:
+    - Feed, Confessions, Communities, My Posts, Saved/Bookmarks
+
+    MESSAGES PAGE (/messages) should include tabs for:
+    - Chats, Archived, Secret Messages
+
+    PROFILE PAGE (/profile) should include tabs for:
+    - Overview, My Listings, Reviews, Settings
+
+23. Simplify navigation:
+    - Header Services menu: VTU Services, Hostels, Study Materials, Games, Explore
+    - BottomNav More menu: same as above
+    - Remove redundant separate page links for features now inside parent pages
+
+24. Fix potential lazy loading errors:
+    - Ensure all page components have proper default exports
+    - Add console.error logging in ErrorBoundary to capture failures
+    - Show "Something went wrong. Try refreshing." message instead of blank screen
+
+25. Add loading states everywhere:
+    - Skeleton loaders for all data fetching
+    - Button loading spinners during mutations
+    - Disable buttons while requests are in progress
+
+26. Mobile responsiveness check:
+    - Test all pages on mobile viewport (375px width)
+    - Ensure tab bars scroll horizontally on small screens
+    - Fix any overflow issues in tables and forms
+
+MUST DO NOW:
+1. Move Reseller & Rewards into VTU page as tabs
+2. Create public reseller storefront at /store/:subdomain (guest checkout)
+3. Add reseller payout/withdrawal system
+4. Implement scheduled VTU background job execution
+5. Add transaction PIN for wallet security
+6. Add rate limiting on VTU and wallet endpoints
+
+SHOULD DO SOON:
+7. Split schema.ts into multiple files
+8. Enable Enterprise API access fully
+9. Add push notifications
+10. Create audit log system
+11. Improve admin analytics
+
+NICE TO HAVE:
+12. WhatsApp quick-buy integration if it’s not free don’t bother 
+13. Subdomain routing for reseller sites
+14. CAPTCHA on signup/login
