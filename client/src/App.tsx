@@ -50,6 +50,7 @@ const StudyMaterialsPage = lazy(() => import("@/pages/study-materials"));
 const HostelsPage = lazy(() => import("@/pages/hostels"));
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 const ExplorePage = lazy(() => import("@/pages/explore"));
+const ResellerPage = lazy(() => import("@/pages/reseller"));
 
 function PageLoadingSpinner() {
   return (
@@ -253,6 +254,11 @@ function Router() {
             <Route path="/vtu" component={() => (
               <ErrorBoundary>
                 <VtuPage />
+              </ErrorBoundary>
+            )} />
+            <Route path="/reseller" component={() => (
+              <ErrorBoundary>
+                <ResellerPage />
               </ErrorBoundary>
             )} />
             <Route path="/settings" component={() => (

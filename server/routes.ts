@@ -55,6 +55,8 @@ import {
   purchaseExamPinSchema,
   payBillSchema,
   validateCustomerSchema,
+  createResellerSiteSchema,
+  updateResellerSiteSchema,
 } from "@shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, SquadApiError, SquadErrorType } from "./squad";
@@ -5901,6 +5903,227 @@ Happy trading!`;
     } catch (error) {
       console.error("Error fetching VTU transactions:", error);
       res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Export VTU transactions as JSON (for frontend to process into PDF/Excel)
+  app.get("/api/vtu/transactions/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { status, network, startDate, endDate, format = "json" } = req.query;
+      
+      const filters: { status?: string; network?: string; startDate?: Date; endDate?: Date } = {};
+      if (status && typeof status === "string" && status !== "all") filters.status = status;
+      if (network && typeof network === "string" && network !== "all") filters.network = network;
+      if (startDate && typeof startDate === "string") filters.startDate = new Date(startDate);
+      if (endDate && typeof endDate === "string") filters.endDate = new Date(endDate);
+
+      const transactions = await storage.getUserVtuTransactions(userId, filters);
+      const user = await storage.getUser(userId);
+
+      res.json({
+        success: true,
+        exportData: {
+          userName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User",
+          exportDate: new Date().toISOString(),
+          filters: {
+            status: filters.status || "all",
+            network: filters.network || "all",
+            startDate: filters.startDate?.toISOString() || null,
+            endDate: filters.endDate?.toISOString() || null,
+          },
+          transactions: transactions.map((tx: any) => ({
+            id: tx.id,
+            date: tx.createdAt,
+            type: tx.serviceType || "data",
+            network: tx.network,
+            phoneNumber: tx.phoneNumber,
+            plan: tx.planName || tx.planId || "N/A",
+            amount: tx.amount,
+            status: tx.status,
+            reference: tx.apiReference || tx.id,
+          })),
+          summary: {
+            totalTransactions: transactions.length,
+            totalAmount: transactions.reduce((sum: number, tx: any) => sum + parseFloat(tx.amount || 0), 0),
+            successfulCount: transactions.filter((tx: any) => tx.status === "success" || tx.status === "completed").length,
+            pendingCount: transactions.filter((tx: any) => tx.status === "pending").length,
+            failedCount: transactions.filter((tx: any) => tx.status === "failed").length,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error exporting VTU transactions:", error);
+      res.status(500).json({ message: "Failed to export transactions" });
+    }
+  });
+
+  // Bulk VTU purchase - purchase data/airtime for multiple numbers
+  app.post("/api/vtu/bulk-purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { purchases, serviceType = "data" } = req.body;
+
+      if (!Array.isArray(purchases) || purchases.length === 0) {
+        return res.status(400).json({ message: "Purchases array is required and cannot be empty" });
+      }
+
+      if (purchases.length > 50) {
+        return res.status(400).json({ message: "Maximum 50 purchases per bulk request" });
+      }
+
+      // Validate all phone numbers first
+      for (const purchase of purchases) {
+        if (!isValidNigerianPhone(purchase.phoneNumber)) {
+          return res.status(400).json({ 
+            message: `Invalid phone number: ${purchase.phoneNumber}`,
+            invalidNumber: purchase.phoneNumber
+          });
+        }
+      }
+
+      // Calculate total amount needed
+      let totalAmount = 0;
+      const purchasesWithPlans: any[] = [];
+
+      for (const purchase of purchases) {
+        if (serviceType === "data") {
+          const plan = getDataPlanById(purchase.planId);
+          if (!plan) {
+            return res.status(400).json({ 
+              message: `Data plan not found: ${purchase.planId}`,
+              invalidPlan: purchase.planId
+            });
+          }
+          totalAmount += plan.sellingPrice;
+          purchasesWithPlans.push({ ...purchase, plan });
+        } else if (serviceType === "airtime") {
+          const amount = parseFloat(purchase.amount);
+          if (isNaN(amount) || amount < 50 || amount > 50000) {
+            return res.status(400).json({ 
+              message: `Invalid airtime amount for ${purchase.phoneNumber}. Must be between 50 and 50,000.`,
+            });
+          }
+          totalAmount += amount;
+          purchasesWithPlans.push({ ...purchase, amount });
+        }
+      }
+
+      // Check wallet balance
+      const wallet = await storage.getOrCreateWallet(userId);
+      const walletBalance = parseFloat(wallet.balance);
+
+      if (walletBalance < totalAmount) {
+        return res.status(400).json({ 
+          message: "Insufficient wallet balance for bulk purchase",
+          required: totalAmount,
+          available: walletBalance
+        });
+      }
+
+      // Check if API is configured
+      if (!isInlomaxConfigured()) {
+        return res.status(503).json({ message: "VTU service is temporarily unavailable" });
+      }
+
+      // Process each purchase
+      const results: any[] = [];
+      let totalSuccess = 0;
+      let totalFailed = 0;
+      let amountDeducted = 0;
+
+      for (const purchase of purchasesWithPlans) {
+        try {
+          const purchaseAmount = serviceType === "data" ? purchase.plan.sellingPrice : purchase.amount;
+          
+          // Deduct from wallet
+          await storage.updateWalletBalance(userId, purchaseAmount.toString(), "subtract");
+          amountDeducted += purchaseAmount;
+
+          // Create transaction record
+          const walletTx = await storage.createTransaction({
+            walletId: wallet.id,
+            type: "purchase",
+            amount: `-${purchaseAmount}`,
+            status: "pending",
+            description: serviceType === "data" 
+              ? `Bulk Data: ${purchase.plan.dataAmount} for ${purchase.phoneNumber}`
+              : `Bulk Airtime: ₦${purchase.amount} for ${purchase.phoneNumber}`,
+            relatedUserId: userId,
+          });
+
+          let purchaseResult;
+          if (serviceType === "data") {
+            purchaseResult = await purchaseData(purchase.plan.network, purchase.phoneNumber, purchase.plan.planCode);
+          } else {
+            purchaseResult = await purchaseAirtime(purchase.network || "mtn", purchase.phoneNumber, purchase.amount);
+          }
+
+          if (purchaseResult.success) {
+            await storage.updateTransaction(walletTx.id, { status: "completed" });
+            totalSuccess++;
+            results.push({
+              phoneNumber: purchase.phoneNumber,
+              status: "success",
+              amount: purchaseAmount,
+              reference: purchaseResult.reference,
+              message: serviceType === "data" 
+                ? `${purchase.plan.dataAmount} sent successfully`
+                : `₦${purchase.amount} airtime sent successfully`,
+            });
+          } else {
+            // Refund on failure
+            await storage.updateWalletBalance(userId, purchaseAmount.toString(), "add");
+            amountDeducted -= purchaseAmount;
+            await storage.updateTransaction(walletTx.id, { status: "failed" });
+            await storage.createTransaction({
+              walletId: wallet.id,
+              type: "refund",
+              amount: purchaseAmount.toString(),
+              status: "completed",
+              description: `Refund: Bulk ${serviceType} for ${purchase.phoneNumber} - ${purchaseResult.message}`,
+              relatedUserId: userId,
+            });
+            totalFailed++;
+            results.push({
+              phoneNumber: purchase.phoneNumber,
+              status: "failed",
+              amount: purchaseAmount,
+              message: purchaseResult.message || "Purchase failed",
+            });
+          }
+        } catch (purchaseError: any) {
+          totalFailed++;
+          results.push({
+            phoneNumber: purchase.phoneNumber,
+            status: "error",
+            message: purchaseError.message || "Network error",
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Bulk purchase completed: ${totalSuccess} successful, ${totalFailed} failed`,
+        results,
+        summary: {
+          total: purchases.length,
+          successful: totalSuccess,
+          failed: totalFailed,
+          totalAmountDeducted: amountDeducted,
+        },
+      });
+    } catch (error) {
+      console.error("Error processing bulk VTU purchase:", error);
+      res.status(500).json({ message: "Failed to process bulk purchase" });
     }
   });
 
@@ -12502,6 +12725,279 @@ Generate exactly ${questionCount} unique questions with varied topics.`;
     } catch (error: any) {
       console.error("Error sending test email:", error);
       res.status(500).json({ message: error.message || "Failed to send test email" });
+    }
+  });
+
+  // ==================== RESELLER API ENDPOINTS ====================
+  
+  // Get current user's reseller site
+  app.get("/api/reseller", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      res.json(site || null);
+    } catch (error) {
+      console.error("Error fetching reseller site:", error);
+      res.status(500).json({ message: "Failed to fetch reseller site" });
+    }
+  });
+
+  // Create a new reseller site
+  app.post("/api/reseller", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Validate input
+      const validatedData = createResellerSiteSchema.parse(req.body);
+
+      // Check if user already has a reseller site
+      const existingSite = await storage.getResellerSite(userId);
+      if (existingSite) {
+        return res.status(400).json({ message: "You already have a reseller site" });
+      }
+
+      // Check if subdomain is taken
+      const subdomainTaken = await storage.getResellerSiteBySubdomain(validatedData.subdomain);
+      if (subdomainTaken) {
+        return res.status(400).json({ message: "This subdomain is already taken" });
+      }
+
+      // Get tier pricing
+      const tierPrices: Record<string, number> = {
+        starter: 5000,
+        business: 15000,
+        enterprise: 50000,
+      };
+      const price = tierPrices[validatedData.tier];
+
+      // Check wallet balance
+      const wallet = await storage.getOrCreateWallet(userId);
+      if (parseFloat(wallet.balance) < price) {
+        return res.status(400).json({ 
+          message: `Insufficient balance. You need ₦${price.toLocaleString()} for the ${validatedData.tier} plan.` 
+        });
+      }
+
+      // Deduct from wallet
+      await storage.updateWalletBalance(userId, price.toString(), "subtract");
+      
+      // Create transaction record
+      await storage.createTransaction({
+        walletId: wallet.id,
+        type: "reseller_setup",
+        amount: (-price).toString(),
+        description: `Reseller ${validatedData.tier} plan setup fee`,
+        status: "completed",
+      });
+
+      // Create the reseller site
+      const site = await storage.createResellerSite({
+        userId,
+        tier: validatedData.tier,
+        siteName: validatedData.siteName,
+        subdomain: validatedData.subdomain,
+        siteDescription: validatedData.siteDescription,
+        contactEmail: validatedData.contactEmail,
+        contactPhone: validatedData.contactPhone,
+        whatsappNumber: validatedData.whatsappNumber,
+        businessName: validatedData.businessName,
+      });
+
+      res.status(201).json(site);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error creating reseller site:", error);
+      res.status(500).json({ message: error.message || "Failed to create reseller site" });
+    }
+  });
+
+  // Update reseller site settings
+  app.patch("/api/reseller", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const validatedData = updateResellerSiteSchema.parse(req.body);
+      
+      const updatedSite = await storage.updateResellerSite(site.id, validatedData);
+      res.json(updatedSite);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      console.error("Error updating reseller site:", error);
+      res.status(500).json({ message: "Failed to update reseller site" });
+    }
+  });
+
+  // Get reseller stats
+  app.get("/api/reseller/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const stats = await storage.getResellerStats(site.id);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching reseller stats:", error);
+      res.status(500).json({ message: "Failed to fetch reseller stats" });
+    }
+  });
+
+  // Get reseller transactions
+  app.get("/api/reseller/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const { limit, offset, status } = req.query;
+      const transactions = await storage.getResellerTransactions(site.id, {
+        limit: limit ? parseInt(limit as string) : undefined,
+        offset: offset ? parseInt(offset as string) : undefined,
+        status: status as string | undefined,
+      });
+      
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching reseller transactions:", error);
+      res.status(500).json({ message: "Failed to fetch reseller transactions" });
+    }
+  });
+
+  // Get reseller customers
+  app.get("/api/reseller/customers", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const customers = await storage.getResellerCustomers(site.id);
+      res.json(customers);
+    } catch (error) {
+      console.error("Error fetching reseller customers:", error);
+      res.status(500).json({ message: "Failed to fetch reseller customers" });
+    }
+  });
+
+  // Get reseller's custom pricing
+  app.get("/api/reseller/pricing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const pricing = await storage.getResellerPricing(site.id);
+      res.json(pricing);
+    } catch (error) {
+      console.error("Error fetching reseller pricing:", error);
+      res.status(500).json({ message: "Failed to fetch reseller pricing" });
+    }
+  });
+
+  // Set custom pricing for a service
+  app.post("/api/reseller/pricing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      const { serviceType, serviceId, costPrice, sellingPrice } = req.body;
+      
+      if (!serviceType || !serviceId || !costPrice || !sellingPrice) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const cost = parseFloat(costPrice);
+      const sell = parseFloat(sellingPrice);
+      
+      if (sell < cost) {
+        return res.status(400).json({ message: "Selling price cannot be less than cost price" });
+      }
+
+      const profitMargin = (((sell - cost) / cost) * 100).toFixed(2);
+
+      const pricing = await storage.setResellerPricing({
+        resellerId: site.id,
+        serviceType,
+        serviceId,
+        costPrice: cost.toFixed(2),
+        sellingPrice: sell.toFixed(2),
+        profitMargin,
+      });
+
+      res.json(pricing);
+    } catch (error) {
+      console.error("Error setting reseller pricing:", error);
+      res.status(500).json({ message: "Failed to set reseller pricing" });
+    }
+  });
+
+  // Delete custom pricing
+  app.delete("/api/reseller/pricing/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const site = await storage.getResellerSite(userId);
+      if (!site) {
+        return res.status(404).json({ message: "Reseller site not found" });
+      }
+
+      await storage.deleteResellerPricing(req.params.id);
+      res.json({ message: "Pricing deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting reseller pricing:", error);
+      res.status(500).json({ message: "Failed to delete reseller pricing" });
     }
   });
 

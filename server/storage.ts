@@ -231,6 +231,16 @@ import {
   type InsertStudyMaterial,
   type StudyMaterialPurchase,
   type StudyMaterialRating,
+  resellerSites,
+  resellerPricing,
+  resellerTransactions,
+  resellerCustomers,
+  type ResellerSite,
+  type InsertResellerSite,
+  type ResellerPricing,
+  type InsertResellerPricing,
+  type ResellerTransaction,
+  type ResellerCustomer,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
@@ -811,6 +821,23 @@ export interface IStorage {
   incrementMaterialDownloads(id: string): Promise<void>;
   rateStudyMaterial(materialId: string, userId: string, rating: number, review?: string): Promise<StudyMaterialRating>;
   getMaterialRatings(materialId: string): Promise<(StudyMaterialRating & { user: User })[]>;
+
+  // Reseller operations
+  getResellerSite(userId: string): Promise<ResellerSite | undefined>;
+  getResellerSiteById(id: string): Promise<ResellerSite | undefined>;
+  getResellerSiteBySubdomain(subdomain: string): Promise<ResellerSite | undefined>;
+  createResellerSite(data: { userId: string; tier: "starter" | "business" | "enterprise"; siteName: string; subdomain: string; siteDescription?: string; contactEmail?: string; contactPhone?: string; whatsappNumber?: string; businessName?: string; businessAddress?: string }): Promise<ResellerSite>;
+  updateResellerSite(id: string, data: Partial<ResellerSite>): Promise<ResellerSite>;
+  getResellerStats(resellerId: string): Promise<{ totalRevenue: string; totalProfit: string; totalTransactions: number; activeCustomers: number }>;
+  getResellerTransactions(resellerId: string, options?: { limit?: number; offset?: number; status?: string }): Promise<ResellerTransaction[]>;
+  createResellerTransaction(data: { resellerId: string; customerPhone?: string; customerEmail?: string; serviceType: string; serviceId?: string; amount: string; costPrice: string; resellerProfit: string; platformFee: string; status?: string; reference?: string }): Promise<ResellerTransaction>;
+  updateResellerTransaction(id: string, data: Partial<ResellerTransaction>): Promise<ResellerTransaction>;
+  getResellerCustomers(resellerId: string): Promise<ResellerCustomer[]>;
+  getOrCreateResellerCustomer(resellerId: string, phone?: string, email?: string, name?: string): Promise<ResellerCustomer>;
+  updateResellerCustomer(id: string, data: Partial<ResellerCustomer>): Promise<ResellerCustomer>;
+  getResellerPricing(resellerId: string): Promise<ResellerPricing[]>;
+  setResellerPricing(data: { resellerId: string; serviceType: string; serviceId: string; costPrice: string; sellingPrice: string; profitMargin: string }): Promise<ResellerPricing>;
+  deleteResellerPricing(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6571,6 +6598,296 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(studyMaterialRatings.createdAt));
 
     return result.map(row => ({ ...row.study_material_ratings, user: row.users }));
+  }
+
+  // ========================================
+  // Reseller Operations
+  // ========================================
+
+  async getResellerSite(userId: string): Promise<ResellerSite | undefined> {
+    const [site] = await db.select()
+      .from(resellerSites)
+      .where(eq(resellerSites.userId, userId));
+    return site;
+  }
+
+  async getResellerSiteById(id: string): Promise<ResellerSite | undefined> {
+    const [site] = await db.select()
+      .from(resellerSites)
+      .where(eq(resellerSites.id, id));
+    return site;
+  }
+
+  async getResellerSiteBySubdomain(subdomain: string): Promise<ResellerSite | undefined> {
+    const [site] = await db.select()
+      .from(resellerSites)
+      .where(eq(resellerSites.subdomain, subdomain.toLowerCase()));
+    return site;
+  }
+
+  async createResellerSite(data: { 
+    userId: string; 
+    tier: "starter" | "business" | "enterprise"; 
+    siteName: string; 
+    subdomain: string; 
+    siteDescription?: string; 
+    contactEmail?: string; 
+    contactPhone?: string; 
+    whatsappNumber?: string; 
+    businessName?: string; 
+    businessAddress?: string 
+  }): Promise<ResellerSite> {
+    const tierLimits = {
+      starter: "50000.00",
+      business: "200000.00",
+      enterprise: "999999999.00"
+    };
+
+    const [site] = await db.insert(resellerSites).values({
+      userId: data.userId,
+      tier: data.tier,
+      siteName: data.siteName,
+      subdomain: data.subdomain.toLowerCase(),
+      siteDescription: data.siteDescription,
+      contactEmail: data.contactEmail,
+      contactPhone: data.contactPhone,
+      whatsappNumber: data.whatsappNumber,
+      businessName: data.businessName,
+      businessAddress: data.businessAddress,
+      dailyTransactionLimit: tierLimits[data.tier],
+      status: "active",
+    }).returning();
+
+    return site;
+  }
+
+  async updateResellerSite(id: string, data: Partial<ResellerSite>): Promise<ResellerSite> {
+    const [site] = await db.update(resellerSites)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(resellerSites.id, id))
+      .returning();
+    return site;
+  }
+
+  async getResellerStats(resellerId: string): Promise<{ 
+    totalRevenue: string; 
+    totalProfit: string; 
+    totalTransactions: number; 
+    activeCustomers: number 
+  }> {
+    const [site] = await db.select({
+      totalRevenue: resellerSites.totalRevenue,
+      totalProfit: resellerSites.totalProfit,
+      totalTransactions: resellerSites.totalTransactions,
+    }).from(resellerSites)
+      .where(eq(resellerSites.id, resellerId));
+
+    const [customerCount] = await db.select({
+      count: sql<number>`count(*)::int`
+    }).from(resellerCustomers)
+      .where(eq(resellerCustomers.resellerId, resellerId));
+
+    return {
+      totalRevenue: site?.totalRevenue || "0.00",
+      totalProfit: site?.totalProfit || "0.00",
+      totalTransactions: site?.totalTransactions || 0,
+      activeCustomers: customerCount?.count || 0,
+    };
+  }
+
+  async getResellerTransactions(resellerId: string, options?: { 
+    limit?: number; 
+    offset?: number; 
+    status?: string 
+  }): Promise<ResellerTransaction[]> {
+    let query = db.select()
+      .from(resellerTransactions)
+      .where(eq(resellerTransactions.resellerId, resellerId))
+      .orderBy(desc(resellerTransactions.createdAt));
+
+    if (options?.limit) {
+      query = query.limit(options.limit) as any;
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset) as any;
+    }
+
+    const results = await query;
+    
+    if (options?.status) {
+      return results.filter(t => t.status === options.status);
+    }
+    
+    return results;
+  }
+
+  async createResellerTransaction(data: { 
+    resellerId: string; 
+    customerPhone?: string; 
+    customerEmail?: string; 
+    serviceType: string; 
+    serviceId?: string; 
+    amount: string; 
+    costPrice: string; 
+    resellerProfit: string; 
+    platformFee: string; 
+    status?: string; 
+    reference?: string 
+  }): Promise<ResellerTransaction> {
+    const [transaction] = await db.insert(resellerTransactions).values({
+      resellerId: data.resellerId,
+      customerPhone: data.customerPhone,
+      customerEmail: data.customerEmail,
+      serviceType: data.serviceType,
+      serviceId: data.serviceId,
+      amount: data.amount,
+      costPrice: data.costPrice,
+      resellerProfit: data.resellerProfit,
+      platformFee: data.platformFee,
+      status: data.status || "pending",
+      reference: data.reference,
+    }).returning();
+
+    // Update reseller site stats
+    await db.update(resellerSites)
+      .set({
+        totalTransactions: sql`${resellerSites.totalTransactions} + 1`,
+        totalRevenue: sql`${resellerSites.totalRevenue} + ${data.amount}::decimal`,
+        totalProfit: sql`${resellerSites.totalProfit} + ${data.resellerProfit}::decimal`,
+        updatedAt: new Date(),
+      })
+      .where(eq(resellerSites.id, data.resellerId));
+
+    return transaction;
+  }
+
+  async updateResellerTransaction(id: string, data: Partial<ResellerTransaction>): Promise<ResellerTransaction> {
+    const [transaction] = await db.update(resellerTransactions)
+      .set(data)
+      .where(eq(resellerTransactions.id, id))
+      .returning();
+    return transaction;
+  }
+
+  async getResellerCustomers(resellerId: string): Promise<ResellerCustomer[]> {
+    return await db.select()
+      .from(resellerCustomers)
+      .where(eq(resellerCustomers.resellerId, resellerId))
+      .orderBy(desc(resellerCustomers.lastTransactionAt));
+  }
+
+  async getOrCreateResellerCustomer(
+    resellerId: string, 
+    phone?: string, 
+    email?: string, 
+    name?: string
+  ): Promise<ResellerCustomer> {
+    // Try to find existing customer by phone or email
+    if (phone) {
+      const [existing] = await db.select()
+        .from(resellerCustomers)
+        .where(and(
+          eq(resellerCustomers.resellerId, resellerId),
+          eq(resellerCustomers.phone, phone)
+        ));
+      if (existing) {
+        return existing;
+      }
+    }
+    
+    if (email) {
+      const [existing] = await db.select()
+        .from(resellerCustomers)
+        .where(and(
+          eq(resellerCustomers.resellerId, resellerId),
+          eq(resellerCustomers.email, email)
+        ));
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Create new customer
+    const [customer] = await db.insert(resellerCustomers).values({
+      resellerId,
+      phone,
+      email,
+      name,
+      totalTransactions: 0,
+      totalSpent: "0.00",
+    }).returning();
+
+    return customer;
+  }
+
+  async updateResellerCustomer(id: string, data: Partial<ResellerCustomer>): Promise<ResellerCustomer> {
+    const [customer] = await db.update(resellerCustomers)
+      .set(data)
+      .where(eq(resellerCustomers.id, id))
+      .returning();
+    return customer;
+  }
+
+  async getResellerPricing(resellerId: string): Promise<ResellerPricing[]> {
+    return await db.select()
+      .from(resellerPricing)
+      .where(and(
+        eq(resellerPricing.resellerId, resellerId),
+        eq(resellerPricing.isActive, true)
+      ))
+      .orderBy(resellerPricing.serviceType, resellerPricing.serviceId);
+  }
+
+  async setResellerPricing(data: { 
+    resellerId: string; 
+    serviceType: string; 
+    serviceId: string; 
+    costPrice: string; 
+    sellingPrice: string; 
+    profitMargin: string 
+  }): Promise<ResellerPricing> {
+    // Check if pricing already exists
+    const [existing] = await db.select()
+      .from(resellerPricing)
+      .where(and(
+        eq(resellerPricing.resellerId, data.resellerId),
+        eq(resellerPricing.serviceType, data.serviceType),
+        eq(resellerPricing.serviceId, data.serviceId)
+      ));
+
+    if (existing) {
+      // Update existing
+      const [updated] = await db.update(resellerPricing)
+        .set({
+          costPrice: data.costPrice,
+          sellingPrice: data.sellingPrice,
+          profitMargin: data.profitMargin,
+          isActive: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(resellerPricing.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    // Create new
+    const [pricing] = await db.insert(resellerPricing).values({
+      resellerId: data.resellerId,
+      serviceType: data.serviceType,
+      serviceId: data.serviceId,
+      costPrice: data.costPrice,
+      sellingPrice: data.sellingPrice,
+      profitMargin: data.profitMargin,
+      isActive: true,
+    }).returning();
+
+    return pricing;
+  }
+
+  async deleteResellerPricing(id: string): Promise<void> {
+    await db.update(resellerPricing)
+      .set({ isActive: false })
+      .where(eq(resellerPricing.id, id));
   }
 }
 

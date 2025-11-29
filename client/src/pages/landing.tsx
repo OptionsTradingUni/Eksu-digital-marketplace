@@ -20,6 +20,7 @@ import {
 import { AuthModal } from "@/components/AuthModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { WelcomeOnboarding } from "@/components/WelcomeOnboarding";
 
 export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -28,6 +29,9 @@ export default function Landing() {
   const [authModalReferralCode, setAuthModalReferralCode] = useState("");
   const [showSplash, setShowSplash] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showWelcomeOnboarding, setShowWelcomeOnboarding] = useState(() => {
+    return localStorage.getItem("hasSeenWelcome") !== "true";
+  });
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -527,6 +531,18 @@ export default function Landing() {
         defaultRole={authModalDefaultRole}
         defaultReferralCode={authModalReferralCode}
       />
+
+      {showWelcomeOnboarding && (
+        <WelcomeOnboarding
+          onComplete={() => setShowWelcomeOnboarding(false)}
+          onCreateAccount={() => {
+            setShowWelcomeOnboarding(false);
+            setAuthModalTab("signup");
+            setAuthModalOpen(true);
+          }}
+          onBrowseAsGuest={() => setShowWelcomeOnboarding(false)}
+        />
+      )}
     </div>
   );
 }
