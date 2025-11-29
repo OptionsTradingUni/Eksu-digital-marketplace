@@ -1,0 +1,37 @@
+Action Required: Continuous Development
+
+Please proceed immediately with the implementation of the attached issues report. Do not stop, skip steps, or ask for credentials.
+Check and read all the issues and work on all of them 
+All required keys and configurations are already set up and accessible in the environment:
+
+Database: URL  are set.
+
+APIs: Squad Api all configured.
+
+Your goal is continuous, uninterrupted work on the provided list of features and bugs. Prioritize implementation over setup. Let me know only when a task is completed.
+
+Also VTU isn't working can't see reseller, it can't fund betting sites, I can't see api nothing 
+Please add our configurations and work more on them and work on the api to be very functional and working thanks 
+
+Merchant not eligible for this I don't understand . The dev said I've been profiled for transfer it should be working so why is withdrawal like that 
+
+Work on this error too
+
+Error Report
+Error Report: Frontend Error Report
+
+An error occurred in the EksuMarketPlace application
+Error Message
+
+URL: https://eksu-digital-marketplace.onrender.com/profile Error: 'text/html' is not a valid JavaScript MIME type. Stack: undefined
+Timestamp
+
+2025-11-29T15:23:55.944Z
+Technical Details
+
+{
+  "componentStack": "\nLazy\nq@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:324:61772\ncomponent\nte@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:49:3290\nDg@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:49:4136\nSuspense\nmain\nH3@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:380:11434\nTooltipProviderProvider@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:49:45699\nTooltipProvider@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:324:50971\nTM@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:324:59328\nER@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:49:40239\nq@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:324:61772\nK3@https://eksu-digital-marketplace.onrender.com/assets/index-B1n9gvKu.js:380:15138
+",
+  "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+  "timestamp": "2025-11-29T15:23:55.447Z"
+}
