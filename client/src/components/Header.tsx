@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, Sun, Moon, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle, Share2, Briefcase, UserCog } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle, Share2, Briefcase, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NotificationBell from "@/components/NotificationBell";
@@ -21,19 +21,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
-import { useTheme, type Theme } from "@/contexts/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Header() {
   const { user, isAuthenticated, isSeller, isAdmin } = useAuth();
   const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const { theme, setTheme } = useTheme();
-
-  const isDarkMode = theme !== "light" && theme !== "sepia";
-  
-  const toggleTheme = () => {
-    setTheme(isDarkMode ? "light" : "dim");
-  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,19 +71,8 @@ export function Header() {
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <>
-                {/* Theme Toggle in Header */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleTheme}
-                  data-testid="button-theme-toggle-header"
-                >
-                  {isDarkMode ? (
-                    <Sun className="h-5 w-5" />
-                  ) : (
-                    <Moon className="h-5 w-5" />
-                  )}
-                </Button>
+                {/* Theme Toggle in Header - Shows all 8 themes */}
+                <ThemeToggle />
 
                 {/* Cart */}
                 <CartDrawer />
@@ -256,7 +238,7 @@ export function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/support" data-testid="link-support">
                         <HelpCircle className="mr-2 h-4 w-4" />
-                        Help & Support
+                        Help (Use Chatbot or Support)
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -281,25 +263,6 @@ export function Header() {
                     
                     <DropdownMenuSeparator />
                     
-                    {/* Theme Toggle */}
-                    <DropdownMenuItem
-                      onClick={toggleTheme}
-                      className="cursor-pointer"
-                      data-testid="button-theme-toggle"
-                    >
-                      {isDarkMode ? (
-                        <>
-                          <Sun className="mr-2 h-4 w-4" />
-                          Light Mode
-                        </>
-                      ) : (
-                        <>
-                          <Moon className="mr-2 h-4 w-4" />
-                          Dark Mode
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                    
                     {/* Logout */}
                     <DropdownMenuItem 
                       onClick={async () => {
@@ -322,18 +285,8 @@ export function Header() {
               </>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleTheme}
-                  data-testid="button-theme-toggle-guest"
-                >
-                  {isDarkMode ? (
-                    <Sun className="h-5 w-5" />
-                  ) : (
-                    <Moon className="h-5 w-5" />
-                  )}
-                </Button>
+                {/* Theme Toggle for guests - Shows all 8 themes */}
+                <ThemeToggle />
                 <Button variant="ghost" asChild data-testid="button-login">
                   <a href="/api/login">Log In</a>
                 </Button>
