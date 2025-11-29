@@ -1,0 +1,151 @@
+=> ///////////////////////////////////////////////////////////
+3:18:18 PM [express] GET /api/wallet/transactions 304 in 2196ms :: [{"id":"578f5a9d-7751-48ff-860c-f…
+WebSocket authenticated for user: e461e9f4-6a83-413f-a2e9-ab346d268f44 (connection added)
+User e461e9f4-6a83-413f-a2e9-ab346d268f44 is now online - status broadcast sent
+[Payment d6e7aa31] Initializing Squad payment for user e461e9f4-6a83-413f-a2e9-ab346d268f44, amount: ₦5000
+[Squad API] [e707527d] POST https://sandbox-api-d.squadco.com/transaction/initiate
+[Squad API] [e707527d] Status: 200, Success: true
+[Payment d6e7aa31] Squad payment initialized successfully: EKSU_MIKFRSEM_3F6785A0
+3:18:27 PM [express] POST /api/squad/initialize 200 in 1272ms :: {"checkoutUrl":"https://sandbox-pay…
+WebSocket disconnected for user: e461e9f4-6a83-413f-a2e9-ab346d268f44 (connection removed)
+User e461e9f4-6a83-413f-a2e9-ab346d268f44 is now offline - status broadcast sent
+[Payment 3e757e1f] Initializing Squad payment for user e461e9f4-6a83-413f-a2e9-ab346d268f44, amount: ₦5000
+[Squad API] [7729b3fc] POST https://sandbox-api-d.squadco.com/transaction/initiate
+[Squad API] [7729b3fc] Status: 200, Success: true
+[Payment 3e757e1f] Squad payment initialized successfully: EKSU_MIKFS7I9_58BD0721
+3:18:47 PM [express] POST /api/squad/initialize 200 in 3029ms :: {"checkoutUrl":"https://sandbox-pay…
+3:18:48 PM [express] GET /api/auth/ws-token 200 in 436ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ik…
+3:19:18 PM [express] GET /api/auth/user 304 in 1894ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9…
+3:19:19 PM [express] GET /api/cart 304 in 575ms :: []
+3:19:19 PM [express] GET /api/notifications 304 in 581ms :: [{"id":"2960df33-7966-451f-b346-e2a50fc6…
+3:19:21 PM [express] GET /api/users/94598e96-f982-4e67-94ca-520b1dc732d9/follow-stats 304 in 1916ms …
+3:19:18 PM [express] GET /api/auth/user 304 in 1894ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9…
+3:19:19 PM [express] GET /api/cart 304 in 575ms :: []
+3:19:19 PM [express] GET /api/notifications 304 in 581ms :: [{"id":"2960df33-7966-451f-b346-e2a50fc6…
+3:19:21 PM [express] GET /api/users/94598e96-f982-4e67-94ca-520b1dc732d9/follow-stats 304 in 1916ms …
+3:19:51 PM [express] GET /api/auth/user 304 in 578ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9"…
+3:19:53 PM [express] GET /api/auth/ws-token 200 in 1476ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6I…
+3:19:53 PM [express] GET /api/notifications 304 in 1704ms :: [{"id":"2960df33-7966-451f-b346-e2a50fc…
+3:19:53 PM [express] GET /api/messages/unread-count 200 in 1684ms :: {"count":0}
+3:19:53 PM [express] GET /api/cart 304 in 1712ms :: []
+3:19:55 PM [express] GET /api/users/94598e96-f982-4e67-94ca-520b1dc732d9/follow-stats 304 in 583ms :…
+3:19:55 PM [express] GET /api/users/94598e96-f982-4e67-94ca-520b1dc732d9/pinned-posts 304 in 576ms :…
+3:19:55 PM [express] GET /api/stories/user/94598e96-f982-4e67-94ca-520b1dc732d9 304 in 585ms :: []
+WebSocket authenticated for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection added)
+User 94598e96-f982-4e67-94ca-520b1dc732d9 is now online - status broadcast sent
+3:19:55 PM [express] GET /api/social-posts 304 in 1006ms :: []
+3:20:15 PM [express] GET /api/wallet 200 in 577ms :: {"id":"20f2915a-4cb6-41e6-8fed-a61ca4f5fac3","u…
+3:20:15 PM [express] GET /api/squad/banks 200 in 687ms :: [{"name":"Access Bank","code":"000014"},{"…
+3:20:15 PM [express] GET /api/wallet/transactions 200 in 729ms :: [{"id":"22fcdc17-f2e7-4534-99df-36…
+[Payment a9d44ab9] Initializing Squad payment for user 94598e96-f982-4e67-94ca-520b1dc732d9, amount: ₦1000
+[Squad API] [b8ce9cd5] POST https://sandbox-api-d.squadco.com/transaction/initiate
+[Squad API] [b8ce9cd5] Status: 200, Success: true
+[Payment a9d44ab9] Squad payment initialized successfully: EKSU_MIKFU6F6_36DE4073
+3:20:18 PM [express] POST /api/squad/initialize 200 in 1115ms :: {"checkoutUrl":"https://sandbox-pay…
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+User 94598e96-f982-4e67-94ca-520b1dc732d9 is now offline - status broadcast sent
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+3:25:49 PM [express] GET /api/rewards 500 in 585ms :: {"message":"Failed to fetch rewards"}
+3:25:49 PM [express] GET /api/rewards/transactions 500 in 582ms :: {"message":"Failed to fetch rewar…
+3:25:49 PM [express] GET /api/auth/user 304 in 576ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9"…
+Error fetching reward transactions: error: relation "reward_transactions" does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getRewardTransactions (file:///opt/render/project/src/dist/index.js:5726:16)
+    at async file:///opt/render/project/src/dist/index.js:13677:29 {
+  length: 119,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '124',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+Error fetching rewards: error: column "lifetime_earned" does not exist
+    at file:///opt/render/project/src/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///opt/render/project/src/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DatabaseStorage.getOrCreateRewardPoints (file:///opt/render/project/src/dist/index.js:5674:28)
+    at async file:///opt/render/project/src/dist/index.js:13630:23 {
+  length: 115,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '41',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3722',
+  routine: 'errorMissingColumn'
+}
+3:25:51 PM [express] GET /api/rewards/transactions 500 in 580ms :: {"message":"Failed to fetch rewar…
+3:25:52 PM [express] GET /api/rewards 500 in 583ms :: {"message":"Failed to fetch rewards"}
+3:26:14 PM [express] GET /api/notifications 304 in 1434ms :: [{"id":"2960df33-7966-451f-b346-e2a50fc…
+3:26:15 PM [express] GET /api/messages/unread-count 304 in 1439ms :: {"count":0}
+3:26:16 PM [express] GET /api/wallet 304 in 576ms :: {"id":"20f2915a-4cb6-41e6-8fed-a61ca4f5fac3","u…
+3:26:40 PM [express] GET /api/users/online-status 304 in 435ms :: {"onlineUserIds":["94598e96-f982-4…
+3:26:40 PM [express] GET /api/auth/ws-token 200 in 441ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ik…
+3:26:40 PM [express] GET /api/conversations/archived 304 in 576ms :: [{"id":"35864535-e9ac-4ab9-a5f6…
+3:26:40 PM [express] GET /api/auth/user 304 in 582ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9"…
+3:26:41 PM [express] GET /api/messages/threads 304 in 1013ms :: [{"user":{"id":"2bebadee-f30f-43c5-b…
+WebSocket authenticated for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection added)
+3:26:45 PM [express] GET /api/notifications 304 in 581ms :: [{"id":"2960df33-7966-451f-b346-e2a50fc6…
+3:26:46 PM [express] GET /api/messages/unread-count 304 in 580ms :: {"count":0}
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+3:26:50 PM [express] GET /api/wallet 304 in 582ms :: {"id":"20f2915a-4cb6-41e6-8fed-a61ca4f5fac3","u…
+3:26:50 PM [express] GET /api/wallet/transactions 304 in 726ms :: [{"id":"22fcdc17-f2e7-4534-99df-36…
+3:26:50 PM [express] GET /api/squad/banks 304 in 1265ms :: [{"name":"Access Bank","code":"000014"},{…
+[Payment 9817737b] Initializing Squad payment for user 94598e96-f982-4e67-94ca-520b1dc732d9, amount: ₦2000
+[Squad API] [941a5cb2] POST https://sandbox-api-d.squadco.com/transaction/initiate
+[Squad API] [941a5cb2] Status: 200, Success: true
+[Payment 9817737b] Squad payment initialized successfully: EKSU_MIKG2ME9_2C437339
+3:26:52 PM [express] POST /api/squad/initialize 200 in 1170ms :: {"checkoutUrl":"https://sandbox-pay…
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+User 94598e96-f982-4e67-94ca-520b1dc732d9 is now offline - status broadcast sent
+[Payment c0b0ee35] Initializing Squad payment for user 94598e96-f982-4e67-94ca-520b1dc732d9, amount: ₦2000
+[Squad API] [604fc0f2] POST https://sandbox-api-d.squadco.com/transaction/initiate
+[Squad API] [604fc0f2] Status: 200, Success: true
+[Payment c0b0ee35] Squad payment initialized successfully: EKSU_MIKG31VD_070E149F
+3:27:12 PM [express] POST /api/squad/initialize 200 in 2295ms :: {"checkoutUrl":"https://sandbox-pay…
+3:28:24 PM [express] GET /api/users/online-status 200 in 1727ms :: {"onlineUserIds":[]}
+3:28:24 PM [express] GET /api/auth/ws-token 200 in 1753ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6I…
+3:28:24 PM [express] GET /api/auth/ws-token 200 in 1751ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6I…
+3:28:24 PM [express] GET /api/auth/user 304 in 1882ms :: {"id":"94598e96-f982-4e67-94ca-520b1dc732d9…
+3:28:24 PM [express] GET /api/auth/ws-token 200 in 1758ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6I…
+3:28:24 PM [express] GET /api/conversations/archived 304 in 1885ms :: [{"id":"35864535-e9ac-4ab9-a5f…
+3:28:24 PM [express] GET /api/messages/threads 304 in 2336ms :: [{"user":{"id":"2bebadee-f30f-43c5-b…
+WebSocket authenticated for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection added)
+User 94598e96-f982-4e67-94ca-520b1dc732d9 is now online - status broadcast sent
+WebSocket authenticated for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection added)
+WebSocket authenticated for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection added)
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+WebSocket disconnected for user: 94598e96-f982-4e67-94ca-520b1dc732d9 (connection removed)
+User 94598e96-f982-4e67-94ca-520b1dc732d9 is now offline - status broadcast sent
+Need
