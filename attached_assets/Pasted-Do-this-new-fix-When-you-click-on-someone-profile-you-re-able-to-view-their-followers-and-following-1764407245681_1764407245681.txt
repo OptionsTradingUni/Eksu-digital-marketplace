@@ -1,0 +1,85 @@
+Do this new fix 
+When you click on someone profile you’re able to view their followers and following 
+
+Campus plug or official account doesn’t show followers and following only to the admin 
+
+Use the favicon as pic for the official account 
+
+Change the name Campus to Eksu Market Plug
+
+Change need help to message the chatbot you can find it so so so or use the help or support button  in app 
+
+Be able to copy messages 
+Let messages be able to be deleted like WhatsApp 
+
+When there’s a new message or anything let it show in notifications 
+
+Also there should be like if I get a message it should show in my messages icon just like notification that 1 message received or looks like how cart icon looos like when there’s shopping 
+
+When there’s an order messages get sent to email or when a seller or buyer reply they get notifications too 
+
+Add pin feature for chats 
+Since archive is in right put mark as read and pin in left 
+
+Also let message box in the plug be like twitter 
+It covers the whole page so keyboards won’t be dropping 
+Also add media icon maybe at the top or just like this 
+I only want the LAYOUT to become exactly like X/Twitter:
+1.  Compose screen layout
+	•  Top bar: Cancel (left) → Drafts (middle-right) → Post button (right)
+	•  Avatar on the left, text area on the right
+	•  Bottom line: globe icon + “Everyone can reply”
+	•  Bottom icons row exactly like X (Media, GIF, Poll, Emoji, Location) + character counter + small + circle
+2.  Add floating + button (bottom-right corner) that opens the compose screen
+3.  Drafts feature
+	•  When user clicks Cancel → auto-save the text as draft
+	•  When compose opens again → load the draft automatically
+	•  Show a small dot on the “Drafts” text when there is a saved draft
+4.  Feed posts layout
+	•  Each post must be a card with border-bottom only (same spacing as X)
+	•  Avatar left, content right, exactly like X cards
+Only change the layout and structure.
+Just make the positions and arrangement identical to X.
+Do it now, thanks!
+
+Bro, fix this now:
+
+1. Theme selection problem  
+   - On the SIGN-UP / LANDING PAGE → keep ALL theme options visible (Light, Dim, Lights Out, Sunset, Ocean, Forest, etc.)  
+   - After user LOGS IN → ONLY show the theme picker at the TOP navigation bar (like it is now)  
+   - REMOVE “Dark Mode” and “Light” completely from the profile dropdown menu (the one that appears when I click my avatar)  
+   → The profile menu should NEVER have any theme options again.
+
+2. When user is logged in:  
+   - The ONLY place to change theme must be the theme button at the top bar (the little moon/sun icon)  
+   - That top theme picker should still have ALL themes (Light, Dim, Lights Out, Sunset, Ocean, Forest, etc.) — do not remove any  
+   - But inside the profile sidebar/dropdown → delete “Dark Mode” and any theme switches completely.
+
+Summary:  
+Landing page = show all themes  
+After login = theme change ONLY from top bar, NEVER from profile menu again.
+
+Remove theme options from profile menu now. Thanks!
+
+Also when I sign up, there’s no icon to input the email code it’s just saying resend etc 
+Verification link is working, but I need an option where I can input code instead 
+
+Also make sure registered emails can’t be registered again 
+Bro, fix this now:
+
+1. Theme selection problem  
+   - On the SIGN-UP / LANDING PAGE → keep ALL theme options visible (Light, Dim, Lights Out, Sunset, Ocean, Forest, etc.)  
+   - After user LOGS IN → ONLY show the theme picker at the TOP navigation bar (like it is now)  
+   - REMOVE “Dark Mode” and “Light” completely from the profile dropdown menu (the one that appears when I click my avatar)  
+   → The profile menu should NEVER have any theme options again.
+
+2. When user is logged in:  
+   - The ONLY place to change theme must be the theme button at the top bar (the little moon/sun icon)  
+   - That top theme picker should still have ALL themes (Light, Dim, Lights Out, Sunset, Ocean, Forest, etc.) — do not remove any  
+   - But inside the profile sidebar/dropdown → delete “Dark Mode” and any theme switches completely.
+
+Summary:  
+Landing page = show all themes  
+After login = theme change ONLY from top bar, NEVER from profile menu again.
+
+Remove theme options from profile menu now. Thanks!
