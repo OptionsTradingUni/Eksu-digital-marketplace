@@ -68,7 +68,9 @@ import {
   sendNewFollowerEmail,
   sendNewPostFromFollowingEmail,
   sendNewProductFromFollowingEmail,
-  sendTestEmail
+  sendTestEmail,
+  sendNewTicketNotificationToAdmin,
+  sendTicketReplyNotification
 } from "./email-service";
 
 // Module-level WebSocket connections map for broadcasting notifications
@@ -2372,6 +2374,25 @@ Happy trading!`;
       const userId = req.user.id;
       const validated = createSupportTicketSchema.parse({ ...req.body, userId });
       const ticket = await storage.createSupportTicketWithNumber(validated);
+      
+      // Send email notification to admin
+      try {
+        const user = await storage.getUser(userId);
+        await sendNewTicketNotificationToAdmin({
+          id: ticket.id,
+          ticketNumber: ticket.ticketNumber || undefined,
+          subject: ticket.subject,
+          description: ticket.message,
+          priority: ticket.priority || 'medium',
+          category: ticket.category || 'general',
+          userName: user ? `${user.firstName} ${user.lastName}` : undefined,
+          userEmail: user?.email || undefined,
+        });
+      } catch (emailError) {
+        console.error("Failed to send ticket notification email:", emailError);
+        // Don't fail the request if email fails
+      }
+      
       res.json(ticket);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2451,6 +2472,39 @@ Happy trading!`;
       // If admin replied, update ticket status to in_progress
       if (isAdmin) {
         await storage.updateSupportTicket(ticketId, { status: 'in_progress' });
+      }
+      
+      // Send email notification for the reply
+      try {
+        if (isAdmin) {
+          // Admin replied - notify the ticket owner
+          const ticketOwner = await storage.getUser(ticket.userId);
+          if (ticketOwner?.email) {
+            await sendTicketReplyNotification(ticketOwner.email, {
+              ticketId: ticket.id,
+              ticketNumber: ticket.ticketNumber || undefined,
+              ticketSubject: ticket.subject,
+              replyMessage: message.trim(),
+              replierName: `${user.firstName} ${user.lastName}`,
+              isAdminReply: true,
+            });
+          }
+        } else {
+          // User replied - notify admin about new activity
+          await sendNewTicketNotificationToAdmin({
+            id: ticket.id,
+            ticketNumber: ticket.ticketNumber || undefined,
+            subject: `Reply: ${ticket.subject}`,
+            description: message.trim(),
+            priority: ticket.priority || 'medium',
+            category: ticket.category || 'general',
+            userName: `${user.firstName} ${user.lastName}`,
+            userEmail: user.email || undefined,
+          });
+        }
+      } catch (emailError) {
+        console.error("Failed to send reply notification email:", emailError);
+        // Don't fail the request if email fails
       }
       
       // Return reply with user info

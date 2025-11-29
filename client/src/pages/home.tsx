@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, SlidersHorizontal, X, MapPin, Wallet, Search, Tag } from "lucide-react";
+import { Plus, SlidersHorizontal, X, MapPin, Wallet, Search, Tag, Building2, BookOpen, Smartphone, Gamepad2, MessageCircle, Compass } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Product, Category, SponsoredAd } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -327,9 +327,40 @@ export default function Home() {
     return price >= priceRange[0] && price <= priceRange[1];
   });
 
+  const quickServices = [
+    { icon: <Building2 className="h-6 w-6" />, label: "Hostel Finder", href: "/hostels", color: "text-blue-500", bgColor: "bg-blue-500/10" },
+    { icon: <BookOpen className="h-6 w-6" />, label: "Study Materials", href: "/study-materials", color: "text-green-500", bgColor: "bg-green-500/10" },
+    { icon: <Smartphone className="h-6 w-6" />, label: "VTU Data", href: "/vtu", color: "text-purple-500", bgColor: "bg-purple-500/10" },
+    { icon: <Gamepad2 className="h-6 w-6" />, label: "Games", href: "/games", color: "text-orange-500", bgColor: "bg-orange-500/10" },
+    { icon: <MessageCircle className="h-6 w-6" />, label: "Secret Messages", href: "/secret-messages", color: "text-pink-500", bgColor: "bg-pink-500/10" },
+    { icon: <Compass className="h-6 w-6" />, label: "Explore All", href: "/explore", color: "text-cyan-500", bgColor: "bg-cyan-500/10" },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
+        {/* Quick Services Section */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Quick Services</h2>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {quickServices.map((service) => (
+              <Link key={service.href} href={service.href}>
+                <Card 
+                  className="hover-elevate cursor-pointer transition-all"
+                  data-testid={`card-quick-${service.label.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <CardContent className="flex flex-col items-center justify-center p-4 gap-2">
+                    <div className={`p-3 rounded-full ${service.bgColor}`}>
+                      <div className={service.color}>{service.icon}</div>
+                    </div>
+                    <span className="text-xs text-center font-medium">{service.label}</span>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-col gap-6 lg:flex-row">
           <aside className="hidden lg:block w-64 flex-shrink-0">
             <div className="sticky top-24 z-40 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) transparent' }}>

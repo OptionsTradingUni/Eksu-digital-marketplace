@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle, Share2, Briefcase, UserCog } from "lucide-react";
+import { ShoppingBag, MessageSquare, User, Search, Wallet, Users, Megaphone, Settings, LogOut, Bell, Smartphone, HelpCircle, Shield, FileText, Heart, Bookmark, UsersRound, MessageCircle, Share2, Briefcase, UserCog, Home, BookOpen, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NotificationBell from "@/components/NotificationBell";
@@ -211,6 +211,18 @@ export function Header() {
                       <DropdownMenuPortal>
                         <DropdownMenuSubContent>
                           <DropdownMenuItem asChild>
+                            <Link href="/hostels" data-testid="link-hostels">
+                              <Home className="mr-2 h-4 w-4" />
+                              Hostel Finder
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/study-materials" data-testid="link-study-materials">
+                              <BookOpen className="mr-2 h-4 w-4" />
+                              Study Materials
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
                             <Link href="/vtu" data-testid="link-vtu-data">
                               <Smartphone className="mr-2 h-4 w-4" />
                               VTU Data
@@ -220,6 +232,12 @@ export function Header() {
                             <Link href="/referrals" data-testid="link-referrals">
                               <Users className="mr-2 h-4 w-4" />
                               Referrals
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href="/explore" data-testid="link-explore">
+                              <Compass className="mr-2 h-4 w-4" />
+                              Explore All
                             </Link>
                           </DropdownMenuItem>
                         </DropdownMenuSubContent>

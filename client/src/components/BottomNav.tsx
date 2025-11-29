@@ -1,10 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { Home, Zap, MessageSquare, Gamepad2, User } from "lucide-react";
+import { Home, Zap, MessageSquare, User, MoreHorizontal, BookOpen, Building2, Smartphone, Gamepad2, Compass, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useState } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -45,8 +47,9 @@ function NavItem({ icon, label, href, isActive, testId, badgeCount }: NavItemPro
 }
 
 export function BottomNav() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ["/api/messages/unread-count"],
@@ -62,6 +65,17 @@ export function BottomNav() {
     }
     return location.startsWith(path);
   };
+
+  const moreMenuItems = [
+    { icon: <Building2 className="h-5 w-5" />, label: "Hostel Finder", href: "/hostels", testId: "button-nav-hostels" },
+    { icon: <BookOpen className="h-5 w-5" />, label: "Study Materials", href: "/study-materials", testId: "button-nav-study" },
+    { icon: <Smartphone className="h-5 w-5" />, label: "VTU Data", href: "/vtu", testId: "button-nav-vtu" },
+    { icon: <Gamepad2 className="h-5 w-5" />, label: "Games", href: "/games", testId: "button-nav-games" },
+    { icon: <MessageCircle className="h-5 w-5" />, label: "Secret Messages", href: "/secret-messages", testId: "button-nav-secret" },
+    { icon: <Compass className="h-5 w-5" />, label: "Explore All", href: "/explore", testId: "button-nav-explore" },
+  ];
+
+  const isMoreActive = moreMenuItems.some(item => isActive(item.href));
 
   return (
     <nav
@@ -94,13 +108,46 @@ export function BottomNav() {
           badgeCount={unreadCount}
         />
 
-        <NavItem
-          icon={<Gamepad2 className="h-5 w-5" />}
-          label="Games"
-          href="/games"
-          isActive={isActive("/games")}
-          testId="button-nav-games"
-        />
+        <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              className={cn(
+                "flex flex-col items-center justify-center h-full w-full gap-0.5 rounded-none",
+                isMoreActive && "text-primary"
+              )}
+              data-testid="button-nav-more"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+              <span className="text-xs">More</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-auto max-h-[60vh] rounded-t-xl">
+            <SheetHeader>
+              <SheetTitle>Services & Features</SheetTitle>
+            </SheetHeader>
+            <div className="grid grid-cols-3 gap-4 py-6">
+              {moreMenuItems.map((item) => (
+                <Button
+                  key={item.href}
+                  variant="ghost"
+                  className={cn(
+                    "flex flex-col items-center justify-center h-20 gap-2",
+                    isActive(item.href) && "bg-primary/10 text-primary"
+                  )}
+                  onClick={() => {
+                    setLocation(item.href);
+                    setMoreOpen(false);
+                  }}
+                  data-testid={item.testId}
+                >
+                  {item.icon}
+                  <span className="text-xs text-center">{item.label}</span>
+                </Button>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
 
         <NavItem
           icon={<User className="h-5 w-5" />}

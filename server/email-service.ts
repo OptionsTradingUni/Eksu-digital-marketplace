@@ -594,3 +594,133 @@ export async function sendTestEmail(to: string): Promise<EmailResult> {
   `;
   return sendEmail(to, `Test Email from ${APP_NAME}`, getBaseTemplate('Test Email', content));
 }
+
+export async function sendNewTicketNotificationToAdmin(ticket: {
+  id: string;
+  ticketNumber?: string;
+  subject: string;
+  description: string;
+  priority: string;
+  category: string;
+  userName?: string;
+  userEmail?: string;
+}): Promise<EmailResult> {
+  const priorityColors: Record<string, string> = {
+    urgent: '#dc2626',
+    high: '#f97316',
+    medium: '#eab308',
+    low: '#22c55e',
+  };
+  
+  const priorityColor = priorityColors[ticket.priority] || '#6b7280';
+  const truncatedDescription = ticket.description.length > 300 
+    ? ticket.description.substring(0, 300) + '...' 
+    : ticket.description;
+  
+  const content = `
+    <div style="background: #fef3c7; border: 2px solid #f59e0b; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+      <h2 style="color: #92400e; margin: 0 0 10px 0; font-size: 20px;">New Support Ticket</h2>
+      <p style="color: #78350f; margin: 0;">A new support ticket has been submitted and requires attention.</p>
+    </div>
+    
+    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <div style="margin-bottom: 15px;">
+        <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Ticket #</p>
+        <p style="margin: 5px 0 0 0; font-weight: bold; color: #111;">${ticket.ticketNumber || ticket.id.substring(0, 8)}</p>
+      </div>
+      
+      <div style="margin-bottom: 15px;">
+        <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Subject</p>
+        <p style="margin: 5px 0 0 0; font-weight: bold; color: #111;">${ticket.subject}</p>
+      </div>
+      
+      <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+        <div>
+          <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Priority</p>
+          <span style="display: inline-block; background: ${priorityColor}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; margin-top: 5px; text-transform: capitalize;">${ticket.priority}</span>
+        </div>
+        <div>
+          <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Category</p>
+          <span style="display: inline-block; background: #e5e7eb; color: #374151; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; margin-top: 5px; text-transform: capitalize;">${ticket.category}</span>
+        </div>
+      </div>
+      
+      ${ticket.userName ? `
+      <div style="margin-bottom: 15px;">
+        <p style="margin: 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Submitted By</p>
+        <p style="margin: 5px 0 0 0; color: #111;">${ticket.userName} ${ticket.userEmail ? `(${ticket.userEmail})` : ''}</p>
+      </div>
+      ` : ''}
+    </div>
+    
+    <div style="margin: 20px 0;">
+      <h3 style="color: #374151; margin: 0 0 10px 0;">Description</h3>
+      <div style="background: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <p style="margin: 0; color: #374151; white-space: pre-wrap;">${truncatedDescription}</p>
+      </div>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/admin" style="display: inline-block; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">View in Admin Panel</a>
+    </div>
+    
+    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 25px;">
+      <p style="margin: 0; font-size: 13px; color: #6b7280;">
+        This is an automated notification from the ${APP_NAME} support system.
+      </p>
+    </div>
+  `;
+  
+  console.log(`[Email] Sending new ticket notification to admin for ticket: ${ticket.ticketNumber || ticket.id}`);
+  return sendEmail(ADMIN_EMAIL, `[Support Ticket] ${ticket.priority.toUpperCase()}: ${ticket.subject}`, getBaseTemplate('New Support Ticket', content));
+}
+
+export async function sendTicketReplyNotification(
+  recipientEmail: string,
+  details: {
+    ticketId: string;
+    ticketNumber?: string;
+    ticketSubject: string;
+    replyMessage: string;
+    replierName: string;
+    isAdminReply: boolean;
+  }
+): Promise<EmailResult> {
+  const truncatedReply = details.replyMessage.length > 500 
+    ? details.replyMessage.substring(0, 500) + '...' 
+    : details.replyMessage;
+  
+  const replySource = details.isAdminReply ? 'Support Team' : details.replierName;
+  
+  const content = `
+    <p style="font-size: 16px; margin-top: 0;">
+      <strong>${replySource}</strong> has replied to your support ticket.
+    </p>
+    
+    <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #16a34a;">
+      <p style="margin: 0; font-size: 13px; color: #166534;">
+        <strong>Ticket #${details.ticketNumber || details.ticketId.substring(0, 8)}:</strong> ${details.ticketSubject}
+      </p>
+    </div>
+    
+    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 0 0 10px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Reply Message</p>
+      <p style="margin: 0; color: #374151; white-space: pre-wrap;">${truncatedReply}</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${APP_URL}/support" style="display: inline-block; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">View Full Conversation</a>
+    </div>
+    
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      Reply to this ticket directly on ${APP_NAME} to continue the conversation.
+    </p>
+  `;
+  
+  const subject = details.isAdminReply 
+    ? `[Support Reply] Re: ${details.ticketSubject}` 
+    : `New reply on ticket: ${details.ticketSubject}`;
+  
+  console.log(`[Email] Sending ticket reply notification to ${recipientEmail} for ticket: ${details.ticketNumber || details.ticketId}`);
+  return sendEmail(recipientEmail, subject, getBaseTemplate('Support Ticket Reply', content));
+}
