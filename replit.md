@@ -74,6 +74,15 @@ The marketplace employs a modern full-stack architecture focused on performance,
   - Rewards/cashback points system (10 pts per ₦1,000 spent, tier-based multipliers)
   - Savings calculator showing ROI and discounts vs market prices
   - Beneficiary management for quick recharge
+  - **API Access for Resellers:** Animated "hacker-style" terminal interface for generating API credentials with:
+    - Black terminal background with green/cyan text typing animations
+    - Security warnings and confirmation steps
+    - Public API Key, Secret Key, and Webhook Secret generation
+    - Admin-free access (no payment required for admins)
+    - One-time ₦5,000 fee for non-admin users
+    - API documentation with endpoint reference (data/airtime purchase, balance, transactions)
+    - Rate limiting (100 requests/minute, 10,000/day)
+    - Credential revocation and regeneration functionality
 - **PWA Support:** Service worker for offline caching and install prompt.
 - **Support Ticket System:** Threaded conversations with status tracking.
 - **Social Features:** "The Plug" feed for posts (X-style), confessions page with voting, and a "Secret Messages Hub" for anonymous communication.
