@@ -1359,7 +1359,7 @@ export default function VtuPage() {
                       <span>Showing {filteredPlans.length} of {plans?.length || 0} plans</span>
                       {filteredPlans.length === 0 && (
                         <Button
-                          variant="link"
+                          variant="ghost"
                           size="sm"
                           onClick={clearAllFilters}
                           className="h-auto p-0 text-primary"
@@ -1616,7 +1616,7 @@ export default function VtuPage() {
                             <SelectContent>
                               {schedulePlans?.map(plan => (
                                 <SelectItem key={plan.id} value={plan.id}>
-                                  {plan.dataAmount} - {plan.validity} (₦{plan.discountedPrice.toLocaleString()})
+                                  {plan.dataAmount} - {plan.validity} (₦{plan.sellingPrice.toLocaleString()})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1870,7 +1870,7 @@ export default function VtuPage() {
                           <SelectContent>
                             {giftPlans?.map(plan => (
                               <SelectItem key={plan.id} value={plan.id}>
-                                {plan.dataAmount} - {plan.validity} (₦{plan.discountedPrice.toLocaleString()})
+                                {plan.dataAmount} - {plan.validity} (₦{plan.sellingPrice.toLocaleString()})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1896,7 +1896,7 @@ export default function VtuPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Cost:</span>
-                            <span className="font-bold text-primary">₦{selectedGiftPlan.discountedPrice.toLocaleString()}</span>
+                            <span className="font-bold text-primary">₦{selectedGiftPlan.sellingPrice.toLocaleString()}</span>
                           </div>
                         </div>
                       )}
@@ -2520,7 +2520,7 @@ export default function VtuPage() {
                 ) : (
                   <>
                     Purchase Data
-                    {selectedPlan && ` - ₦${selectedPlan.discountedPrice.toLocaleString()}`}
+                    {selectedPlan && ` - ₦${selectedPlan.sellingPrice.toLocaleString()}`}
                   </>
                 )}
               </Button>
