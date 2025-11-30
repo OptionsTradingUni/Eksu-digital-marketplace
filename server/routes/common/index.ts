@@ -298,3 +298,16 @@ export function requireAdmin(req: any, res: any, next: any) {
     return res.status(500).json({ message: "Unable to verify admin status" });
   });
 }
+
+// ============================================
+// System Account Helpers
+// ============================================
+
+export function isSystemAccount(userId: string): boolean {
+  const systemUserId = process.env.SYSTEM_USER_ID;
+  return systemUserId ? userId === systemUserId : false;
+}
+
+export function getWsConnections(): Map<string, Set<WebSocket>> {
+  return wsConnections;
+}
