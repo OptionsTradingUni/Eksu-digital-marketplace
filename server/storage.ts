@@ -247,7 +247,7 @@ import {
   rewardTransactions,
   type RewardPoints,
   type RewardTransaction,
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
 
@@ -2635,7 +2635,7 @@ export class DatabaseStorage implements IStorage {
 
   async getUserNotifications(userId: string): Promise<any[]> {
     try {
-      const { notifications } = await import("@shared/schema");
+      const { notifications } = await import("../shared/schema");
       return await db
         .select()
         .from(notifications)
@@ -2649,7 +2649,7 @@ export class DatabaseStorage implements IStorage {
 
   async markNotificationAsRead(id: string, userId: string): Promise<void> {
     try {
-      const { notifications } = await import("@shared/schema");
+      const { notifications } = await import("../shared/schema");
       await db
         .update(notifications)
         .set({ isRead: true })
@@ -2661,7 +2661,7 @@ export class DatabaseStorage implements IStorage {
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
     try {
-      const { notifications } = await import("@shared/schema");
+      const { notifications } = await import("../shared/schema");
       await db
         .update(notifications)
         .set({ isRead: true })
@@ -2673,7 +2673,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNotification(id: string, userId: string): Promise<void> {
     try {
-      const { notifications } = await import("@shared/schema");
+      const { notifications } = await import("../shared/schema");
       await db
         .delete(notifications)
         .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
@@ -2684,7 +2684,7 @@ export class DatabaseStorage implements IStorage {
 
   async createNotification(data: { userId: string; type: string; title: string; message: string; link?: string; relatedUserId?: string; relatedProductId?: string }): Promise<any> {
     try {
-      const { notifications } = await import("@shared/schema");
+      const { notifications } = await import("../shared/schema");
       const [notification] = await db
         .insert(notifications)
         .values({

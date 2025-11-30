@@ -9,7 +9,7 @@ import {
   normalizePhoneNumber,
   type NetworkType
 } from "./inlomax";
-import type { ScheduledVtuPurchase, User } from "@shared/schema";
+import type { ScheduledVtuPurchase, User } from "../shared/schema";
 
 const SCHEDULED_JOB_INTERVAL = 60000;
 const MAX_CONCURRENT_EXECUTIONS = 5;

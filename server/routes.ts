@@ -60,7 +60,7 @@ import {
   createResellerWithdrawalSchema,
   updateResellerWithdrawalSchema,
   type Order,
-} from "@shared/schema";
+} from "../shared/schema";
 import { getChatbotResponse, getChatbotResponseWithHandoff, checkForPaymentScam, detectHandoffNeed, type ChatMessage, type ChatbotResponse } from "./chatbot";
 import { squad, generatePaymentReference, generateTransferReference, isSquadConfigured, getSquadConfigStatus, getTestCardInfo, SquadApiError, SquadErrorType } from "./squad";
 import { calculatePricingFromSellerPrice, calculateSquadFee, getCommissionRate, getSecurityDepositAmount, isWithdrawalAllowed } from "./pricing";

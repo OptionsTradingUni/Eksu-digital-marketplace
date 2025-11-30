@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { categories } from "@shared/schema";
+import { categories } from "../shared/schema";
 
 const defaultCategories = [
   // Core Electronics & Tech

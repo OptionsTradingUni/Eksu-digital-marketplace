@@ -13,4 +13,3 @@ export {
   pgEnum,
 } from "drizzle-orm/pg-core";
 export { createInsertSchema } from "drizzle-zod";
-export { z } from "zod";
