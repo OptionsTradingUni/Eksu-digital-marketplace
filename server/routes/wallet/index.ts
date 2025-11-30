@@ -334,7 +334,7 @@ export function registerWalletRoutes(app: Express): void {
 
       await storage.createSquadPayment({
         userId,
-        transactionReference: paymentResult.transactionRef,
+        transactionRef: paymentResult.transactionRef,
         amount: amount.toString(),
         purpose: validated.purpose,
         status: 'pending',
@@ -426,7 +426,7 @@ export function registerWalletRoutes(app: Express): void {
       
       await storage.updateSquadPaymentStatus(reference, transactionStatus.transactionStatus, paidAt);
 
-      if (transactionStatus.transactionStatus === 'success' && payment.status !== 'success') {
+      if (transactionStatus.transactionStatus === 'success' && payment.status !== 'successful') {
         const wallet = await storage.getOrCreateWallet(userId);
         await storage.updateWalletBalance(userId, payment.amount, 'add');
         
@@ -484,7 +484,7 @@ export function registerWalletRoutes(app: Express): void {
       const paidAtDate = paymentStatus === 'success' && paidOn ? new Date(paidOn) : undefined;
       await storage.updateSquadPaymentStatus(transactionReference, paymentStatus, paidAtDate);
 
-      if (paymentStatus === 'success' && payment.status !== 'success') {
+      if (paymentStatus === 'success' && payment.status !== 'successful') {
         const wallet = await storage.getOrCreateWallet(payment.userId);
         await storage.updateWalletBalance(payment.userId, amountPaid.toString(), 'add');
         
@@ -609,11 +609,11 @@ export function registerWalletRoutes(app: Express): void {
 
       await storage.createSquadTransfer({
         userId,
-        transactionReference: reference,
+        transactionRef: reference,
         amount: withdrawAmount.toString(),
-        destinationBankCode: bankCode,
-        destinationAccountNumber: accountNumber,
-        destinationAccountName: accountName,
+        bankCode,
+        accountNumber,
+        accountName,
         status: 'pending',
       });
 
@@ -732,7 +732,7 @@ export function registerWalletRoutes(app: Express): void {
         sellerId: product.sellerId,
         originalPrice: product.price,
         offerPrice: offerPriceNum.toFixed(2),
-        buyerMessage: message || null,
+        message: message || null,
         status: 'pending',
       });
 
@@ -1074,7 +1074,8 @@ export function registerWalletRoutes(app: Express): void {
         });
       }
 
-      const { productId, deliveryMethod, deliveryAddress, deliveryLocation, deliveryNotes, negotiationId } = validationResult.data;
+      const { productId, deliveryMethod, deliveryAddress, deliveryNotes, quantity } = validationResult.data;
+      const { negotiationId } = req.body;
 
       const product = await storage.getProduct(productId);
       if (!product) {
@@ -1103,30 +1104,22 @@ export function registerWalletRoutes(app: Express): void {
       const orderNumber = generateOrderNumber();
 
       const order = await storage.createOrder({
-        orderNumber,
         buyerId: userId,
         sellerId: product.sellerId,
         productId,
-        itemPrice: itemPriceNum.toFixed(2),
-        platformFee: pricing.platformCommission.toFixed(2),
-        paymentFee: pricing.paymentFee.toFixed(2),
-        deliveryFee: "0.00",
         totalAmount: pricing.buyerPays.toFixed(2),
-        sellerEarnings: pricing.sellerReceives.toFixed(2),
-        negotiationId: negotiationId || null,
-        status: "pending",
-        deliveryMethod: deliveryMethod || "campus_meetup",
+        deliveryMethod: deliveryMethod || "meetup",
         deliveryAddress: deliveryAddress || null,
-        deliveryLocation: deliveryLocation || null,
-        deliveryNotes: deliveryNotes || null,
+        deliveryFee: "0.00",
+        quantity: String(quantity || 1),
+        notes: deliveryNotes || null,
       });
 
       await storage.addOrderStatusHistory({
         orderId: order.id,
-        fromStatus: null,
-        toStatus: "pending",
+        status: "pending",
         changedBy: userId,
-        notes: "Order created",
+        note: "Order created",
       });
 
       const buyer = await storage.getUser(userId);
@@ -1224,7 +1217,7 @@ export function registerWalletRoutes(app: Express): void {
         });
       }
 
-      const { status, notes } = validationResult.data;
+      const { status, note } = validationResult.data;
 
       const order = await storage.getOrder(id);
       if (!order) {
@@ -1259,7 +1252,7 @@ export function registerWalletRoutes(app: Express): void {
         return res.status(403).json({ message: "This status can only be set by the system" });
       }
 
-      const updatedOrder = await storage.updateOrderStatus(id, status, userId, notes);
+      const updatedOrder = await storage.updateOrderStatus(id, status, userId, note);
 
       try {
         const buyer = order.buyerId ? await storage.getUser(order.buyerId) : null;

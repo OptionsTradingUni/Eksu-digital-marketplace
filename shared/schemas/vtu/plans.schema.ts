@@ -6,6 +6,7 @@ import {
   varchar,
   decimal,
   boolean,
+  integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -16,19 +17,18 @@ export const vtuNetworkEnum = pgEnum("vtu_network", ["mtn", "airtel", "glo", "9m
 export const vtuPlans = pgTable("vtu_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   network: vtuNetworkEnum("network").notNull(),
-  planType: varchar("plan_type", { length: 50 }).notNull(),
-  planCode: varchar("plan_code", { length: 50 }),
+  planName: varchar("plan_name", { length: 100 }).notNull(),
   dataAmount: varchar("data_amount", { length: 50 }),
-  duration: varchar("duration", { length: 50 }),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  validity: varchar("validity", { length: 50 }),
   costPrice: decimal("cost_price", { precision: 10, scale: 2 }),
-  description: varchar("description", { length: 500 }),
+  sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }),
+  planCode: varchar("plan_code", { length: 50 }),
   isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedAt: timestamp("updated_at"),
 }, (table) => [
   index("idx_vtu_plans_network").on(table.network),
-  index("idx_vtu_plans_type").on(table.planType),
 ]);
 
 export const insertVtuPlanSchema = createInsertSchema(vtuPlans).omit({

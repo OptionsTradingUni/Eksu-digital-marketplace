@@ -89,6 +89,7 @@ import {
 } from "./email-service";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerVtuRoutes } from "./routes/vtu";
+import { registerWalletRoutes } from "./routes/wallet";
 
 // Module-level WebSocket connections map for broadcasting notifications
 // Changed from Map<string, WebSocket> to Map<string, Set<WebSocket>> to support multiple connections per user
@@ -413,6 +414,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register VTU routes (data, airtime, cable TV, electricity, exam pins, etc.)
   registerVtuRoutes(app);
+
+  // Register wallet, payment, orders, and negotiation routes
+  registerWalletRoutes(app);
 
   // Serve uploaded images from disk (legacy)
   app.use("/uploads", (req, res, next) => {

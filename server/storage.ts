@@ -249,7 +249,7 @@ import {
   type RewardTransaction,
 } from "../shared/schema";
 import { db } from "./db";
-import { eq, and, or, like, desc, sql, gt, gte } from "drizzle-orm";
+import { eq, and, or, like, desc, sql, gt, gte, lte } from "drizzle-orm";
 
 function generateReferralCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -4786,7 +4786,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(scheduledVtuPurchases.status, 'active'),
-          sql`${scheduledVtuPurchases.nextRunAt} <= ${now}`
+          lte(scheduledVtuPurchases.nextRunAt, now)
         )
       );
     

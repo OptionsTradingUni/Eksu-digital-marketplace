@@ -82,7 +82,7 @@ async function executeScheduledPurchase(
     const wallet = await storage.getOrCreateWallet(userId);
     const walletBalance = parseFloat(wallet.balance);
     
-    let purchaseAmount = 0;
+    let purchaseAmount = parseFloat(schedule.amount);
     let planDetails: {
       name: string;
       dataAmount?: string;
@@ -90,7 +90,9 @@ async function executeScheduledPurchase(
       network: NetworkType;
     } | null = null;
     
-    if (schedule.serviceType === "data" && schedule.planId) {
+    const serviceType = schedule.serviceType;
+    
+    if (serviceType === "data" && schedule.planId) {
       const plan = getDataPlanById(schedule.planId);
       if (!plan) {
         logJob(`Plan ${schedule.planId} not found for schedule ${scheduleId}`);
@@ -103,7 +105,7 @@ async function executeScheduledPurchase(
         planCode: plan.planCode,
         network: plan.network,
       };
-    } else if (schedule.serviceType === "airtime" && schedule.amount) {
+    } else if (serviceType === "airtime" && schedule.amount) {
       purchaseAmount = parseFloat(schedule.amount);
       const network = detectNetwork(schedule.phoneNumber);
       if (!network) {
@@ -129,7 +131,7 @@ async function executeScheduledPurchase(
           userId,
           type: "system",
           title: "Scheduled Purchase Paused",
-          message: `Your scheduled ${schedule.serviceType} purchase for ${schedule.phoneNumber} has been paused due to insufficient wallet balance. Please fund your wallet and resume the schedule.`,
+          message: `Your scheduled ${serviceType} purchase for ${schedule.phoneNumber} has been paused due to insufficient wallet balance. Please fund your wallet and resume the schedule.`,
           link: "/vtu/scheduled",
         });
         logJob(`Notification created for user ${userId} about paused schedule`);
@@ -148,12 +150,11 @@ async function executeScheduledPurchase(
       type: "purchase",
       amount: `-${purchaseAmount}`,
       status: "pending",
-      description: `Scheduled ${schedule.serviceType === "data" ? "Data" : "Airtime"} Purchase: ${planDetails.name} for ${schedule.phoneNumber}`,
-      relatedUserId: userId,
+      description: `Scheduled ${serviceType === "data" ? "Data" : "Airtime"} Purchase: ${planDetails.name} for ${schedule.phoneNumber}`,
     });
     
     let purchaseResult;
-    if (schedule.serviceType === "data" && planDetails.planCode) {
+    if (serviceType === "data" && planDetails.planCode) {
       purchaseResult = await purchaseData(
         planDetails.network,
         schedule.phoneNumber,
@@ -170,7 +171,7 @@ async function executeScheduledPurchase(
     if (purchaseResult.success) {
       await storage.updateTransaction(walletTransaction.id, { status: "completed" });
       
-      const networkForDb = schedule.serviceType === "data" && schedule.network 
+      const networkForDb = serviceType === "data" && schedule.network 
         ? schedule.network 
         : planDetails.network === "mtn" ? "mtn_sme" 
         : planDetails.network === "glo" ? "glo_cg" 
@@ -188,7 +189,7 @@ async function executeScheduledPurchase(
         amount: purchaseAmount.toString(),
         costPrice: (purchaseAmount * 0.95).toFixed(2),
         profit: (purchaseAmount * 0.05).toFixed(2),
-        status: "success",
+        status: "completed",
         smedataReference: purchaseResult.transactionId || purchaseResult.reference,
         smedataResponse: purchaseResult.data,
         walletTransactionId: walletTransaction.id,
@@ -197,22 +198,23 @@ async function executeScheduledPurchase(
       });
       
       const now = new Date();
-      const nextRunAt = calculateNextRunDate(schedule, now);
+      const nextRunDate = calculateNextRunDate(schedule, now);
+      const currentRunCount = schedule.runCount ?? 0;
       
       await storage.updateScheduledPurchase(scheduleId, {
         lastRunAt: now,
-        nextRunAt: nextRunAt,
-        runCount: (schedule.runCount || 0) + 1,
+        nextRunAt: nextRunDate,
+        runCount: currentRunCount + 1,
       });
       
-      logJob(`Successfully executed schedule ${scheduleId}. Next run: ${nextRunAt.toISOString()}`);
+      logJob(`Successfully executed schedule ${scheduleId}. Next run: ${nextRunDate.toISOString()}`);
       
       try {
         await storage.createNotification({
           userId,
           type: "system",
           title: "Scheduled Purchase Successful",
-          message: `Your scheduled ${schedule.serviceType === "data" ? "data" : "airtime"} purchase of ${planDetails.name} for ${schedule.phoneNumber} was successful.`,
+          message: `Your scheduled ${serviceType === "data" ? "data" : "airtime"} purchase of ${planDetails.name} for ${schedule.phoneNumber} was successful.`,
           link: "/vtu/history",
         });
       } catch (notifError: any) {
